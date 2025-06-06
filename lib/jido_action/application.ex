@@ -8,8 +8,7 @@ defmodule JidoAction.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      # Starts a worker by calling: JidoAction.Worker.start_link(arg)
-      # {JidoAction.Worker, arg}
+      {Task.Supervisor, name: Jido.Action.TaskSupervisor}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
