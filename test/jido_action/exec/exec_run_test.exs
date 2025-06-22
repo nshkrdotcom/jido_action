@@ -299,30 +299,35 @@ defmodule JidoTest.ExecRunTest do
         # Test timeout from application config (using a very slow action to ensure timeout)
         # Disable retries for this test to isolate timeout behavior
         start_time = System.monotonic_time(:millisecond)
-        
-        assert {:error, %Error{type: :timeout}} = 
-          Exec.run(DelayAction, %{delay: 2_000}, %{}, [max_retries: 0])
+
+        assert {:error, %Error{type: :timeout}} =
+                 Exec.run(DelayAction, %{delay: 2_000}, %{}, max_retries: 0)
 
         end_time = System.monotonic_time(:millisecond)
         duration = end_time - start_time
 
         # Should timeout around 1 second (our configured timeout), not the default 5 seconds
-        assert duration >= 900 && duration <= 1_200, 
-          "Expected timeout around 1s, but took #{duration}ms"
+        assert duration >= 900 && duration <= 1_200,
+               "Expected timeout around 1s, but took #{duration}ms"
 
         # Test max_retries from application config
         # Reset attempts counter
         :ets.insert(@attempts_table, {:attempts, 0})
 
-        assert {:ok, %{result: result}} = Exec.run(RetryAction, %{should_succeed: false, max_attempts: 2}, %{attempts_table: @attempts_table}, [])
-        
+        assert {:ok, %{result: result}} =
+                 Exec.run(
+                   RetryAction,
+                   %{should_succeed: false, max_attempts: 2},
+                   %{attempts_table: @attempts_table},
+                   []
+                 )
+
         # Should succeed after exhausting retries
         assert result =~ "success after 2 attempts"
 
         # Should have attempted 2 times total (1 initial + 1 retry, then success on 2nd attempt)
         [{:attempts, attempts}] = :ets.lookup(@attempts_table, :attempts)
         assert attempts == 2
-
       after
         # Restore original config
         if original_timeout do

@@ -1,4 +1,4 @@
-defmodule Jido.Actions.Files do
+defmodule Jido.Tools.Files do
   @moduledoc """
   A collection of file system actions for common file operations.
 

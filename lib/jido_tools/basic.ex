@@ -1,4 +1,4 @@
-defmodule Jido.Actions.Basic do
+defmodule Jido.Tools.Basic do
   @moduledoc """
   A collection of basic actions for common actions.
 

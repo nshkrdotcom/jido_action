@@ -1,6 +1,6 @@
 defmodule JidoTest.Actions.FilesTest do
   use JidoTest.Case, async: true
-  alias Jido.Actions.Files
+  alias Jido.Tools.Files
 
   setup do
     tmp_dir = Path.join(System.tmp_dir!(), "#{__MODULE__}_#{System.unique_integer()}")

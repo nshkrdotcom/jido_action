@@ -54,9 +54,14 @@ defmodule Jido.Exec do
   @default_initial_backoff 250
 
   # Helper functions to get configuration values with fallbacks
-  defp get_default_timeout, do: Application.get_env(:jido_action, :default_timeout, @default_timeout)
-  defp get_default_max_retries, do: Application.get_env(:jido_action, :default_max_retries, @default_max_retries)
-  defp get_default_backoff, do: Application.get_env(:jido_action, :default_backoff, @default_initial_backoff)
+  defp get_default_timeout,
+    do: Application.get_env(:jido_action, :default_timeout, @default_timeout)
+
+  defp get_default_max_retries,
+    do: Application.get_env(:jido_action, :default_max_retries, @default_max_retries)
+
+  defp get_default_backoff,
+    do: Application.get_env(:jido_action, :default_backoff, @default_initial_backoff)
 
   @type action :: module()
   @type params :: map()

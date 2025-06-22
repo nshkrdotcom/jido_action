@@ -1,4 +1,4 @@
-defmodule Jido.Actions.Arithmetic do
+defmodule Jido.Tools.Arithmetic do
   @moduledoc """
   Provides basic arithmetic operations as actions. The operations defined here are obviously trivial.
   This module is intended to be used as a reference for how to write your own actions.

@@ -158,7 +158,7 @@ Jido provides several built-in Action modules:
 ### Basic Operations
 
 ```elixir
-alias Jido.Actions.Basic
+alias Jido.Tools.Basic
 
 # Sleep for a duration
 Basic.Sleep.run(%{duration_ms: 1000}, %{})
@@ -170,7 +170,7 @@ Basic.Log.run(%{level: :info, message: "Processing"}, %{})
 ### File Operations
 
 ```elixir
-alias Jido.Actions.Files
+alias Jido.Tools.Files
 
 # Write to a file
 Files.WriteFile.run(%{
@@ -183,7 +183,7 @@ Files.WriteFile.run(%{
 ### Arithmetic Operations
 
 ```elixir
-alias Jido.Actions.Arithmetic
+alias Jido.Tools.Arithmetic
 
 # Add numbers
 Arithmetic.Add.run(%{value: 5, amount: 3}, %{})

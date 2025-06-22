@@ -1,4 +1,4 @@
-defmodule Jido.Actions.ReqAction do
+defmodule Jido.Tools.ReqTool do
   alias Jido.Action.Error
 
   @req_config_schema NimbleOptions.new!(
@@ -26,12 +26,12 @@ defmodule Jido.Actions.ReqAction do
     escaped_schema = Macro.escape(@req_config_schema)
 
     quote location: :keep do
-      # Separate ReqAction-specific options from base Action options
+      # Separate ReqTool-specific options from base Action options
       req_keys = [:url, :method, :headers, :json]
       req_opts = Keyword.take(unquote(opts), req_keys)
       action_opts = Keyword.drop(unquote(opts), req_keys)
 
-      # Validate ReqAction-specific options
+      # Validate ReqTool-specific options
       case NimbleOptions.validate(req_opts, unquote(escaped_schema)) do
         {:ok, validated_req_opts} ->
           # Store validated req opts for later use
@@ -41,7 +41,7 @@ defmodule Jido.Actions.ReqAction do
           use Jido.Action, action_opts
 
           # Implement the behavior
-          @behaviour Jido.Actions.ReqAction
+          @behaviour Jido.Tools.ReqTool
 
           # Implement the run function that uses req options
           @impl Jido.Action
@@ -88,7 +88,7 @@ defmodule Jido.Actions.ReqAction do
                %{
                  type: :dependency_error,
                  message:
-                   "Req library is required for ReqAction. Add {:req, \"~> 0.3.0\"} to your dependencies."
+                   "Req library is required for ReqTool. Add {:req, \"~> 0.3.0\"} to your dependencies."
                }}
             else
               try do
@@ -123,7 +123,7 @@ defmodule Jido.Actions.ReqAction do
           end
 
           # Default implementation for transform_result
-          @impl Jido.Actions.ReqAction
+          @impl Jido.Tools.ReqTool
           def transform_result(result) do
             {:ok, result}
           end
@@ -132,7 +132,7 @@ defmodule Jido.Actions.ReqAction do
           defoverridable transform_result: 1
 
         {:error, error} ->
-          message = Error.format_nimble_config_error(error, "ReqAction", __MODULE__)
+          message = Error.format_nimble_config_error(error, "ReqTool", __MODULE__)
           raise CompileError, description: message, file: __ENV__.file, line: __ENV__.line
       end
     end

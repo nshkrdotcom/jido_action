@@ -1,6 +1,6 @@
 defmodule JidoTest.Actions.ReqTest do
   use JidoTest.Case, async: false
-  alias Jido.Actions.ReqAction
+  alias Jido.Tools.ReqTool
 
   # Import Mimic for mocking
   import Mimic
@@ -9,7 +9,7 @@ defmodule JidoTest.Actions.ReqTest do
 
   # Example with custom transform_result
   defmodule SolPrice do
-    use ReqAction,
+    use ReqTool,
       name: "sol_price",
       description: "Get the price of SOL",
       url: "https://cryptoprices.cc/SOL/",
@@ -17,7 +17,7 @@ defmodule JidoTest.Actions.ReqTest do
       schema: []
 
     # Override the transform_result function to extract specific data
-    @impl Jido.Actions.ReqAction
+    @impl Jido.Tools.ReqTool
     def transform_result(_result) do
       # In a real implementation, you would parse the response body
       # For testing, we'll just return a simulated price
@@ -27,7 +27,7 @@ defmodule JidoTest.Actions.ReqTest do
 
   # Example without custom transform_result
   defmodule SimpleGet do
-    use ReqAction,
+    use ReqTool,
       name: "simple_get",
       description: "Simple GET request example",
       url: "https://example.com/api",
@@ -39,7 +39,7 @@ defmodule JidoTest.Actions.ReqTest do
 
   # Example without custom transform_result
   defmodule SimplePost do
-    use ReqAction,
+    use ReqTool,
       name: "simple_post",
       description: "Simple POST request example",
       url: "https://example.com/api",

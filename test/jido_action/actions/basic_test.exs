@@ -1,7 +1,7 @@
 defmodule JidoTest.Actions.BasicActionsTest do
   use JidoTest.Case, async: false
   require Logger
-  alias Jido.Actions.Basic
+  alias Jido.Tools.Basic
   import ExUnit.CaptureLog
 
   @moduletag :capture_log
