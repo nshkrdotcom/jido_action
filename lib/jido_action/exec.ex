@@ -51,7 +51,12 @@ defmodule Jido.Exec do
 
   @default_timeout 5000
   @default_max_retries 1
-  @initial_backoff 250
+  @default_initial_backoff 250
+
+  # Helper functions to get configuration values with fallbacks
+  defp get_default_timeout, do: Application.get_env(:jido_action, :default_timeout, @default_timeout)
+  defp get_default_max_retries, do: Application.get_env(:jido_action, :default_max_retries, @default_max_retries)
+  defp get_default_backoff, do: Application.get_env(:jido_action, :default_backoff, @default_initial_backoff)
 
   @type action :: module()
   @type params :: map()
@@ -68,9 +73,9 @@ defmodule Jido.Exec do
   - `params`: A map of input parameters for the Action.
   - `context`: A map providing additional context for the Action execution.
   - `opts`: Options controlling the execution:
-    - `:timeout` - Maximum time (in ms) allowed for the Action to complete (default: #{@default_timeout}).
-    - `:max_retries` - Maximum number of retry attempts (default: #{@default_max_retries}).
-    - `:backoff` - Initial backoff time in milliseconds, doubles with each retry (default: #{@initial_backoff}).
+    - `:timeout` - Maximum time (in ms) allowed for the Action to complete (default: #{@default_timeout}, configurable via `:jido_action, :default_timeout`).
+    - `:max_retries` - Maximum number of retry attempts (default: #{@default_max_retries}, configurable via `:jido_action, :default_max_retries`).
+    - `:backoff` - Initial backoff time in milliseconds, doubles with each retry (default: #{@default_initial_backoff}, configurable via `:jido_action, :default_backoff`).
     - `:log_level` - Override the global Logger level for this specific action. Accepts #{inspect(Logger.levels())}.
 
   ## Action Metadata in Context
@@ -273,7 +278,8 @@ defmodule Jido.Exec do
       {:error, %Jido.Action.Error{type: :timeout, message: "Async action timed out after 100ms"}}
   """
   @spec await(async_ref(), timeout()) :: {:ok, map()} | {:error, Error.t()}
-  def await(%{ref: ref, pid: pid}, timeout \\ 5000) do
+  def await(%{ref: ref, pid: pid}, timeout \\ nil) do
+    timeout = timeout || get_default_timeout()
     dbug("Awaiting async action result", ref: ref, pid: pid, timeout: timeout)
 
     receive do
@@ -449,8 +455,8 @@ defmodule Jido.Exec do
     @spec do_run_with_retry(action(), params(), context(), run_opts()) ::
             {:ok, map()} | {:error, Error.t()}
     defp do_run_with_retry(action, params, context, opts) do
-      max_retries = Keyword.get(opts, :max_retries, @default_max_retries)
-      backoff = Keyword.get(opts, :backoff, @initial_backoff)
+      max_retries = Keyword.get(opts, :max_retries, get_default_max_retries())
+      backoff = Keyword.get(opts, :backoff, get_default_backoff())
       dbug("Starting run with retry", action: action, max_retries: max_retries, backoff: backoff)
       do_run_with_retry(action, params, context, opts, 0, max_retries, backoff)
     end
@@ -550,7 +556,7 @@ defmodule Jido.Exec do
     @spec do_run(action(), params(), context(), run_opts()) ::
             {:ok, map()} | {:error, Error.t()}
     defp do_run(action, params, context, opts) do
-      timeout = Keyword.get(opts, :timeout)
+      timeout = Keyword.get(opts, :timeout, get_default_timeout())
       telemetry = Keyword.get(opts, :telemetry, :full)
       dbug("Starting action execution", action: action, timeout: timeout, telemetry: telemetry)
 
@@ -895,7 +901,7 @@ Debug info:
     end
 
     defp execute_action_with_timeout(action, params, context, _timeout, opts) do
-      execute_action_with_timeout(action, params, context, @default_timeout, opts)
+      execute_action_with_timeout(action, params, context, get_default_timeout(), opts)
     end
 
     defp cleanup_task_group(task_group) do
