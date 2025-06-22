@@ -1,11 +1,11 @@
 defmodule Jido.Tools.Weather do
   @moduledoc """
   A tool for fetching weather information via the OpenWeatherMap API.
-  
+
   Supports both test mode (using fake data) and live API calls.
   Can return weather data in either text or map format.
   """
-  
+
   use Jido.Action,
     name: "weather",
     description: "Get the weather for a given location via the OpenWeatherMap API",
@@ -64,7 +64,7 @@ defmodule Jido.Tools.Weather do
 
   @doc """
   Fetches weather data for the specified location.
-  
+
   Returns formatted weather information based on the provided parameters.
   """
   def run(params, _context) do
