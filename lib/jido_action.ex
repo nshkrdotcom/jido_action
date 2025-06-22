@@ -265,14 +265,28 @@ defmodule Jido.Action do
         {:ok, validated_opts} ->
           @validated_opts validated_opts
 
+          @doc "Returns the name of the Action."
           def name, do: @validated_opts[:name]
+          
+          @doc "Returns the description of the Action."
           def description, do: @validated_opts[:description]
+          
+          @doc "Returns the category of the Action."
           def category, do: @validated_opts[:category]
+          
+          @doc "Returns the tags associated with the Action."
           def tags, do: @validated_opts[:tags]
+          
+          @doc "Returns the version of the Action."
           def vsn, do: @validated_opts[:vsn]
+          
+          @doc "Returns the input schema of the Action."
           def schema, do: @validated_opts[:schema]
+          
+          @doc "Returns the output schema of the Action."
           def output_schema, do: @validated_opts[:output_schema]
 
+          @doc "Returns the Action metadata as a JSON-serializable map."
           def to_json do
             %{
               name: @validated_opts[:name],
@@ -286,10 +300,12 @@ defmodule Jido.Action do
             }
           end
 
+          @doc "Converts the Action to an LLM-compatible tool format."
           def to_tool do
             Jido.Action.Tool.to_tool(__MODULE__)
           end
 
+          @doc "Returns the Action metadata. Alias for to_json/0."
           def __action_metadata__ do
             to_json()
           end
@@ -412,11 +428,22 @@ defmodule Jido.Action do
             |> OK.failure()
           end
 
+          @doc "Lifecycle hook called before parameter validation."
           def on_before_validate_params(params), do: OK.success(params)
+          
+          @doc "Lifecycle hook called after parameter validation."
           def on_after_validate_params(params), do: OK.success(params)
+          
+          @doc "Lifecycle hook called before output validation."
           def on_before_validate_output(output), do: OK.success(output)
+          
+          @doc "Lifecycle hook called after output validation."
           def on_after_validate_output(output), do: OK.success(output)
+          
+          @doc "Lifecycle hook called after Action execution."
           def on_after_run(result), do: OK.success(result)
+          
+          @doc "Lifecycle hook called when an error occurs."
           def on_error(failed_params, _error, _context, _opts), do: OK.success(failed_params)
 
           defoverridable on_before_validate_params: 1,

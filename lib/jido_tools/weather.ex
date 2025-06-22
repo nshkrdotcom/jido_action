@@ -1,4 +1,11 @@
 defmodule Jido.Tools.Weather do
+  @moduledoc """
+  A tool for fetching weather information via the OpenWeatherMap API.
+  
+  Supports both test mode (using fake data) and live API calls.
+  Can return weather data in either text or map format.
+  """
+  
   use Jido.Action,
     name: "weather",
     description: "Get the weather for a given location via the OpenWeatherMap API",
@@ -31,6 +38,7 @@ defmodule Jido.Tools.Weather do
 
     case run(%{location: "any", test: true, format: "text"}, %{}) do
       {:ok, result} when is_binary(result) -> IO.puts(result)
+      # credo:disable-for-next-line
       {:ok, result} -> IO.inspect(result, label: "Weather Data")
       {:error, error} -> IO.puts("Error: #{error}")
     end
@@ -39,6 +47,7 @@ defmodule Jido.Tools.Weather do
 
     case run(%{location: "any", test: true, format: "map"}, %{}) do
       {:ok, result} when is_binary(result) -> IO.puts(result)
+      # credo:disable-for-next-line
       {:ok, result} -> IO.inspect(result, label: "Weather Data")
       {:error, error} -> IO.puts("Error: #{error}")
     end
@@ -47,11 +56,17 @@ defmodule Jido.Tools.Weather do
 
     case run(%{location: "60618,US", format: "text"}, %{}) do
       {:ok, result} when is_binary(result) -> IO.puts(result)
+      # credo:disable-for-next-line
       {:ok, result} -> IO.inspect(result, label: "Weather Data")
       {:error, error} -> IO.puts("Error: #{error}")
     end
   end
 
+  @doc """
+  Fetches weather data for the specified location.
+  
+  Returns formatted weather information based on the provided parameters.
+  """
   def run(params, _context) do
     with {:ok, opts} <- build_opts(params),
          {:ok, response} <- Weather.API.fetch_weather(opts) do

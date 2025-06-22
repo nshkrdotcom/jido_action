@@ -83,6 +83,7 @@ defmodule Jido.Tools.Workflow do
     if valid_steps, do: {:ok, steps}, else: {:error, "invalid workflow steps format"}
   end
 
+  @doc false  
   def validate_step(_), do: {:error, "steps must be a list of tuples"}
 
   # Schema for validating workflow configuration
@@ -102,13 +103,20 @@ defmodule Jido.Tools.Workflow do
                             ]
                           )
 
-  # Define the callback for step execution
+  @doc """
+  Callback for executing a single workflow step.
+  
+  Takes a step tuple, parameters, and context and returns the result.
+  """
   @callback execute_step(step :: tuple(), params :: map(), context :: map()) ::
               {:ok, map()} | {:error, any()}
 
   # Make the callback optional
   @optional_callbacks [execute_step: 3]
 
+  @doc """
+  Macro for setting up a module as a Workflow with step execution capabilities.
+  """
   defmacro __using__(opts) do
     escaped_schema = Macro.escape(@workflow_config_schema)
     valid_step_types = @valid_step_types
@@ -145,13 +153,16 @@ defmodule Jido.Tools.Workflow do
           end
 
           # Add workflow-specific functionality
+          @doc "Returns true if this module is a workflow."
           def workflow?, do: @workflow
-          def workflow_steps, do: @workflow_steps
+           
+           @doc "Returns the workflow steps for this module."
+           def workflow_steps, do: @workflow_steps
 
           # Make to_json overridable before redefining it
           defoverridable to_json: 0
 
-          # Override to_json to include workflow flag and steps
+          @doc "Returns the workflow metadata as JSON including workflow flag and steps."
           def to_json do
             # Get the base JSON from Jido.Action
             base_json = super()
@@ -164,7 +175,7 @@ defmodule Jido.Tools.Workflow do
           # Make to_tool overridable before redefining it
           defoverridable to_tool: 0
 
-          # Override to_tool to ensure the output format matches expectations
+          @doc "Converts the workflow to an LLM-compatible tool format."
           def to_tool do
             tool = super()
 
@@ -203,7 +214,11 @@ defmodule Jido.Tools.Workflow do
             end
           end
 
-          # Default implementation for execute_step
+          @doc """
+          Default implementation for executing a workflow step.
+          
+          Handles step, branch, converge, and parallel step types.
+          """
           def execute_step(step, params, context) do
             case step do
               {:step, _metadata, [instruction]} ->

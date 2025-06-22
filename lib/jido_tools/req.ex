@@ -1,4 +1,11 @@
 defmodule Jido.Tools.ReqTool do
+  @moduledoc """
+  A behavior and macro for creating HTTP request tools using the Req library.
+  
+  Provides a standardized way to create actions that make HTTP requests with
+  configurable URL, method, headers, and JSON parsing options.
+  """
+  
   alias Jido.Action.Error
 
   @req_config_schema NimbleOptions.new!(
@@ -16,12 +23,19 @@ defmodule Jido.Tools.ReqTool do
                        ]
                      )
 
-  # Define the callback
+  @doc """
+  Callback for transforming the HTTP response result.
+  
+  Takes a map with request and response data and returns a transformed result.
+  """
   @callback transform_result(map()) :: {:ok, map()} | {:error, any()}
 
   # Make transform_result optional
   @optional_callbacks [transform_result: 1]
 
+  @doc """
+  Macro for setting up a module as a ReqTool with HTTP request capabilities.
+  """
   defmacro __using__(opts) do
     escaped_schema = Macro.escape(@req_config_schema)
 
