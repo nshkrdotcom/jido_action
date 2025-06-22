@@ -1,5 +1,5 @@
 defmodule JidoTest.ExecRunTest do
-  use JidoTest.Case, async: false
+  use JidoTest.ActionCase, async: false
   use Mimic
 
   import ExUnit.CaptureLog

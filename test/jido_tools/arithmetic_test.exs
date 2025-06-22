@@ -1,5 +1,5 @@
 defmodule Jido.Tools.ArithmeticTest do
-  use JidoTest.Case, async: true
+  use JidoTest.ActionCase, async: true
   alias Jido.Tools.Arithmetic
   @moduletag :capture_log
 

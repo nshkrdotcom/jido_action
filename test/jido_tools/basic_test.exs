@@ -1,5 +1,5 @@
 defmodule JidoTest.Actions.BasicActionsTest do
-  use JidoTest.Case, async: false
+  use JidoTest.ActionCase, async: false
   require Logger
   alias Jido.Tools.Basic
   import ExUnit.CaptureLog

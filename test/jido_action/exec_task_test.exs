@@ -1,5 +1,5 @@
 defmodule Jido.ExecTaskTest do
-  use JidoTest.Case, async: false
+  use JidoTest.ActionCase, async: false
 
   # Import Private to access private functions for testing
   use Private

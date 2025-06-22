@@ -1,5 +1,5 @@
 defmodule JidoTest.Exec.ChainInterruptTest do
-  use JidoTest.Case, async: true
+  use JidoTest.ActionCase, async: true
   import ExUnit.CaptureLog
 
   alias Jido.Exec.Chain

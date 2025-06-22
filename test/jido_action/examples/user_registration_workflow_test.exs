@@ -1,5 +1,5 @@
 defmodule JidoTest.Exec.Examples.UserRegistrationExecTest do
-  use JidoTest.Case, async: true
+  use JidoTest.ActionCase, async: true
 
   alias Jido.Exec
   alias Jido.Exec.Chain

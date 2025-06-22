@@ -1,5 +1,5 @@
 defmodule Jido.InstructionTest do
-  use JidoTest.Case, async: true
+  use JidoTest.ActionCase, async: true
   alias Jido.Instruction
   alias Jido.Action.Error
   alias JidoTest.TestActions.BasicAction

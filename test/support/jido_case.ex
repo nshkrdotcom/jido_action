@@ -1,4 +1,4 @@
-defmodule JidoTest.Case do
+defmodule JidoTest.ActionCase do
   @moduledoc """
   Test case helper module providing common test functionality for Jido tests.
   """
@@ -9,7 +9,7 @@ defmodule JidoTest.Case do
     quote do
       # Import test helpers
 
-      import JidoTest.Case
+      import JidoTest.ActionCase
       import JidoTest.Helpers.Assertions
 
       @moduletag :capture_log

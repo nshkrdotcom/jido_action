@@ -1,5 +1,5 @@
 defmodule JidoTest.Actions.ReqTest do
-  use JidoTest.Case, async: false
+  use JidoTest.ActionCase, async: false
   alias Jido.Tools.ReqTool
 
   # Import Mimic for mocking

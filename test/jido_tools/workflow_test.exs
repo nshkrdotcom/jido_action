@@ -1,5 +1,5 @@
 # defmodule Jido.Tools.WorkflowTest do
-#   use JidoTest.Case, async: true
+#   use JidoTest.ActionCase, async: true
 
 #   # Define a simple LogAction for testing
 #   defmodule LogAction do

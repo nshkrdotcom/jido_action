@@ -16,7 +16,7 @@ defmodule JidoAction.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {JidoAction.Application, []}
+      mod: {Jido.Action.Application, []}
     ]
   end
 

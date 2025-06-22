@@ -1,4 +1,4 @@
-defmodule JidoAction.Application do
+defmodule Jido.Action.Application do
   # See https://hexdocs.pm/elixir/Application.html
   # for more information on OTP Applications
   @moduledoc false

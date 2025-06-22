@@ -1,5 +1,5 @@
 defmodule JidoTest.Actions.SimplebotTest do
-  use JidoTest.Case, async: true
+  use JidoTest.ActionCase, async: true
   alias Jido.Tools.Simplebot
 
   describe "Move" do

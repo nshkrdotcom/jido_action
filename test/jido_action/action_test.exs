@@ -1,5 +1,5 @@
 defmodule JidoTest.Exec.ActionTest do
-  use JidoTest.Case, async: true
+  use JidoTest.ActionCase, async: true
   use ExUnitProperties
 
   alias Jido.Action.Error
