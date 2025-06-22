@@ -1,4 +1,4 @@
-defmodule Jido.Actions.Simplebot do
+defmodule Jido.Tools.Simplebot do
   @moduledoc """
   A collection of actions for a simple robot simulation. These are intended to be used as an example and reference for how to write your own bot logic.
 
