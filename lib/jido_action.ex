@@ -19,26 +19,26 @@ defmodule Jido.Action do
 
   To define a new Action, use the `Jido.Action` behavior in your module:
 
-      defmodule MyAction do
+    defmodule MyAction do
       use Jido.Action,
-      name: "my_action",
-      description: "Performs my action",
-      category: "processing",
-      tags: ["example", "demo"],
-      vsn: "1.0.0",
-      schema: [
-      input: [type: :string, required: true]
-      ],
-           output_schema: [
+        name: "my_action",
+        description: "Performs my action",
+        category: "processing",
+        tags: ["example", "demo"],
+        vsn: "1.0.0",
+        schema: [
+          input: [type: :string, required: true]
+        ],
+        output_schema: [
           result: [type: :string, required: true]
         ]
 
       @impl true
       def run(params, _context) do
-           # Your action logic here
-           {:ok, %{result: String.upcase(params.input)}}
-         end
-       end
+        # Your action logic here
+        {:ok, %{result: String.upcase(params.input)}}
+      end
+    end
 
   ## Callbacks
 
