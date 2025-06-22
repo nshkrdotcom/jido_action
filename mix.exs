@@ -43,6 +43,8 @@ defmodule JidoAction.MixProject do
       # Skill & Action Dependencies for examples
       {:abacus, "~> 2.1"},
       {:req, "~> 0.5.10"},
+      {:tentacat, "~> 2.5"},
+      {:weather, "~> 0.4.0"},
 
       # Development & Test Dependencies
       {:credo, "~> 1.7", only: [:dev, :test]},
