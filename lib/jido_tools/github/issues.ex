@@ -1,12 +1,12 @@
 defmodule Jido.Tools.Github.Issues do
   @moduledoc """
   Tools for interacting with GitHub Issues API.
-  
+
   Provides actions for creating, listing, filtering, finding, and updating GitHub issues.
   """
   defmodule Create do
     @moduledoc "Action for creating new GitHub issues."
-    
+
     use Jido.Action,
       name: "github_issues_create",
       description: "Create a new issue on GitHub",
@@ -40,7 +40,7 @@ defmodule Jido.Tools.Github.Issues do
 
   defmodule Filter do
     @moduledoc "Action for filtering GitHub issues by various criteria."
-    
+
     use Jido.Action,
       name: "github_issues_filter",
       description: "Filter repository issues on GitHub",
@@ -78,7 +78,7 @@ defmodule Jido.Tools.Github.Issues do
 
   defmodule Find do
     @moduledoc "Action for finding a specific GitHub issue by number."
-    
+
     use Jido.Action,
       name: "github_issues_find",
       description: "Get a specific issue from GitHub",
@@ -100,7 +100,7 @@ defmodule Jido.Tools.Github.Issues do
 
   defmodule List do
     @moduledoc "Action for listing all issues from a GitHub repository."
-    
+
     use Jido.Action,
       name: "github_issues_list",
       description: "List all issues from a GitHub repository",
@@ -121,7 +121,7 @@ defmodule Jido.Tools.Github.Issues do
 
   defmodule Update do
     @moduledoc "Action for updating existing GitHub issues."
-    
+
     use Jido.Action,
       name: "github_issues_update",
       description: "Update an existing issue on GitHub",

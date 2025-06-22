@@ -2,8 +2,9 @@ defmodule JidoTest.TestActions do
   @moduledoc false
   import OK, only: [success: 1, failure: 1]
 
-  alias Jido.Action.Error
   alias Jido.Action
+  alias Jido.Action.Error
+  alias Jido.Exec.Chain
   alias Jido.Instruction
 
   defmodule BasicAction do
@@ -920,7 +921,7 @@ defmodule JidoTest.TestActions do
       ]
 
     def run(params, _context) do
-      Jido.Exec.Chain.chain(
+      Chain.chain(
         [
           JidoTest.TestActions.FormatUser,
           JidoTest.TestActions.EnrichUserData,

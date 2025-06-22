@@ -1,12 +1,12 @@
 defmodule JidoTest.Exec.OutputValidationTest do
   use JidoTest.ActionCase, async: true
 
-  alias Jido.Exec
   alias Jido.Action.Error
-  alias JidoTest.TestActions.OutputSchemaAction
+  alias Jido.Exec
   alias JidoTest.TestActions.InvalidOutputAction
   alias JidoTest.TestActions.NoOutputSchemaAction
   alias JidoTest.TestActions.OutputCallbackAction
+  alias JidoTest.TestActions.OutputSchemaAction
 
   @moduletag :capture_log
 

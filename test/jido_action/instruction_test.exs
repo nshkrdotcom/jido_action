@@ -1,7 +1,7 @@
 defmodule Jido.InstructionTest do
   use JidoTest.ActionCase, async: true
-  alias Jido.Instruction
   alias Jido.Action.Error
+  alias Jido.Instruction
   alias JidoTest.TestActions.BasicAction
   alias JidoTest.TestActions.NoSchema
   @moduletag :capture_log

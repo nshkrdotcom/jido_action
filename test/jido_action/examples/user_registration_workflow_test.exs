@@ -3,7 +3,7 @@ defmodule JidoTest.Exec.Examples.UserRegistrationExecTest do
 
   alias Jido.Exec
   alias Jido.Exec.Chain
-  alias JidoTest.TestActions.{FormatUser, EnrichUserData, NotifyUser, FormatEnrichNotifyUserChain}
+  alias JidoTest.TestActions.{EnrichUserData, FormatEnrichNotifyUserChain, FormatUser, NotifyUser}
 
   @valid_user_data %{
     # Note the trailing space to test trimming

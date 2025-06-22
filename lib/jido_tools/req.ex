@@ -1,11 +1,11 @@
 defmodule Jido.Tools.ReqTool do
   @moduledoc """
   A behavior and macro for creating HTTP request tools using the Req library.
-  
+
   Provides a standardized way to create actions that make HTTP requests with
   configurable URL, method, headers, and JSON parsing options.
   """
-  
+
   alias Jido.Action.Error
 
   @req_config_schema NimbleOptions.new!(
@@ -25,7 +25,7 @@ defmodule Jido.Tools.ReqTool do
 
   @doc """
   Callback for transforming the HTTP response result.
-  
+
   Takes a map with request and response data and returns a transformed result.
   """
   @callback transform_result(map()) :: {:ok, map()} | {:error, any()}
@@ -97,14 +97,7 @@ defmodule Jido.Tools.ReqTool do
             json = @req_opts[:json]
 
             # Ensure Req is available
-            if not Code.ensure_loaded?(Req) do
-              {:error,
-               %{
-                 type: :dependency_error,
-                 message:
-                   "Req library is required for ReqTool. Add {:req, \"~> 0.3.0\"} to your dependencies."
-               }}
-            else
+            if Code.ensure_loaded?(Req) do
               try do
                 # Build options for Req
                 req_options = [
@@ -133,6 +126,13 @@ defmodule Jido.Tools.ReqTool do
               rescue
                 e -> {:error, %{type: :http_error, message: Exception.message(e)}}
               end
+            else
+              {:error,
+               %{
+                 type: :dependency_error,
+                 message:
+                   "Req library is required for ReqTool. Add {:req, \"~> 0.3.0\"} to your dependencies."
+               }}
             end
           end
 

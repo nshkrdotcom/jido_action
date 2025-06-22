@@ -68,7 +68,7 @@ defmodule Jido.Action.Tool do
 
   @doc """
   Helper function to convert params using schema information.
-  
+
   Converts string keys to atom keys and handles type conversion based on schema.
   """
   def convert_params_using_schema(params, schema) do

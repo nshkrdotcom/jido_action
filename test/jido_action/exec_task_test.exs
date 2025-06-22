@@ -3,9 +3,9 @@ defmodule Jido.ExecTaskTest do
 
   # Import Private to access private functions for testing
   use Private
+  alias Jido.Exec
   alias JidoTest.TestActions.SpawnerAction
   alias JidoTest.TestActions.TaskAction
-  alias Jido.Exec
   @moduletag :capture_log
   describe "spawning multiple processes" do
     test "handles action spawning multiple processes" do

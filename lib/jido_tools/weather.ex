@@ -34,33 +34,30 @@ defmodule Jido.Tools.Weather do
     iex> Jido.Tools.Weather.demo()
   """
   def demo do
-    IO.puts("\n=== Testing with fake data (text format) ===")
-
-    case run(%{location: "any", test: true, format: "text"}, %{}) do
-      {:ok, result} when is_binary(result) -> IO.puts(result)
-      # credo:disable-for-next-line
-      {:ok, result} -> IO.inspect(result, label: "Weather Data")
-      {:error, error} -> IO.puts("Error: #{error}")
-    end
-
-    IO.puts("\n=== Testing with fake data (map format) ===")
-
-    case run(%{location: "any", test: true, format: "map"}, %{}) do
-      {:ok, result} when is_binary(result) -> IO.puts(result)
-      # credo:disable-for-next-line
-      {:ok, result} -> IO.inspect(result, label: "Weather Data")
-      {:error, error} -> IO.puts("Error: #{error}")
-    end
-
-    IO.puts("\n=== Testing with real API ===")
-
-    case run(%{location: "60618,US", format: "text"}, %{}) do
-      {:ok, result} when is_binary(result) -> IO.puts(result)
-      # credo:disable-for-next-line
-      {:ok, result} -> IO.inspect(result, label: "Weather Data")
-      {:error, error} -> IO.puts("Error: #{error}")
-    end
+    demo_fake_text()
+    demo_fake_map()
+    demo_real_api()
   end
+
+  defp demo_fake_text do
+    IO.puts("\n=== Testing with fake data (text format) ===")
+    handle_demo_result(run(%{location: "any", test: true, format: "text"}, %{}))
+  end
+
+  defp demo_fake_map do
+    IO.puts("\n=== Testing with fake data (map format) ===")
+    handle_demo_result(run(%{location: "any", test: true, format: "map"}, %{}))
+  end
+
+  defp demo_real_api do
+    IO.puts("\n=== Testing with real API ===")
+    handle_demo_result(run(%{location: "60618,US", format: "text"}, %{}))
+  end
+
+  defp handle_demo_result({:ok, result}) when is_binary(result), do: IO.puts(result)
+  # credo:disable-for-next-line Credo.Check.Warning.IoInspect
+  defp handle_demo_result({:ok, result}), do: IO.inspect(result, label: "Weather Data")
+  defp handle_demo_result({:error, error}), do: IO.puts("Error: #{error}")
 
   @doc """
   Fetches weather data for the specified location.
@@ -81,17 +78,19 @@ defmodule Jido.Tools.Weather do
   end
 
   defp build_opts(params) do
-    with {:ok, api_key} <- System.fetch_env!("OPENWEATHER_API_KEY") do
-      {:ok,
-       Weather.Opts.new!(
-         api_key: api_key,
-         zip: params.location,
-         units: params.units,
-         hours: params.hours,
-         twelve: false
-       )}
-    else
-      :error -> {:error, "Missing OPENWEATHER_API_KEY environment variable"}
+    case System.fetch_env!("OPENWEATHER_API_KEY") do
+      {:ok, api_key} ->
+        {:ok,
+         Weather.Opts.new!(
+           api_key: api_key,
+           zip: params.location,
+           units: params.units,
+           hours: params.hours,
+           twelve: false
+         )}
+
+      :error ->
+        {:error, "Missing OPENWEATHER_API_KEY environment variable"}
     end
   end
 

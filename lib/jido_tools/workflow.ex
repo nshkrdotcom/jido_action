@@ -83,7 +83,7 @@ defmodule Jido.Tools.Workflow do
     if valid_steps, do: {:ok, steps}, else: {:error, "invalid workflow steps format"}
   end
 
-  @doc false  
+  @doc false
   def validate_step(_), do: {:error, "steps must be a list of tuples"}
 
   # Schema for validating workflow configuration
@@ -105,7 +105,7 @@ defmodule Jido.Tools.Workflow do
 
   @doc """
   Callback for executing a single workflow step.
-  
+
   Takes a step tuple, parameters, and context and returns the result.
   """
   @callback execute_step(step :: tuple(), params :: map(), context :: map()) ::
@@ -155,9 +155,9 @@ defmodule Jido.Tools.Workflow do
           # Add workflow-specific functionality
           @doc "Returns true if this module is a workflow."
           def workflow?, do: @workflow
-           
-           @doc "Returns the workflow steps for this module."
-           def workflow_steps, do: @workflow_steps
+
+          @doc "Returns the workflow steps for this module."
+          def workflow_steps, do: @workflow_steps
 
           # Make to_json overridable before redefining it
           defoverridable to_json: 0
@@ -216,7 +216,7 @@ defmodule Jido.Tools.Workflow do
 
           @doc """
           Default implementation for executing a workflow step.
-          
+
           Handles step, branch, converge, and parallel step types.
           """
           def execute_step(step, params, context) do

@@ -2,8 +2,8 @@ defmodule JidoTest.Exec.ActionTest do
   use JidoTest.ActionCase, async: true
   use ExUnitProperties
 
-  alias Jido.Action.Error
   alias Jido.Action
+  alias Jido.Action.Error
   alias JidoTest.TestActions.Add
   alias JidoTest.TestActions.CompensateAction
   alias JidoTest.TestActions.ConcurrentAction
