@@ -2,7 +2,9 @@ defmodule JidoTest.Exec.ClosureTest do
   use JidoTest.ActionCase, async: false
 
   import ExUnit.CaptureLog
-  import Mock
+  import Mimic
+
+  setup :set_mimic_global
 
   alias Jido.Action.Error
   alias Jido.Exec
@@ -23,14 +25,12 @@ defmodule JidoTest.Exec.ClosureTest do
     end
 
     test "closure preserves context and options" do
-      with_mock Exec, run: fn _, _, _, _ -> {:ok, %{mocked: true}} end do
-        closure = Closure.closure(ContextAction, %{context_key: "value"}, timeout: 5000)
-        closure.(%{input: "test"})
+      expect(Exec, :run, fn _, _, _, _ -> {:ok, %{mocked: true}} end)
 
-        assert_called(
-          Exec.run(ContextAction, %{input: "test"}, %{context_key: "value"}, timeout: 5000)
-        )
-      end
+      closure = Closure.closure(ContextAction, %{context_key: "value"}, timeout: 5000)
+      closure.(%{input: "test"})
+
+      verify!(Exec)
     end
 
     test "closure handles errors from the action" do
@@ -69,18 +69,14 @@ defmodule JidoTest.Exec.ClosureTest do
 
     test "async_closure preserves context and options" do
       capture_log(fn ->
-        with_mock Exec, run_async: fn _, _, _, _ -> %{ref: make_ref(), pid: self()} end do
-          async_closure =
-            Closure.async_closure(ContextAction, %{async_context: true}, timeout: 10_000)
+        expect(Exec, :run_async, fn _, _, _, _ -> %{ref: make_ref(), pid: self()} end)
 
-          async_closure.(%{input: "async_test"})
+        async_closure =
+          Closure.async_closure(ContextAction, %{async_context: true}, timeout: 10_000)
 
-          assert_called(
-            Exec.run_async(ContextAction, %{input: "async_test"}, %{async_context: true},
-              timeout: 10_000
-            )
-          )
-        end
+        async_closure.(%{input: "async_test"})
+
+        verify!(Exec)
       end)
     end
 

@@ -3,7 +3,8 @@ Enum.each(
   [
     :telemetry,
     System,
-    Req
+    Req,
+    Jido.Exec
   ],
   &Mimic.copy/1
 )
