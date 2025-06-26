@@ -157,9 +157,7 @@ defmodule Jido.Plan do
     depends_on = opts |> Keyword.get(:depends_on, []) |> List.wrap()
     plan_opts = Keyword.drop(opts, [:depends_on])
 
-    merged_context = Map.merge(plan.context, %{})
-
-    case Instruction.normalize_single(step_def, merged_context, []) do
+    case Instruction.normalize_single(step_def, plan.context, []) do
       {:ok, instruction} ->
         plan_instruction = %PlanInstruction{
           name: step_name,
