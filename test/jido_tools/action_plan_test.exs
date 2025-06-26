@@ -125,7 +125,7 @@ defmodule Jido.Tools.ActionPlanTest do
 
   defmodule InvalidActionPlan do
     use ActionPlan,
-      name: "invalid_workflow", 
+      name: "invalid_workflow",
       description: "A workflow that causes execution issues"
 
     @impl ActionPlan
@@ -209,9 +209,10 @@ defmodule Jido.Tools.ActionPlanTest do
     test "handles missing steps gracefully" do
       # Test that we can handle a plan with missing dependencies
       # The Plan module should create a graph with missing vertices
-      plan = Plan.new()
-      |> Plan.add(:existing_step, TestAction)
-      |> Plan.add(:bad_step, TestAction, depends_on: [:non_existent])
+      plan =
+        Plan.new()
+        |> Plan.add(:existing_step, TestAction)
+        |> Plan.add(:bad_step, TestAction, depends_on: [:non_existent])
 
       # The execution_phases will succeed but the missing vertex will be included
       # This is actually valid behavior - the graph includes the missing dependency

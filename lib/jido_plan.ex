@@ -109,7 +109,7 @@ defmodule Jido.Plan do
       iex> {:ok, plan} = Plan.build(plan_def)
       {:ok, %Plan{...}}
   """
-  @spec build(keyword(), map(), keyword()) :: {:ok, t()} | {:error, term()}
+  @spec build(keyword(), map()) :: {:ok, t()} | {:error, term()}
   def build(plan_def, context \\ %{}) when is_list(plan_def) do
     if Keyword.keyword?(plan_def) do
       plan = new(context: context)
@@ -129,9 +129,9 @@ defmodule Jido.Plan do
   @doc """
   Same as build/3 but raises on error.
   """
-  @spec build!(keyword(), map(), keyword()) :: t()
-  def build!(plan_def, context \\ %{}, opts \\ []) do
-    case build(plan_def, context, opts) do
+  @spec build!(keyword(), map()) :: t()
+  def build!(plan_def, context \\ %{}) do
+    case build(plan_def, context) do
       {:ok, plan} -> plan
       {:error, error} -> raise error.message
     end
