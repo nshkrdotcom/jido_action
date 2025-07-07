@@ -92,7 +92,7 @@ defmodule Jido.Tools.Weather do
            twelve: false
          )}
 
-      :error ->
+      _ ->
         {:error, "Missing OPENWEATHER_API_KEY environment variable"}
     end
   end
