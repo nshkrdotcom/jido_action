@@ -69,6 +69,19 @@ defmodule Jido.Exec do
   @type run_opts :: [timeout: non_neg_integer()]
   @type async_ref :: %{ref: reference(), pid: pid()}
 
+  # Execution result types
+  @type exec_success :: {:ok, map()}
+  @type exec_success_dir :: {:ok, map(), any()}
+  @type exec_error :: {:error, Error.t()}
+  @type exec_error_dir :: {:error, Error.t(), any()}
+  @type exec_result ::
+          exec_success
+          | exec_success_dir
+          | exec_error
+          | exec_error_dir
+          | {:ok, any()}
+          | {:error, any()}
+
   @doc """
   Executes a Action synchronously with the given parameters and context.
 
@@ -118,7 +131,7 @@ defmodule Jido.Exec do
       #   end
       # end
   """
-  @spec run(action(), params(), context(), run_opts()) :: {:ok, map()} | {:error, Error.t()}
+  @spec run(action(), params(), context(), run_opts()) :: exec_result
   def run(action, params \\ %{}, context \\ %{}, opts \\ [])
 
   def run(action, params, context, opts) when is_atom(action) and is_list(opts) do
@@ -150,11 +163,6 @@ defmodule Jido.Exec do
         dbug("Error in action setup", error: reason)
         cond_log(log_level, :debug, "Action Execution failed: #{inspect(reason)}")
         OK.failure(reason)
-
-      {:error, reason, other} ->
-        dbug("Error with additional info in action setup", error: reason, other: other)
-        cond_log(log_level, :debug, "Action Execution failed with directive: #{inspect(reason)}")
-        {:error, reason, other}
     end
   rescue
     e in [FunctionClauseError, BadArityError, BadFunctionError] ->
@@ -282,9 +290,11 @@ defmodule Jido.Exec do
       iex> Jido.Exec.await(async_ref, 100)
       {:error, %Jido.Action.Error{type: :timeout, message: "Async action timed out after 100ms"}}
   """
-  @spec await(async_ref(), timeout()) :: {:ok, map()} | {:error, Error.t()}
-  def await(%{ref: ref, pid: pid}, timeout \\ nil) do
-    timeout = timeout || get_default_timeout()
+  @spec await(async_ref()) :: exec_result
+  def await(async_ref), do: await(async_ref, get_default_timeout())
+
+  @spec await(async_ref(), timeout()) :: exec_result
+  def await(%{ref: ref, pid: pid}, timeout) do
     dbug("Awaiting async action result", ref: ref, pid: pid, timeout: timeout)
 
     receive do
@@ -344,7 +354,7 @@ defmodule Jido.Exec do
       iex> Jido.Exec.cancel("invalid")
       {:error, %Jido.Action.Error{type: :invalid_async_ref, message: "Invalid async ref for cancellation"}}
   """
-  @spec cancel(async_ref() | pid()) :: :ok | {:error, Error.t()}
+  @spec cancel(async_ref() | pid()) :: :ok | exec_error
   def cancel(%{ref: _ref, pid: pid}), do: cancel(pid)
   def cancel(%{pid: pid}), do: cancel(pid)
 
@@ -457,8 +467,7 @@ defmodule Jido.Exec do
       end
     end
 
-    @spec do_run_with_retry(action(), params(), context(), run_opts()) ::
-            {:ok, map()} | {:error, Error.t()}
+    @spec do_run_with_retry(action(), params(), context(), run_opts()) :: exec_result
     defp do_run_with_retry(action, params, context, opts) do
       max_retries = Keyword.get(opts, :max_retries, get_default_max_retries())
       backoff = Keyword.get(opts, :backoff, get_default_backoff())
@@ -474,7 +483,7 @@ defmodule Jido.Exec do
             non_neg_integer(),
             non_neg_integer(),
             non_neg_integer()
-          ) :: {:ok, map()} | {:error, Error.t()}
+          ) :: exec_result
     defp do_run_with_retry(action, params, context, opts, retry_count, max_retries, backoff) do
       dbug("Attempting run", action: action, retry_count: retry_count)
 
@@ -558,8 +567,7 @@ defmodule Jido.Exec do
       |> min(30_000)
     end
 
-    @spec do_run(action(), params(), context(), run_opts()) ::
-            {:ok, map()} | {:error, Error.t()}
+    @spec do_run(action(), params(), context(), run_opts()) :: exec_result
     defp do_run(action, params, context, opts) do
       timeout = Keyword.get(opts, :timeout, get_default_timeout())
       telemetry = Keyword.get(opts, :telemetry, :full)
@@ -680,8 +688,7 @@ defmodule Jido.Exec do
             context(),
             Error.t() | {Error.t(), any()},
             run_opts()
-          ) ::
-            {:error, Error.t() | map()} | {:error, Error.t(), any()}
+          ) :: exec_result
     defp handle_action_error(action, params, context, error_or_tuple, opts) do
       Logger.debug("Handle Action Error in handle_action_error: #{inspect(opts)}")
       dbug("Handling action error", action: action, error: error_or_tuple)
@@ -737,8 +744,7 @@ defmodule Jido.Exec do
       end
     end
 
-    @spec handle_compensation_result(any(), Error.t(), any()) ::
-            {:error, Error.t()} | {:error, Error.t(), any()}
+    @spec handle_compensation_result(any(), Error.t(), any()) :: exec_result
     defp handle_compensation_result(result, original_error, directive) do
       error_result =
         case result do
@@ -796,8 +802,13 @@ defmodule Jido.Exec do
       enabled && function_exported?(action, :on_error, 4)
     end
 
-    @spec execute_action_with_timeout(action(), params(), context(), non_neg_integer()) ::
-            {:ok, map()} | {:error, Error.t()}
+    @spec execute_action_with_timeout(
+            action(),
+            params(),
+            context(),
+            non_neg_integer(),
+            run_opts()
+          ) :: exec_result
     defp execute_action_with_timeout(action, params, context, timeout, opts \\ [])
 
     defp execute_action_with_timeout(action, params, context, 0, opts) do
@@ -924,8 +935,7 @@ Debug info:
       |> Enum.each(&Process.exit(&1, :kill))
     end
 
-    @spec execute_action(action(), params(), context(), run_opts()) ::
-            {:ok, map()} | {:error, Error.t()}
+    @spec execute_action(action(), params(), context(), run_opts()) :: exec_result
     defp execute_action(action, params, context, opts) do
       log_level = Keyword.get(opts, :log_level, :info)
       dbug("Executing action", action: action, params: params, context: context)

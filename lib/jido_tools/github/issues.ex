@@ -24,6 +24,7 @@ defmodule Jido.Tools.Github.Issues do
         labels: [type: :array, description: "The labels of the issue"]
       ]
 
+    @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
     def run(params, _context) do
       body = %{
         title: params.title,
@@ -34,7 +35,13 @@ defmodule Jido.Tools.Github.Issues do
       }
 
       result = Tentacat.Issues.create(params.client, params.owner, params.repo, body)
-      {:ok, result}
+
+      {:ok,
+       %{
+         status: "success",
+         data: result,
+         raw: result
+       }}
     end
   end
 
@@ -60,6 +67,7 @@ defmodule Jido.Tools.Github.Issues do
         since: [type: :string, description: "Only show issues updated after this time"]
       ]
 
+    @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
     def run(params, _context) do
       filters = %{
         state: params.state,
@@ -72,7 +80,13 @@ defmodule Jido.Tools.Github.Issues do
       }
 
       result = Tentacat.Issues.filter(params.client, params.owner, params.repo, filters)
-      {:ok, result}
+
+      {:ok,
+       %{
+         status: "success",
+         data: result,
+         raw: result
+       }}
     end
   end
 
@@ -92,9 +106,16 @@ defmodule Jido.Tools.Github.Issues do
         number: [type: :integer, description: "The issue number"]
       ]
 
+    @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
     def run(params, _context) do
       result = Tentacat.Issues.find(params.client, params.owner, params.repo, params.number)
-      {:ok, result}
+
+      {:ok,
+       %{
+         status: "success",
+         data: result,
+         raw: result
+       }}
     end
   end
 
@@ -113,9 +134,16 @@ defmodule Jido.Tools.Github.Issues do
         repo: [type: :string, description: "The name of the repository"]
       ]
 
+    @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
     def run(params, _context) do
       result = Tentacat.Issues.list(params.client, params.owner, params.repo)
-      {:ok, result}
+
+      {:ok,
+       %{
+         status: "success",
+         data: result,
+         raw: result
+       }}
     end
   end
 
@@ -141,6 +169,7 @@ defmodule Jido.Tools.Github.Issues do
         labels: [type: :array, description: "The new labels of the issue"]
       ]
 
+    @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
     def run(params, _context) do
       body = %{
         title: params.title,
@@ -154,7 +183,12 @@ defmodule Jido.Tools.Github.Issues do
       result =
         Tentacat.Issues.update(params.client, params.owner, params.repo, params.number, body)
 
-      {:ok, result}
+      {:ok,
+       %{
+         status: "success",
+         data: result,
+         raw: result
+       }}
     end
   end
 end

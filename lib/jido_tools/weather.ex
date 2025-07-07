@@ -33,6 +33,7 @@ defmodule Jido.Tools.Weather do
   Usage in IEx:
     iex> Jido.Tools.Weather.demo()
   """
+  @dialyzer :no_match
   def demo do
     demo_fake_text()
     demo_fake_map()
@@ -49,6 +50,7 @@ defmodule Jido.Tools.Weather do
     handle_demo_result(run(%{location: "any", test: true, format: "map"}, %{}))
   end
 
+  @dialyzer :no_match
   defp demo_real_api do
     IO.puts("\n=== Testing with real API ===")
     handle_demo_result(run(%{location: "60618,US", format: "text"}, %{}))
@@ -64,6 +66,7 @@ defmodule Jido.Tools.Weather do
 
   Returns formatted weather information based on the provided parameters.
   """
+  @spec run(map(), map()) :: {:ok, String.t() | map()} | {:error, String.t()}
   def run(params, _context) do
     with {:ok, opts} <- build_opts(params),
          {:ok, response} <- Weather.API.fetch_weather(opts) do
@@ -78,7 +81,7 @@ defmodule Jido.Tools.Weather do
   end
 
   defp build_opts(params) do
-    case System.fetch_env!("OPENWEATHER_API_KEY") do
+    case System.fetch_env("OPENWEATHER_API_KEY") do
       {:ok, api_key} ->
         {:ok,
          Weather.Opts.new!(
@@ -97,7 +100,7 @@ defmodule Jido.Tools.Weather do
   defp format_response(response, %{format: "map"}) do
     current = response["current"]
     daily = List.first(response["daily"])
-    unit = if current["temp"] > 32, do: "F", else: "C"
+    unit = if is_number(current["temp"]) and current["temp"] > 32.0, do: "F", else: "C"
 
     %{
       current: %{
@@ -123,15 +126,15 @@ defmodule Jido.Tools.Weather do
 
     """
     Current Weather:
-    Temperature: #{current["temp"]}°#{if current["temp"] > 32, do: "F", else: "C"}
-    Feels like: #{current["feels_like"]}°#{if current["feels_like"] > 32, do: "F", else: "C"}
+    Temperature: #{current["temp"]}°#{if is_number(current["temp"]) and current["temp"] > 32.0, do: "F", else: "C"}
+    Feels like: #{current["feels_like"]}°#{if is_number(current["feels_like"]) and current["feels_like"] > 32.0, do: "F", else: "C"}
     Humidity: #{current["humidity"]}%
     Wind: #{current["wind_speed"]} mph
     Conditions: #{List.first(current["weather"])["description"]}
 
     Today's Forecast:
-    High: #{daily["temp"]["max"]}°#{if daily["temp"]["max"] > 32, do: "F", else: "C"}
-    Low: #{daily["temp"]["min"]}°#{if daily["temp"]["min"] > 32, do: "F", else: "C"}
+    High: #{daily["temp"]["max"]}°#{if is_number(daily["temp"]["max"]) and daily["temp"]["max"] > 32.0, do: "F", else: "C"}
+    Low: #{daily["temp"]["min"]}°#{if is_number(daily["temp"]["min"]) and daily["temp"]["min"] > 32.0, do: "F", else: "C"}
     Conditions: #{daily["summary"]}
     """
     |> String.trim()
