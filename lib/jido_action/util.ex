@@ -6,6 +6,8 @@ defmodule Jido.Action.Util do
   require Logger
   require OK
 
+  alias Jido.Action.Error
+
   @name_regex ~r/^[a-zA-Z][a-zA-Z0-9_]*$/
 
   @doc """

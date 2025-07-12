@@ -25,6 +25,7 @@ defmodule Jido.Exec.Chain do
   require OK
 
   @type chain_action :: module() | {module(), keyword()}
+  @type ok_t :: {:ok, any()} | {:error, any()}
   @type chain_result :: {:ok, map()} | {:error, Error.t()} | {:interrupted, map()} | Task.t()
   @type interrupt_check :: (-> boolean())
 
@@ -78,13 +79,13 @@ defmodule Jido.Exec.Chain do
   defp should_interrupt?(check) when is_function(check, 0), do: check.()
 
   @spec process_action(chain_action(), map(), map(), keyword()) ::
-          {:cont, OK.t()} | {:halt, chain_result()}
+          {:cont, ok_t()} | {:halt, chain_result()}
   defp process_action(action, params, context, opts) when is_atom(action) do
     run_action(action, params, context, opts)
   end
 
   @spec process_action({module(), keyword()} | {module(), map()}, map(), map(), keyword()) ::
-          {:cont, OK.t()} | {:halt, chain_result()}
+          {:cont, ok_t()} | {:halt, chain_result()}
   defp process_action({action, action_opts}, params, context, opts)
        when is_atom(action) and (is_list(action_opts) or is_map(action_opts)) do
     case validate_action_params(action_opts) do
@@ -102,7 +103,7 @@ defmodule Jido.Exec.Chain do
     {:halt, {:error, Error.bad_request("Invalid chain action", %{action: invalid_action})}}
   end
 
-  @spec validate_action_params(keyword() | map()) :: {:ok, map()} | {:error, Error.t()}
+  @spec validate_action_params(keyword() | map()) :: ok_t()
   defp validate_action_params(opts) when is_list(opts) do
     if Enum.all?(opts, fn {k, _v} -> is_atom(k) end) do
       {:ok, Map.new(opts)}
@@ -120,7 +121,7 @@ defmodule Jido.Exec.Chain do
   end
 
   @spec run_action(module(), map(), map(), keyword()) ::
-          {:cont, OK.t()} | {:halt, chain_result()}
+          {:cont, ok_t()} | {:halt, chain_result()}
   defp run_action(action, params, context, opts) do
     case Exec.run(action, params, context, opts) do
       OK.success(result) when is_map(result) ->

@@ -129,7 +129,7 @@ defmodule Jido.Plan do
   @doc """
   Same as build/3 but raises on error.
   """
-  @spec build!(keyword(), map()) :: t()
+  @spec build!(keyword(), map()) :: t() | no_return()
   def build!(plan_def, context \\ %{}) do
     case build(plan_def, context) do
       {:ok, plan} -> plan
@@ -152,7 +152,7 @@ defmodule Jido.Plan do
       iex> plan = Plan.add(plan, :fetch, MyApp.FetchAction)
       iex> plan = Plan.add(plan, :save, MyApp.SaveAction, depends_on: :fetch)
   """
-  @spec add(t(), atom(), step_def(), keyword()) :: t()
+  @spec add(t(), atom(), step_def(), keyword()) :: t() | no_return()
   def add(%__MODULE__{} = plan, step_name, step_def, opts \\ []) do
     depends_on = opts |> Keyword.get(:depends_on, []) |> List.wrap()
     plan_opts = Keyword.drop(opts, [:depends_on])
@@ -188,7 +188,7 @@ defmodule Jido.Plan do
       iex> |> Plan.add(:step2, Action2)
       iex> |> Plan.depends_on(:step2, :step1)
   """
-  @spec depends_on(t(), atom(), atom() | [atom()]) :: t()
+  @spec depends_on(t(), atom(), atom() | [atom()]) :: t() | no_return()
   def depends_on(%__MODULE__{} = plan, step_name, deps) do
     case Map.get(plan.steps, step_name) do
       nil ->
@@ -230,7 +230,7 @@ defmodule Jido.Plan do
   @doc """
   Same as normalize/1 but raises on error.
   """
-  @spec normalize!(t()) :: {Graph.t(), [PlanInstruction.t()]}
+  @spec normalize!(t()) :: {Graph.t(), [PlanInstruction.t()]} | no_return()
   def normalize!(%__MODULE__{} = plan) do
     case normalize(plan) do
       {:ok, result} -> result
@@ -429,7 +429,6 @@ defmodule Jido.Plan do
       {params, []} -> {action, params}
       {params, opts} when map_size(params) == 0 and opts != [] -> {action, opts}
       {params, opts} when opts != [] -> {action, params, opts}
-      {params, []} -> {action, params}
     end
   end
 
