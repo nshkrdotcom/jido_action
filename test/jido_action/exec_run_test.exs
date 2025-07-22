@@ -95,7 +95,8 @@ defmodule JidoTest.ExecRunTest do
 
       log =
         capture_log(fn ->
-          assert {:error, %Error{}} = Exec.run(ErrorAction, %{}, %{}, timeout: 50)
+          assert {:error, %_{} = error} = Exec.run(ErrorAction, %{}, %{}, timeout: 50)
+          assert is_exception(error)
         end)
 
       assert log =~ "Executing JidoTest.TestActions.ErrorAction with params: %{}"
@@ -138,7 +139,8 @@ defmodule JidoTest.ExecRunTest do
             backoff: 10
           )
 
-        assert {:error, %Error{}} = result
+        assert {:error, %_{} = error} = result
+        assert is_exception(error)
         assert :ets.lookup(attempts_table, :attempts) == [{:attempts, 3}]
       end)
 
@@ -146,13 +148,17 @@ defmodule JidoTest.ExecRunTest do
     end
 
     test "handles invalid params" do
-      assert {:error, %Error{}} = Exec.run(BasicAction, %{invalid: "params"})
+      assert {:error, %_{} = error} = Exec.run(BasicAction, %{invalid: "params"})
+      assert is_exception(error)
     end
 
     test "handles timeout" do
       capture_log(fn ->
-        assert {:error, %Error{message: message}} =
+        assert {:error, %_{} = error} =
                  Exec.run(DelayAction, %{delay: 1000}, %{}, timeout: 50)
+
+        assert is_exception(error)
+        message = Exception.message(error)
 
         assert message =~ "timed out after 50ms. This could be due"
       end)
@@ -208,15 +214,15 @@ defmodule JidoTest.ExecRunTest do
     test "handles {:error, reason}" do
       params = {:error, "some error"}
 
-      assert {:error, %Error{type: :validation_error, message: "some error"}} =
+      assert {:error, %Jido.Action.Error.InvalidInputError{}} =
                Exec.normalize_params(params)
     end
 
-    test "passes through %Error{} with different types" do
+    test "passes through exception errors" do
       errors = [
-        %Error{type: :validation_error, message: "validation failed"},
-        %Error{type: :execution_error, message: "execution failed"},
-        %Error{type: :timeout_error, message: "action timed out"}
+        Error.validation_error("validation failed"),
+        Error.execution_error("execution failed"),
+        Error.timeout_error("action timed out")
       ]
 
       for error <- errors do
@@ -227,7 +233,7 @@ defmodule JidoTest.ExecRunTest do
     test "returns error for invalid params" do
       params = "invalid"
 
-      assert {:error, %Error{type: :validation_error, message: "Invalid params type: " <> _}} =
+      assert {:error, %Jido.Action.Error.InvalidInputError{message: "Invalid params type: " <> _}} =
                Exec.normalize_params(params)
     end
   end
@@ -246,7 +252,8 @@ defmodule JidoTest.ExecRunTest do
     test "returns error for invalid context" do
       context = "invalid"
 
-      assert {:error, %Error{type: :validation_error, message: "Invalid context type: " <> _}} =
+      assert {:error,
+              %Jido.Action.Error.InvalidInputError{message: "Invalid context type: " <> _}} =
                Exec.normalize_context(context)
     end
   end
@@ -263,8 +270,7 @@ defmodule JidoTest.ExecRunTest do
 
     test "returns error for action without run/2" do
       assert {:error,
-              %Error{
-                type: :invalid_action,
+              %Jido.Action.Error.InvalidInputError{
                 message:
                   "Module JidoTest.ExecRunTest.NotAAction is not a valid action: missing run/2 function"
               }} = Exec.validate_action(NotAAction)
@@ -280,7 +286,8 @@ defmodule JidoTest.ExecRunTest do
       # BasicAction has validate_params/1 defined via use Action in test_actions.ex
       # The error will be an invalid_action error because we're using function_exported? in Exec
       # But this test is just verifying that invalid params return an error
-      {:error, %Error{}} = Exec.validate_params(BasicAction, %{invalid: "params"})
+      {:error, %_{} = error} = Exec.validate_params(BasicAction, %{invalid: "params"})
+      assert is_exception(error)
     end
   end
 
@@ -300,7 +307,7 @@ defmodule JidoTest.ExecRunTest do
         # Disable retries for this test to isolate timeout behavior
         start_time = System.monotonic_time(:millisecond)
 
-        assert {:error, %Error{type: :timeout}} =
+        assert {:error, %Jido.Action.Error.TimeoutError{}} =
                  Exec.run(DelayAction, %{delay: 2_000}, %{}, max_retries: 0)
 
         end_time = System.monotonic_time(:millisecond)

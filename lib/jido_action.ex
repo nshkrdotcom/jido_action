@@ -595,10 +595,10 @@ defmodule Jido.Action do
   """
   @callback on_error(
               failed_params :: map(),
-              error :: Error.t(),
+              error :: Exception.t(),
               context :: map(),
               opts :: keyword()
-            ) :: {:ok, map()} | {:error, Error.t()}
+            ) :: {:ok, map()} | {:error, Exception.t()}
 
   @doc """
   Raises an error indicating that Actions cannot be defined at runtime.
@@ -616,8 +616,8 @@ defmodule Jido.Action do
       {:error, %Jido.Action.Error{type: :config_error, message: "Actions should not be defined at runtime"}}
 
   """
-  @spec new() :: {:error, Error.t()}
-  @spec new(map() | keyword()) :: {:error, Error.t()}
+  @spec new() :: {:error, Exception.t()}
+  @spec new(map() | keyword()) :: {:error, Exception.t()}
   def new, do: new(%{})
 
   def new(_map_or_kwlist) do

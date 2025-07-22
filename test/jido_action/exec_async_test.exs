@@ -3,7 +3,6 @@ defmodule JidoTest.ExecAsyncTest do
 
   import ExUnit.CaptureLog
 
-  alias Jido.Action.Error
   alias Jido.Exec
   alias JidoTest.TestActions.BasicAction
   alias JidoTest.TestActions.DelayAction
@@ -34,10 +33,9 @@ defmodule JidoTest.ExecAsyncTest do
       capture_log(fn ->
         async_ref = Exec.run_async(ErrorAction, %{error_type: :runtime}, %{}, timeout: 50)
 
-        assert {:error, %Error{type: :execution_error, message: message}} =
-                 Exec.await(async_ref)
-
-        assert message =~ "Runtime error"
+        assert {:error, error} = Exec.await(async_ref)
+        assert is_exception(error)
+        assert Exception.message(error) =~ "Runtime error"
       end)
     end
 
@@ -45,7 +43,8 @@ defmodule JidoTest.ExecAsyncTest do
       capture_log(fn ->
         async_ref = Exec.run_async(DelayAction, %{delay: 200}, %{}, timeout: 75)
 
-        assert {:error, %Error{type: :timeout, message: "Async action timed out after 50ms"}} =
+        assert {:error,
+                %Jido.Action.Error.TimeoutError{message: "Async action timed out after 50ms"}} =
                  Exec.await(async_ref, 50)
       end)
     end
@@ -79,7 +78,7 @@ defmodule JidoTest.ExecAsyncTest do
     end
 
     test "returns an error for invalid input" do
-      assert {:error, %Error{type: :invalid_async_ref}} = Exec.cancel("invalid")
+      assert {:error, %Jido.Action.Error.InvalidInputError{}} = Exec.cancel("invalid")
     end
   end
 
@@ -98,8 +97,8 @@ defmodule JidoTest.ExecAsyncTest do
 
       receive do
         {:await_result, result} ->
-          assert {:error, %Error{type: :timeout} = error} = result
-          assert error.message =~ "Async action timed out after 100ms"
+          assert {:error, %Jido.Action.Error.TimeoutError{} = error} = result
+          assert Exception.message(error) =~ "Async action timed out after 100ms"
       after
         2000 ->
           flunk("Await did not complete in time")

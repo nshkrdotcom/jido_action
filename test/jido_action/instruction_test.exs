@@ -1,6 +1,5 @@
 defmodule Jido.InstructionTest do
   use JidoTest.ActionCase, async: true
-  alias Jido.Action.Error
   alias Jido.Instruction
   alias JidoTest.TestActions.BasicAction
   alias JidoTest.TestActions.NoSchema
@@ -44,8 +43,10 @@ defmodule Jido.InstructionTest do
     end
 
     test "returns error for invalid params list format" do
-      assert {:error, %Error{}} =
+      assert {:error, %_{} = error} =
                Instruction.normalize({BasicAction, ["not", "a", "keyword", "list"]})
+
+      assert is_exception(error)
     end
 
     test "normalizes list of mixed formats with different param types" do
@@ -77,11 +78,13 @@ defmodule Jido.InstructionTest do
     end
 
     test "returns error for invalid params format" do
-      assert {:error, %Error{}} = Instruction.normalize({BasicAction, "invalid"})
+      assert {:error, %_{} = error} = Instruction.normalize({BasicAction, "invalid"})
+      assert is_exception(error)
     end
 
     test "returns error for invalid instruction format" do
-      assert {:error, %Error{}} = Instruction.normalize(123)
+      assert {:error, %_{} = error} = Instruction.normalize(123)
+      assert is_exception(error)
     end
 
     test "merges options from input" do
@@ -116,7 +119,7 @@ defmodule Jido.InstructionTest do
     end
 
     test "raises error for invalid input" do
-      assert_raise ArgumentError, fn ->
+      assert_raise Jido.Action.Error.ExecutionFailureError, fn ->
         Instruction.normalize!(123)
       end
     end
@@ -138,14 +141,20 @@ defmodule Jido.InstructionTest do
         %Instruction{action: NoSchema}
       ]
 
-      assert {:error, %Error{}} =
+      assert {:error, %_{} = error} =
                Instruction.validate_allowed_actions(instructions, [BasicAction])
+
+      assert is_exception(error)
     end
 
     test "validates single instruction" do
       instruction = %Instruction{action: BasicAction}
       assert :ok = Instruction.validate_allowed_actions(instruction, [BasicAction])
-      assert {:error, %Error{}} = Instruction.validate_allowed_actions(instruction, [NoSchema])
+
+      assert {:error, %_{} = error} =
+               Instruction.validate_allowed_actions(instruction, [NoSchema])
+
+      assert is_exception(error)
     end
   end
 
@@ -187,16 +196,20 @@ defmodule Jido.InstructionTest do
     end
 
     test "returns error for invalid params format" do
-      assert {:error, %Error{}} =
+      assert {:error, %_{} = error} =
                Instruction.normalize_single({BasicAction, "invalid"})
+
+      assert is_exception(error)
     end
 
     test "returns error for invalid instruction format" do
-      assert {:error, %Error{}} = Instruction.normalize_single(123)
+      assert {:error, %_{} = error} = Instruction.normalize_single(123)
+      assert is_exception(error)
     end
 
     test "returns error for list input" do
-      assert {:error, %Error{}} = Instruction.normalize_single([BasicAction])
+      assert {:error, %_{} = error} = Instruction.normalize_single([BasicAction])
+      assert is_exception(error)
     end
 
     test "merges options from input" do

@@ -6,8 +6,6 @@ defmodule Jido.Action.Tool do
   like LangChain or Instructor by converting them into a standardized tool format.
   """
 
-  alias Jido.Action.Error
-
   @type tool :: %{
           name: String.t(),
           description: String.t(),
@@ -61,7 +59,7 @@ defmodule Jido.Action.Tool do
       {:ok, result} ->
         {:ok, Jason.encode!(result)}
 
-      {:error, %Error{} = error} ->
+      {:error, %_{} = error} when is_exception(error) ->
         {:error, Jason.encode!(%{error: inspect(error)})}
     end
   end

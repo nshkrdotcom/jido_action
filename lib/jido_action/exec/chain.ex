@@ -100,7 +100,7 @@ defmodule Jido.Exec.Chain do
 
   @spec process_action(any(), map(), map(), keyword()) :: {:halt, {:error, Error.t()}}
   defp process_action(invalid_action, _params, _context, _opts) do
-    {:halt, {:error, Error.bad_request("Invalid chain action", %{action: invalid_action})}}
+    {:halt, {:error, Error.validation_error("Invalid chain action", %{action: invalid_action})}}
   end
 
   @spec validate_action_params(keyword() | map()) :: ok_t()
@@ -108,7 +108,7 @@ defmodule Jido.Exec.Chain do
     if Enum.all?(opts, fn {k, _v} -> is_atom(k) end) do
       {:ok, Map.new(opts)}
     else
-      {:error, Error.bad_request("Exec parameters must use atom keys")}
+      {:error, Error.validation_error("Exec parameters must use atom keys")}
     end
   end
 
@@ -116,7 +116,7 @@ defmodule Jido.Exec.Chain do
     if Enum.all?(Map.keys(opts), &is_atom/1) do
       {:ok, opts}
     else
-      {:error, Error.bad_request("Exec parameters must use atom keys")}
+      {:error, Error.validation_error("Exec parameters must use atom keys")}
     end
   end
 

@@ -108,8 +108,9 @@ defmodule JidoTest.Exec.ChainInterruptTest do
         capture_log([level: :warning], fn ->
           result = Chain.chain(actions, initial_params, interrupt_check: fn -> false end)
           assert {:error, error} = result
-          assert error.type == :execution_error
-          assert error.message == "Validation error"
+          assert is_exception(error)
+          assert error.__struct__ == Jido.Action.Error.ExecutionFailureError
+          assert Exception.message(error) =~ "Validation error"
         end)
 
       assert log =~ "Exec in chain failed"

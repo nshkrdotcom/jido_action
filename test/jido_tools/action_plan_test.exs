@@ -179,7 +179,8 @@ defmodule Jido.Tools.ActionPlanTest do
       assert {:error, error} = FailingActionPlan.run(params, context)
       assert %{type: :step_execution_failed, step_name: :failing_step} = error
       # The error is now wrapped in a Jido.Action.Error struct by Jido.Exec
-      assert %Jido.Action.Error{message: "This action always fails"} = error.reason
+      assert is_exception(error.reason)
+      assert Exception.message(error.reason) =~ "This action always fails"
     end
 
     test "workflow handles plan execution failures" do

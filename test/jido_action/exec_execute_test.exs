@@ -3,7 +3,6 @@ defmodule JidoTest.ExecExecuteTest do
 
   import ExUnit.CaptureLog
 
-  alias Jido.Action.Error
   alias Jido.Exec
   alias JidoTest.TestActions.BasicAction
   alias JidoTest.TestActions.ContextAction
@@ -73,10 +72,12 @@ defmodule JidoTest.ExecExecuteTest do
     test "handles Action execution error" do
       log =
         capture_log(fn ->
-          assert {:error, %Error{type: :execution_error}} =
+          assert {:error, error} =
                    Exec.execute_action(ErrorAction, %{error_type: :validation}, %{},
                      log_level: :debug
                    )
+
+          assert is_exception(error)
         end)
 
       assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
@@ -86,12 +87,13 @@ defmodule JidoTest.ExecExecuteTest do
     test "handles runtime errors" do
       log =
         capture_log(fn ->
-          assert {:error, %Error{type: :execution_error, message: message}} =
+          assert {:error, error} =
                    Exec.execute_action(ErrorAction, %{error_type: :runtime}, %{},
                      log_level: :debug
                    )
 
-          assert message =~ "Runtime error"
+          assert is_exception(error)
+          assert Exception.message(error) =~ "Runtime error"
         end)
 
       assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
@@ -101,10 +103,12 @@ defmodule JidoTest.ExecExecuteTest do
     test "handles argument errors" do
       log =
         capture_log(fn ->
-          assert {:error, %Error{type: :execution_error}} =
+          assert {:error, error} =
                    Exec.execute_action(ErrorAction, %{error_type: :argument}, %{},
                      log_level: :debug
                    )
+
+          assert is_exception(error)
         end)
 
       assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
@@ -114,12 +118,15 @@ defmodule JidoTest.ExecExecuteTest do
     test "handles unexpected errors" do
       log =
         capture_log(fn ->
-          assert {:error, %Error{type: :execution_error, message: message}} =
+          assert {:error, error} =
                    Exec.execute_action(ErrorAction, %{error_type: :custom}, %{},
                      log_level: :debug
                    )
 
-          assert message =~ "Server error in JidoTest.TestActions.ErrorAction: Custom error"
+          assert is_exception(error)
+
+          assert Exception.message(error) =~
+                   "Server error in JidoTest.TestActions.ErrorAction: Custom error"
         end)
 
       assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
@@ -180,7 +187,7 @@ defmodule JidoTest.ExecExecuteTest do
     test "times out for slow action" do
       log =
         capture_log(fn ->
-          assert {:error, %Error{type: :timeout}} =
+          assert {:error, %Jido.Action.Error.TimeoutError{}} =
                    Exec.execute_action_with_timeout(DelayAction, %{delay: 1000}, %{}, 100,
                      log_level: :debug
                    )
@@ -197,7 +204,7 @@ defmodule JidoTest.ExecExecuteTest do
               log_level: :debug
             )
 
-          assert {:error, %Error{type: :timeout}} = result
+          assert {:error, %Jido.Action.Error.TimeoutError{}} = result
         end)
 
       assert log =~ "Starting execution of JidoTest.TestActions.DelayAction"
@@ -206,7 +213,7 @@ defmodule JidoTest.ExecExecuteTest do
     test "handles action errors" do
       log =
         capture_log(fn ->
-          assert {:error, %Error{type: :execution_error}} =
+          assert {:error, error} =
                    Exec.execute_action_with_timeout(
                      ErrorAction,
                      %{error_type: :runtime},
@@ -214,6 +221,8 @@ defmodule JidoTest.ExecExecuteTest do
                      1000,
                      log_level: :debug
                    )
+
+          assert is_exception(error)
         end)
 
       assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
@@ -223,7 +232,7 @@ defmodule JidoTest.ExecExecuteTest do
     test "handles unexpected errors during execution" do
       log =
         capture_log(fn ->
-          assert {:error, %Error{type: :execution_error, message: message}} =
+          assert {:error, error} =
                    Exec.execute_action_with_timeout(
                      ErrorAction,
                      %{type: :unexpected},
@@ -232,7 +241,8 @@ defmodule JidoTest.ExecExecuteTest do
                      log_level: :debug
                    )
 
-          assert message =~ "Exec failed"
+          assert is_exception(error)
+          assert Exception.message(error) =~ "Exec failed"
         end)
 
       assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
@@ -242,12 +252,13 @@ defmodule JidoTest.ExecExecuteTest do
     test "handles errors thrown during execution" do
       log =
         capture_log(fn ->
-          assert {:error, %Error{type: :execution_error, message: message}} =
+          assert {:error, error} =
                    Exec.execute_action_with_timeout(ErrorAction, %{type: :throw}, %{}, 1000,
                      log_level: :debug
                    )
 
-          assert message =~ "Caught throw: \"Action threw an error\""
+          assert is_exception(error)
+          assert Exception.message(error) =~ "Caught throw: \"Action threw an error\""
         end)
 
       assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
@@ -265,7 +276,7 @@ defmodule JidoTest.ExecExecuteTest do
             send(test_pid, {:result, result})
           end)
 
-          assert_receive {:result, {:error, %Error{type: :timeout}}}, 1000
+          assert_receive {:result, {:error, %Jido.Action.Error.TimeoutError{}}}, 1000
         end)
 
       assert log =~ "Starting execution of JidoTest.TestActions.SlowKilledAction"
@@ -316,8 +327,9 @@ defmodule JidoTest.ExecExecuteTest do
           result =
             Exec.execute_action_with_timeout(NormalExitAction, %{}, %{}, 1000, log_level: :debug)
 
-          assert {:error, %Error{type: :execution_error, message: "Task exited: :normal"}} =
-                   result
+          assert {:error, error} = result
+          assert is_exception(error)
+          assert Exception.message(error) =~ "Task exited: :normal"
         end)
 
       assert log =~ "Starting execution of JidoTest.TestActions.NormalExitAction"
@@ -329,7 +341,9 @@ defmodule JidoTest.ExecExecuteTest do
           result =
             Exec.execute_action_with_timeout(KilledAction, %{}, %{}, 1000, log_level: :debug)
 
-          assert {:error, %Error{type: :execution_error, message: "Task was killed"}} = result
+          assert {:error, error} = result
+          assert is_exception(error)
+          assert Exception.message(error) =~ "Task was killed"
         end)
 
       assert log =~ "Starting execution of JidoTest.TestActions.KilledAction"

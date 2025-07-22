@@ -188,6 +188,7 @@ defmodule JidoAction.MixProject do
       {:telemetry_metrics, "~> 1.1"},
       {:typed_struct, "~> 0.3.0"},
       {:uniq, "~> 0.6.1"},
+      {:splode, "~> 0.2.4"},
 
       # Skill & Action Dependencies for examples
       {:abacus, "~> 2.1"},

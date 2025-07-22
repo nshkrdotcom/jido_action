@@ -528,7 +528,7 @@ defmodule JidoTest.TestActions do
     end
 
     def run(%{result_type: :failure}, _context) do
-      failure(Error.internal_server_error("Simulated failure"))
+      failure(Error.internal_error("Simulated failure"))
     end
 
     def run(%{result_type: :raw}, _context) do
@@ -559,7 +559,7 @@ defmodule JidoTest.TestActions do
       if attempts < max_attempts do
         # Simulate failure based on the failure_type
         case failure_type do
-          :error -> {:error, Error.internal_server_error("Retry needed")}
+          :error -> {:error, Error.internal_error("Retry needed")}
           :exception -> raise "Retry exception"
         end
       else

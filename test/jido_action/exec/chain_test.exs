@@ -3,7 +3,6 @@ defmodule JidoTest.Exec.ChainTest do
 
   import ExUnit.CaptureLog
 
-  alias Jido.Action.Error
   alias Jido.Exec.Chain
   alias JidoTest.TestActions.Add
   alias JidoTest.TestActions.ContextAwareMultiply
@@ -54,7 +53,7 @@ defmodule JidoTest.Exec.ChainTest do
     test "handles string keys in action parameters" do
       capture_log(fn ->
         result = Chain.chain([Add, {Multiply, %{"amount" => 3}}, Subtract], %{value: 5})
-        assert {:error, %Error{type: :bad_request}} = result
+        assert {:error, %Jido.Action.Error.InvalidInputError{}} = result
       end)
     end
 
@@ -69,27 +68,26 @@ defmodule JidoTest.Exec.ChainTest do
       capture_log(fn ->
         result = Chain.chain([Add, {Multiply, nil}, Subtract], %{value: 5})
 
-        assert {:error,
-                %Error{
-                  type: :bad_request,
-                  message: "Invalid chain action",
-                  details: %{action: {Multiply, nil}}
-                }} = result
+        assert {:error, error} = result
+        assert is_exception(error)
+        assert Exception.message(error) =~ "Invalid chain action"
       end)
     end
 
     test "handles errors in the chain" do
       capture_log(fn ->
         result = Chain.chain([Add, ErrorAction, Multiply], %{value: 5, error_type: :runtime})
-        assert {:error, %Error{type: :execution_error, message: message}} = result
-        assert message =~ "Runtime error"
+        assert {:error, error} = result
+        assert is_exception(error)
+        assert Exception.message(error) =~ "Runtime error"
       end)
     end
 
     test "stops execution on first error" do
       capture_log(fn ->
         result = Chain.chain([Add, ErrorAction, Multiply], %{value: 5, error_type: :runtime})
-        assert {:error, %Error{}} = result
+        assert {:error, %_{}} = result
+        assert is_exception(result |> elem(1))
         refute match?({:ok, %{value: _}}, result)
       end)
     end
@@ -98,12 +96,9 @@ defmodule JidoTest.Exec.ChainTest do
       capture_log(fn ->
         result = Chain.chain([Add, :invalid_action, Multiply], %{value: 5})
 
-        assert {:error,
-                %Error{
-                  type: :invalid_action,
-                  message: "Failed to compile module :invalid_action: :nofile"
-                }} =
-                 result
+        assert {:error, error} = result
+        assert is_exception(error)
+        assert Exception.message(error) =~ "Failed to compile module :invalid_action: :nofile"
       end)
     end
 

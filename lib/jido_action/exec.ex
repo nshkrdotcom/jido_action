@@ -72,8 +72,8 @@ defmodule Jido.Exec do
   # Execution result types
   @type exec_success :: {:ok, map()}
   @type exec_success_dir :: {:ok, map(), any()}
-  @type exec_error :: {:error, Error.t()}
-  @type exec_error_dir :: {:error, Error.t(), any()}
+  @type exec_error :: {:error, Exception.t()}
+  @type exec_error_dir :: {:error, Exception.t(), any()}
   @type exec_result ::
           exec_success
           | exec_success_dir
@@ -175,16 +175,14 @@ defmodule Jido.Exec do
         "Function invocation error in action: #{Exception.message(e)}"
       )
 
-      OK.failure(Error.invalid_action("Invalid action module: #{Exception.message(e)}"))
+      OK.failure(Error.validation_error("Invalid action module: #{Exception.message(e)}"))
 
     e ->
       log_level = Keyword.get(opts, :log_level, :info)
       dbug("Unexpected error in action", error: e)
       cond_log(log_level, :error, "Unexpected error in action: #{Exception.message(e)}")
 
-      OK.failure(
-        Error.internal_server_error("An unexpected error occurred: #{Exception.message(e)}")
-      )
+      OK.failure(Error.internal_error("An unexpected error occurred: #{Exception.message(e)}"))
   catch
     kind, reason ->
       log_level = Keyword.get(opts, :log_level, :info)
@@ -196,7 +194,7 @@ defmodule Jido.Exec do
         "Caught unexpected throw/exit in action: #{Exception.message(reason)}"
       )
 
-      OK.failure(Error.internal_server_error("Caught #{kind}: #{inspect(reason)}"))
+      OK.failure(Error.internal_error("Caught #{kind}: #{inspect(reason)}"))
   end
 
   def run(%Instruction{} = instruction, _params, _context, _opts) do
@@ -212,7 +210,7 @@ defmodule Jido.Exec do
 
   def run(action, _params, _context, _opts) do
     dbug("Invalid action type", action: action)
-    OK.failure(Error.invalid_action("Expected action to be a module, got: #{inspect(action)}"))
+    OK.failure(Error.validation_error("Expected action to be a module, got: #{inspect(action)}"))
   end
 
   @doc """
@@ -329,7 +327,7 @@ defmodule Jido.Exec do
           0 -> :ok
         end
 
-        {:error, Error.timeout("Async action timed out after #{timeout}ms")}
+        {:error, Error.timeout_error("Async action timed out after #{timeout}ms")}
     end
   end
 
@@ -364,12 +362,12 @@ defmodule Jido.Exec do
     :ok
   end
 
-  def cancel(_), do: {:error, Error.invalid_async_ref("Invalid async ref for cancellation")}
+  def cancel(_), do: {:error, Error.validation_error("Invalid async ref for cancellation")}
 
   # Private functions are exposed to the test suite
   private do
-    @spec normalize_params(params()) :: {:ok, map()} | {:error, Error.t()}
-    defp normalize_params(%Error{} = error), do: OK.failure(error)
+    @spec normalize_params(params()) :: {:ok, map()} | {:error, Exception.t()}
+    defp normalize_params(%_{} = error) when is_exception(error), do: OK.failure(error)
     defp normalize_params(params) when is_map(params), do: OK.success(params)
     defp normalize_params(params) when is_list(params), do: OK.success(Map.new(params))
     defp normalize_params({:ok, params}) when is_map(params), do: OK.success(params)
@@ -379,14 +377,14 @@ defmodule Jido.Exec do
     defp normalize_params(params),
       do: OK.failure(Error.validation_error("Invalid params type: #{inspect(params)}"))
 
-    @spec normalize_context(context()) :: {:ok, map()} | {:error, Error.t()}
+    @spec normalize_context(context()) :: {:ok, map()} | {:error, Exception.t()}
     defp normalize_context(context) when is_map(context), do: OK.success(context)
     defp normalize_context(context) when is_list(context), do: OK.success(Map.new(context))
 
     defp normalize_context(context),
       do: OK.failure(Error.validation_error("Invalid context type: #{inspect(context)}"))
 
-    @spec validate_action(action()) :: :ok | {:error, Error.t()}
+    @spec validate_action(action()) :: :ok | {:error, Exception.t()}
     defp validate_action(action) do
       dbug("Validating action", action: action)
 
@@ -396,18 +394,20 @@ defmodule Jido.Exec do
             :ok
           else
             {:error,
-             Error.invalid_action(
+             Error.validation_error(
                "Module #{inspect(action)} is not a valid action: missing run/2 function"
              )}
           end
 
         {:error, reason} ->
           {:error,
-           Error.invalid_action("Failed to compile module #{inspect(action)}: #{inspect(reason)}")}
+           Error.validation_error(
+             "Failed to compile module #{inspect(action)}: #{inspect(reason)}"
+           )}
       end
     end
 
-    @spec validate_params(action(), map()) :: {:ok, map()} | {:error, Error.t()}
+    @spec validate_params(action(), map()) :: {:ok, map()} | {:error, Exception.t()}
     defp validate_params(action, params) do
       dbug("Validating params", action: action, params: params)
 
@@ -424,14 +424,14 @@ defmodule Jido.Exec do
         end
       else
         OK.failure(
-          Error.invalid_action(
+          Error.validation_error(
             "Module #{inspect(action)} is not a valid action: missing validate_params/1 function"
           )
         )
       end
     end
 
-    @spec validate_output(action(), map(), run_opts()) :: {:ok, map()} | {:error, Error.t()}
+    @spec validate_output(action(), map(), run_opts()) :: {:ok, map()} | {:error, Exception.t()}
     defp validate_output(action, output, opts) do
       log_level = Keyword.get(opts, :log_level, :info)
       dbug("Validating output", action: action, output: output)
@@ -600,7 +600,7 @@ defmodule Jido.Exec do
           dbug("Action succeeded with additional info", result: success)
           success
 
-        {:error, %Error{type: :timeout}} = timeout_err ->
+        {:error, %Jido.Action.Error.TimeoutError{}} = timeout_err ->
           dbug("Action timed out", error: timeout_err)
           timeout_err
 
@@ -625,7 +625,7 @@ defmodule Jido.Exec do
       emit_telemetry_event(:start, metadata, telemetry)
     end
 
-    @spec end_span(action(), {:ok, map()} | {:error, Error.t()}, non_neg_integer(), atom()) ::
+    @spec end_span(action(), {:ok, map()} | {:error, Exception.t()}, non_neg_integer(), atom()) ::
             :ok
     defp end_span(action, result, duration_us, telemetry) do
       metadata = get_metadata(action, result, duration_us, telemetry)
@@ -640,7 +640,12 @@ defmodule Jido.Exec do
       emit_telemetry_event(status, metadata, telemetry)
     end
 
-    @spec get_metadata(action(), {:ok, map()} | {:error, Error.t()}, non_neg_integer(), atom()) ::
+    @spec get_metadata(
+            action(),
+            {:ok, map()} | {:error, Exception.t()},
+            non_neg_integer(),
+            atom()
+          ) ::
             map()
     defp get_metadata(action, result, duration_us, :full) do
       %{
@@ -653,7 +658,12 @@ defmodule Jido.Exec do
       }
     end
 
-    @spec get_metadata(action(), {:ok, map()} | {:error, Error.t()}, non_neg_integer(), atom()) ::
+    @spec get_metadata(
+            action(),
+            {:ok, map()} | {:error, Exception.t()},
+            non_neg_integer(),
+            atom()
+          ) ::
             map()
     defp get_metadata(action, result, duration_us, :minimal) do
       %{
@@ -686,7 +696,7 @@ defmodule Jido.Exec do
             action(),
             params(),
             context(),
-            Error.t() | {Error.t(), any()},
+            Exception.t() | {Exception.t(), any()},
             run_opts()
           ) :: exec_result
     defp handle_action_error(action, params, context, error_or_tuple, opts) do
@@ -728,11 +738,12 @@ defmodule Jido.Exec do
             dbug("Compensation timed out", timeout: timeout)
 
             error_result =
-              Error.compensation_error(
-                error,
+              Error.execution_error(
+                "Compensation timed out after #{timeout}ms for: #{inspect(error)}",
                 %{
                   compensated: false,
-                  compensation_error: "Compensation timed out after #{timeout}ms"
+                  compensation_error: "Compensation timed out after #{timeout}ms",
+                  original_error: error
                 }
               )
 
@@ -744,7 +755,7 @@ defmodule Jido.Exec do
       end
     end
 
-    @spec handle_compensation_result(any(), Error.t(), any()) :: exec_result
+    @spec handle_compensation_result(any(), Exception.t(), any()) :: exec_result
     defp handle_compensation_result(result, original_error, directive) do
       error_result =
         case result do
@@ -763,23 +774,28 @@ defmodule Jido.Exec do
                 top_level_fields
               )
 
-            Error.compensation_error(original_error, details)
+            Error.execution_error(
+              "Compensation completed for: #{inspect(original_error)}",
+              Map.merge(details, %{original_error: original_error})
+            )
 
           {:error, comp_error} ->
-            Error.compensation_error(
-              original_error,
+            Error.execution_error(
+              "Compensation failed for: #{inspect(original_error)}",
               %{
                 compensated: false,
-                compensation_error: comp_error
+                compensation_error: comp_error,
+                original_error: original_error
               }
             )
 
           _ ->
-            Error.compensation_error(
-              original_error,
+            Error.execution_error(
+              "Invalid compensation result for: #{inspect(original_error)}",
               %{
                 compensated: false,
-                compensation_error: "Invalid compensation result"
+                compensation_error: "Invalid compensation result",
+                original_error: original_error
               }
             )
         end
@@ -860,8 +876,7 @@ defmodule Jido.Exec do
                 {:error,
                  Error.execution_error(
                    "Caught #{kind}: #{inspect(reason)}",
-                   %{kind: kind, reason: reason, action: action},
-                   stacktrace
+                   %{kind: kind, reason: reason, action: action, stacktrace: stacktrace}
                  )}
             end
 
@@ -898,7 +913,7 @@ defmodule Jido.Exec do
             end
 
             {:error,
-             Error.timeout(
+             Error.timeout_error(
                "Action #{inspect(action)} timed out after #{timeout}ms. This could be due to:
 1. The action is taking too long to complete (current timeout: #{timeout}ms)
 2. The action is stuck in an infinite loop
@@ -909,7 +924,13 @@ defmodule Jido.Exec do
 Debug info:
 - Action module: #{inspect(action)}
 - Params: #{inspect(params)}
-- Context: #{inspect(Map.drop(context, [:__task_group__]))}"
+- Context: #{inspect(Map.drop(context, [:__task_group__]))}",
+               %{
+                 timeout: timeout,
+                 action: action,
+                 params: params,
+                 context: Map.drop(context, [:__task_group__])
+               }
              )}
         end
 
@@ -1002,7 +1023,7 @@ Debug info:
           cond_log(log_level, :error, "Action #{inspect(action)} failed: #{inspect(reason)}")
           {:error, reason, other}
 
-        OK.failure(%Error{} = error) ->
+        OK.failure(%_{} = error) when is_exception(error) ->
           dbug("Action failed with error struct", error: error)
           cond_log(log_level, :error, "Action #{inspect(action)} failed: #{inspect(error)}")
           OK.failure(error)
@@ -1047,8 +1068,7 @@ Debug info:
         OK.failure(
           Error.execution_error(
             "Server error in #{inspect(action)}: #{Exception.message(e)}",
-            %{original_exception: e, action: action},
-            stacktrace
+            %{original_exception: e, action: action, stacktrace: stacktrace}
           )
         )
 
@@ -1061,8 +1081,7 @@ Debug info:
         OK.failure(
           Error.execution_error(
             "Argument error in #{inspect(action)}: #{Exception.message(e)}",
-            %{original_exception: e, action: action},
-            stacktrace
+            %{original_exception: e, action: action, stacktrace: stacktrace}
           )
         )
 
@@ -1074,8 +1093,7 @@ Debug info:
         OK.failure(
           Error.execution_error(
             "An unexpected error occurred during execution of #{inspect(action)}: #{inspect(e)}",
-            %{original_exception: e, action: action},
-            stacktrace
+            %{original_exception: e, action: action, stacktrace: stacktrace}
           )
         )
     end
