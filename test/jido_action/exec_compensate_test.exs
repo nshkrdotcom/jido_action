@@ -95,7 +95,7 @@ defmodule JidoTest.ExecCompensateTest do
   describe "telemetry with compensation" do
     test "emits telemetry events for compensation flow" do
       params = %{should_fail: true}
-      expect(:telemetry, :execute, fn _, _, _ -> :ok end)
+      stub(:telemetry, :execute, fn _, _, _ -> :ok end)
 
       assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
                Exec.run(CompensateAction, params, %{},

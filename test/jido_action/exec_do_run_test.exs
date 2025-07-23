@@ -34,8 +34,7 @@ defmodule JidoTest.ExecDoRunTest do
 
   describe "do_run/3" do
     test "executes action with full telemetry" do
-      expect(System, :monotonic_time, fn :microsecond -> 0 end)
-      expect(:telemetry, :execute, 2, fn _, _, _ -> :ok end)
+      stub(:telemetry, :execute, fn _, _, _ -> :ok end)
 
       log =
         capture_log(fn ->
@@ -52,8 +51,7 @@ defmodule JidoTest.ExecDoRunTest do
     end
 
     test "executes action with minimal telemetry" do
-      expect(System, :monotonic_time, fn :microsecond -> 0 end)
-      expect(:telemetry, :execute, 2, fn _, _, _ -> :ok end)
+      stub(:telemetry, :execute, fn _, _, _ -> :ok end)
 
       log =
         capture_log(fn ->
@@ -86,8 +84,7 @@ defmodule JidoTest.ExecDoRunTest do
     end
 
     test "handles action error" do
-      expect(System, :monotonic_time, fn :microsecond -> 0 end)
-      expect(:telemetry, :execute, 2, fn _, _, _ -> :ok end)
+      stub(:telemetry, :execute, fn _, _, _ -> :ok end)
 
       log =
         capture_log(fn ->
@@ -141,7 +138,7 @@ defmodule JidoTest.ExecDoRunTest do
 
   describe "emit_telemetry_event/3" do
     test "emits telemetry event for full mode" do
-      expect(:telemetry, :execute, fn _, _, _ -> :ok end)
+      stub(:telemetry, :execute, fn _, _, _ -> :ok end)
 
       Exec.emit_telemetry_event(
         :test_event,
@@ -153,7 +150,7 @@ defmodule JidoTest.ExecDoRunTest do
     end
 
     test "emits telemetry event for minimal mode" do
-      expect(:telemetry, :execute, fn _, _, _ -> :ok end)
+      stub(:telemetry, :execute, fn _, _, _ -> :ok end)
 
       Exec.emit_telemetry_event(
         :test_event,
@@ -183,8 +180,7 @@ defmodule JidoTest.ExecDoRunTest do
 
   describe "do_run_with_retry/4" do
     test "succeeds on first try" do
-      expect(System, :monotonic_time, fn :microsecond -> 0 end)
-      expect(:telemetry, :execute, 2, fn _, _, _ -> :ok end)
+      stub(:telemetry, :execute, fn _, _, _ -> :ok end)
 
       capture_log(fn ->
         assert {:ok, %{value: 5}} =
@@ -195,8 +191,7 @@ defmodule JidoTest.ExecDoRunTest do
     end
 
     test "retries on error and then succeeds", %{attempts_table: attempts_table} do
-      expect(System, :monotonic_time, 3, fn :microsecond -> 0 end)
-      expect(:telemetry, :execute, 3, fn _, _, _ -> :ok end)
+      stub(:telemetry, :execute, fn _, _, _ -> :ok end)
 
       capture_log(fn ->
         result =
@@ -216,8 +211,7 @@ defmodule JidoTest.ExecDoRunTest do
     end
 
     test "retries on exception and then succeeds", %{attempts_table: attempts_table} do
-      expect(System, :monotonic_time, 3, fn :microsecond -> 0 end)
-      expect(:telemetry, :execute, 3, fn _, _, _ -> :ok end)
+      stub(:telemetry, :execute, fn _, _, _ -> :ok end)
 
       capture_log(fn ->
         result =
@@ -237,8 +231,7 @@ defmodule JidoTest.ExecDoRunTest do
     end
 
     test "fails after max retries", %{attempts_table: attempts_table} do
-      expect(System, :monotonic_time, 3, fn :microsecond -> 0 end)
-      expect(:telemetry, :execute, 3, fn _, _, _ -> :ok end)
+      stub(:telemetry, :execute, fn _, _, _ -> :ok end)
 
       capture_log(fn ->
         result =
