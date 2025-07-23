@@ -20,8 +20,6 @@ defmodule JidoTest.Exec.ActionTest do
   alias JidoTest.TestActions.StreamingAction
   alias JidoTest.TestActions.Subtract
 
-  require OK
-
   @moduletag :capture_log
 
   describe "error formatting" do

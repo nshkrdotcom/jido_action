@@ -4,7 +4,6 @@ defmodule Jido.Action.Util do
   """
 
   require Logger
-  require OK
 
   @name_regex ~r/^[a-zA-Z][a-zA-Z0-9_]*$/
 
@@ -82,15 +81,78 @@ defmodule Jido.Action.Util do
   @spec validate_name(any()) :: {:ok, String.t()} | {:error, String.t()}
   def validate_name(name) when is_binary(name) do
     if Regex.match?(@name_regex, name) do
-      OK.success(name)
+      {:ok, name}
     else
-      "The name must start with a letter and contain only letters, numbers, and underscores."
-      |> OK.failure()
+      {:error,
+       "The name must start with a letter and contain only letters, numbers, and underscores."}
     end
   end
 
   def validate_name(_) do
-    "Invalid name format."
-    |> OK.failure()
+    {:error, "Invalid name format."}
   end
+
+  @doc """
+  Normalizes nested result tuples to single-level tuples.
+
+  This function handles cases where callbacks or functions return nested tuples
+  like {:ok, {:ok, value}} or {:error, {:error, reason}}, flattening them to
+  proper single-level result tuples.
+
+  ## Examples
+
+      iex> normalize_result({:ok, {:ok, "value"}})
+      {:ok, "value"}
+      
+      iex> normalize_result({:ok, {:error, "reason"}})
+      {:error, "reason"}
+      
+      iex> normalize_result({:ok, "value"})
+      {:ok, "value"}
+      
+      iex> normalize_result("value")
+      {:ok, "value"}
+  """
+  @spec normalize_result(any()) :: {:ok, any()} | {:error, any()}
+  def normalize_result({:ok, {:ok, value}}), do: {:ok, value}
+  def normalize_result({:ok, {:error, reason}}), do: {:error, reason}
+  def normalize_result({:error, {:ok, _value}}), do: {:error, "Invalid nested error tuple"}
+  def normalize_result({:error, {:error, reason}}), do: {:error, reason}
+  def normalize_result({:ok, value}), do: {:ok, value}
+  def normalize_result({:error, reason}), do: {:error, reason}
+  def normalize_result(value), do: {:ok, value}
+
+  @doc """
+  Wraps value in success tuple if not already a result tuple.
+
+  ## Examples
+
+      iex> wrap_ok({:ok, "value"})
+      {:ok, "value"}
+      
+      iex> wrap_ok({:error, "reason"})
+      {:error, "reason"}
+      
+      iex> wrap_ok("value")
+      {:ok, "value"}
+  """
+  @spec wrap_ok(any()) :: {:ok, any()} | {:error, any()}
+  def wrap_ok({:ok, _} = result), do: result
+  def wrap_ok({:error, _} = result), do: result
+  def wrap_ok(value), do: {:ok, value}
+
+  @doc """
+  Wraps value in error tuple.
+
+  ## Examples
+
+      iex> wrap_error({:error, "reason"})
+      {:error, "reason"}
+      
+      iex> wrap_error("reason")
+      {:error, "reason"}
+  """
+  @spec wrap_error(any()) :: {:error, any()}
+  def wrap_error({:error, _} = error), do: error
+  def wrap_error(reason), do: {:error, reason}
 end

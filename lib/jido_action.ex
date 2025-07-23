@@ -54,8 +54,7 @@ defmodule Jido.Action do
 
   ## Error Handling
 
-  Actions use the `OK` monad for consistent error handling. Errors are wrapped
-  in `Jido.Action.Error` structs for uniform error reporting across the system.
+  Errors are wrapped in `Jido.Action.Error` structs for uniform error reporting across the system.
 
   ## AI Tool Example
 
@@ -159,8 +158,6 @@ defmodule Jido.Action do
   alias Jido.Action.Error
   alias Jido.Action.Tool
 
-  require OK
-
   use TypedStruct
 
   typedstruct do
@@ -260,8 +257,6 @@ defmodule Jido.Action do
       alias Jido.Instruction
       alias Jido.Signal
 
-      require OK
-
       case NimbleOptions.validate(unquote(opts), unquote(escaped_schema)) do
         {:ok, validated_opts} ->
           @validated_opts validated_opts
@@ -335,9 +330,9 @@ defmodule Jido.Action do
             with {:ok, params} <- on_before_validate_params(params),
                  {:ok, validated_params} <- do_validate_params(params),
                  {:ok, after_params} <- on_after_validate_params(validated_params) do
-              OK.success(after_params)
+              {:ok, after_params}
             else
-              {:error, reason} -> OK.failure(reason)
+              {:error, reason} -> {:error, reason}
             end
           end
 
@@ -365,16 +360,16 @@ defmodule Jido.Action do
             with {:ok, output} <- on_before_validate_output(output),
                  {:ok, validated_output} <- do_validate_output(output),
                  {:ok, after_output} <- on_after_validate_output(validated_output) do
-              OK.success(after_output)
+              {:ok, after_output}
             else
-              {:error, reason} -> OK.failure(reason)
+              {:error, reason} -> {:error, reason}
             end
           end
 
           defp do_validate_params(params) do
             case @validated_opts[:schema] do
               [] ->
-                OK.success(params)
+                {:ok, params}
 
               schema when is_list(schema) ->
                 known_keys = Keyword.keys(schema)
@@ -383,13 +378,13 @@ defmodule Jido.Action do
                 case NimbleOptions.validate(Enum.to_list(known_params), schema) do
                   {:ok, validated_params} ->
                     merged_params = Map.merge(unknown_params, Map.new(validated_params))
-                    OK.success(merged_params)
+                    {:ok, merged_params}
 
                   {:error, %NimbleOptions.ValidationError{} = error} ->
                     error
                     |> Error.format_nimble_validation_error("Action", __MODULE__)
                     |> Error.validation_error()
-                    |> OK.failure()
+                    |> then(&{:error, &1})
                 end
             end
           end
@@ -397,7 +392,7 @@ defmodule Jido.Action do
           defp do_validate_output(output) do
             case @validated_opts[:output_schema] do
               [] ->
-                OK.success(output)
+                {:ok, output}
 
               output_schema when is_list(output_schema) ->
                 known_keys = Keyword.keys(output_schema)
@@ -406,13 +401,13 @@ defmodule Jido.Action do
                 case NimbleOptions.validate(Enum.to_list(known_output), output_schema) do
                   {:ok, validated_output} ->
                     merged_output = Map.merge(unknown_output, Map.new(validated_output))
-                    OK.success(merged_output)
+                    {:ok, merged_output}
 
                   {:error, %NimbleOptions.ValidationError{} = error} ->
                     error
                     |> Error.format_nimble_validation_error("Action output", __MODULE__)
                     |> Error.validation_error()
-                    |> OK.failure()
+                    |> then(&{:error, &1})
                 end
             end
           end
@@ -426,26 +421,26 @@ defmodule Jido.Action do
           def run(params, context) do
             "run/2 must be implemented in in your Action"
             |> Error.config_error()
-            |> OK.failure()
+            |> then(&{:error, &1})
           end
 
           @doc "Lifecycle hook called before parameter validation."
-          def on_before_validate_params(params), do: OK.success(params)
+          def on_before_validate_params(params), do: {:ok, params}
 
           @doc "Lifecycle hook called after parameter validation."
-          def on_after_validate_params(params), do: OK.success(params)
+          def on_after_validate_params(params), do: {:ok, params}
 
           @doc "Lifecycle hook called before output validation."
-          def on_before_validate_output(output), do: OK.success(output)
+          def on_before_validate_output(output), do: {:ok, output}
 
           @doc "Lifecycle hook called after output validation."
-          def on_after_validate_output(output), do: OK.success(output)
+          def on_after_validate_output(output), do: {:ok, output}
 
           @doc "Lifecycle hook called after Action execution."
-          def on_after_run(result), do: OK.success(result)
+          def on_after_run(result), do: {:ok, result}
 
           @doc "Lifecycle hook called when an error occurs."
-          def on_error(failed_params, _error, _context, _opts), do: OK.success(failed_params)
+          def on_error(failed_params, _error, _context, _opts), do: {:ok, failed_params}
 
           defoverridable on_before_validate_params: 1,
                          on_after_validate_params: 1,
@@ -623,6 +618,6 @@ defmodule Jido.Action do
   def new(_map_or_kwlist) do
     "Actions should not be defined at runtime"
     |> Error.config_error()
-    |> OK.failure()
+    |> then(&{:error, &1})
   end
 end

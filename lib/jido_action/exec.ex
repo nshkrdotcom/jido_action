@@ -45,7 +45,6 @@ defmodule Jido.Exec do
   alias Jido.Instruction
 
   require Logger
-  require OK
 
   import Jido.Action.Util, only: [cond_log: 3]
 
@@ -141,7 +140,7 @@ defmodule Jido.Exec do
     with {:ok, normalized_params} <- normalize_params(params),
          {:ok, normalized_context} <- normalize_context(context),
          :ok <- validate_action(action),
-         OK.success(validated_params) <- validate_params(action, normalized_params) do
+         {:ok, validated_params} <- validate_params(action, normalized_params) do
       enhanced_context =
         Map.put(normalized_context, :action_metadata, action.__action_metadata__())
 
@@ -162,7 +161,7 @@ defmodule Jido.Exec do
       {:error, reason} ->
         dbug("Error in action setup", error: reason)
         cond_log(log_level, :debug, "Action Execution failed: #{inspect(reason)}")
-        OK.failure(reason)
+        {:error, reason}
     end
   rescue
     e in [FunctionClauseError, BadArityError, BadFunctionError] ->
@@ -175,14 +174,14 @@ defmodule Jido.Exec do
         "Function invocation error in action: #{Exception.message(e)}"
       )
 
-      OK.failure(Error.validation_error("Invalid action module: #{Exception.message(e)}"))
+      {:error, Error.validation_error("Invalid action module: #{Exception.message(e)}")}
 
     e ->
       log_level = Keyword.get(opts, :log_level, :info)
       dbug("Unexpected error in action", error: e)
       cond_log(log_level, :error, "Unexpected error in action: #{Exception.message(e)}")
 
-      OK.failure(Error.internal_error("An unexpected error occurred: #{Exception.message(e)}"))
+      {:error, Error.internal_error("An unexpected error occurred: #{Exception.message(e)}")}
   catch
     kind, reason ->
       log_level = Keyword.get(opts, :log_level, :info)
@@ -194,7 +193,7 @@ defmodule Jido.Exec do
         "Caught unexpected throw/exit in action: #{Exception.message(reason)}"
       )
 
-      OK.failure(Error.internal_error("Caught #{kind}: #{inspect(reason)}"))
+      {:error, Error.internal_error("Caught #{kind}: #{inspect(reason)}")}
   end
 
   def run(%Instruction{} = instruction, _params, _context, _opts) do
@@ -210,7 +209,7 @@ defmodule Jido.Exec do
 
   def run(action, _params, _context, _opts) do
     dbug("Invalid action type", action: action)
-    OK.failure(Error.validation_error("Expected action to be a module, got: #{inspect(action)}"))
+    {:error, Error.validation_error("Expected action to be a module, got: #{inspect(action)}")}
   end
 
   @doc """
@@ -367,22 +366,22 @@ defmodule Jido.Exec do
   # Private functions are exposed to the test suite
   private do
     @spec normalize_params(params()) :: {:ok, map()} | {:error, Exception.t()}
-    defp normalize_params(%_{} = error) when is_exception(error), do: OK.failure(error)
-    defp normalize_params(params) when is_map(params), do: OK.success(params)
-    defp normalize_params(params) when is_list(params), do: OK.success(Map.new(params))
-    defp normalize_params({:ok, params}) when is_map(params), do: OK.success(params)
-    defp normalize_params({:ok, params}) when is_list(params), do: OK.success(Map.new(params))
-    defp normalize_params({:error, reason}), do: OK.failure(Error.validation_error(reason))
+    defp normalize_params(%_{} = error) when is_exception(error), do: {:error, error}
+    defp normalize_params(params) when is_map(params), do: {:ok, params}
+    defp normalize_params(params) when is_list(params), do: {:ok, Map.new(params)}
+    defp normalize_params({:ok, params}) when is_map(params), do: {:ok, params}
+    defp normalize_params({:ok, params}) when is_list(params), do: {:ok, Map.new(params)}
+    defp normalize_params({:error, reason}), do: {:error, Error.validation_error(reason)}
 
     defp normalize_params(params),
-      do: OK.failure(Error.validation_error("Invalid params type: #{inspect(params)}"))
+      do: {:error, Error.validation_error("Invalid params type: #{inspect(params)}")}
 
     @spec normalize_context(context()) :: {:ok, map()} | {:error, Exception.t()}
-    defp normalize_context(context) when is_map(context), do: OK.success(context)
-    defp normalize_context(context) when is_list(context), do: OK.success(Map.new(context))
+    defp normalize_context(context) when is_map(context), do: {:ok, context}
+    defp normalize_context(context) when is_list(context), do: {:ok, Map.new(context)}
 
     defp normalize_context(context),
-      do: OK.failure(Error.validation_error("Invalid context type: #{inspect(context)}"))
+      do: {:error, Error.validation_error("Invalid context type: #{inspect(context)}")}
 
     @spec validate_action(action()) :: :ok | {:error, Exception.t()}
     defp validate_action(action) do
@@ -414,20 +413,19 @@ defmodule Jido.Exec do
       if function_exported?(action, :validate_params, 1) do
         case action.validate_params(params) do
           {:ok, params} ->
-            OK.success(params)
+            {:ok, params}
 
           {:error, reason} ->
-            OK.failure(reason)
+            {:error, reason}
 
           _ ->
-            OK.failure(Error.validation_error("Invalid return from action.validate_params/1"))
+            {:error, Error.validation_error("Invalid return from action.validate_params/1")}
         end
       else
-        OK.failure(
-          Error.validation_error(
-            "Module #{inspect(action)} is not a valid action: missing validate_params/1 function"
-          )
-        )
+        {:error,
+         Error.validation_error(
+           "Module #{inspect(action)} is not a valid action: missing validate_params/1 function"
+         )}
       end
     end
 
@@ -440,7 +438,7 @@ defmodule Jido.Exec do
         case action.validate_output(output) do
           {:ok, validated_output} ->
             cond_log(log_level, :debug, "Output validation succeeded for #{inspect(action)}")
-            OK.success(validated_output)
+            {:ok, validated_output}
 
           {:error, reason} ->
             cond_log(
@@ -449,11 +447,11 @@ defmodule Jido.Exec do
               "Output validation failed for #{inspect(action)}: #{inspect(reason)}"
             )
 
-            OK.failure(reason)
+            {:error, reason}
 
           _ ->
             cond_log(log_level, :debug, "Invalid return from action.validate_output/1")
-            OK.failure(Error.validation_error("Invalid return from action.validate_output/1"))
+            {:error, Error.validation_error("Invalid return from action.validate_output/1")}
         end
       else
         # If action doesn't have validate_output/1, skip output validation
@@ -463,7 +461,7 @@ defmodule Jido.Exec do
           "No output validation function found for #{inspect(action)}, skipping"
         )
 
-        OK.success(output)
+        {:ok, output}
       end
     end
 
@@ -488,9 +486,9 @@ defmodule Jido.Exec do
       dbug("Attempting run", action: action, retry_count: retry_count)
 
       case do_run(action, params, context, opts) do
-        OK.success(result) ->
+        {:ok, result} ->
           dbug("Run succeeded", result: result)
-          OK.success(result)
+          {:ok, result}
 
         {:ok, result, other} ->
           dbug("Run succeeded with additional info", result: result, other: other)
@@ -510,7 +508,7 @@ defmodule Jido.Exec do
             {:error, reason, other}
           )
 
-        OK.failure(reason) ->
+        {:error, reason} ->
           dbug("Run failed", error: reason)
 
           maybe_retry(
@@ -521,7 +519,7 @@ defmodule Jido.Exec do
             retry_count,
             max_retries,
             backoff,
-            OK.failure(reason)
+            {:error, reason}
           )
       end
     end
@@ -747,11 +745,11 @@ defmodule Jido.Exec do
                 }
               )
 
-            if directive, do: {:error, error_result, directive}, else: OK.failure(error_result)
+            if directive, do: {:error, error_result, directive}, else: {:error, error_result}
         end
       else
         dbug("Compensation not enabled", action: action)
-        if directive, do: {:error, error, directive}, else: OK.failure(error)
+        if directive, do: {:error, error, directive}, else: {:error, error}
       end
     end
 
@@ -800,7 +798,7 @@ defmodule Jido.Exec do
             )
         end
 
-      if directive, do: {:error, error_result, directive}, else: OK.failure(error_result)
+      if directive, do: {:error, error_result, directive}, else: {:error, error_result}
     end
 
     @spec compensation_enabled?(action()) :: boolean()
@@ -993,7 +991,7 @@ Debug info:
               {:error, validation_error, other}
           end
 
-        OK.success(result) ->
+        {:ok, result} ->
           dbug("Action succeeded", result: result)
 
           case validate_output(action, result, opts) do
@@ -1004,7 +1002,7 @@ Debug info:
                 "Finished execution of #{inspect(action)}, result: #{inspect(validated_result)}"
               )
 
-              OK.success(validated_result)
+              {:ok, validated_result}
 
             {:error, validation_error} ->
               dbug("Action output validation failed", error: validation_error)
@@ -1015,7 +1013,7 @@ Debug info:
                 "Action #{inspect(action)} output validation failed: #{inspect(validation_error)}"
               )
 
-              OK.failure(validation_error)
+              {:error, validation_error}
           end
 
         {:error, reason, other} ->
@@ -1023,15 +1021,15 @@ Debug info:
           cond_log(log_level, :error, "Action #{inspect(action)} failed: #{inspect(reason)}")
           {:error, reason, other}
 
-        OK.failure(%_{} = error) when is_exception(error) ->
+        {:error, %_{} = error} when is_exception(error) ->
           dbug("Action failed with error struct", error: error)
           cond_log(log_level, :error, "Action #{inspect(action)} failed: #{inspect(error)}")
-          OK.failure(error)
+          {:error, error}
 
-        OK.failure(reason) ->
+        {:error, reason} ->
           dbug("Action failed with reason", reason: reason)
           cond_log(log_level, :error, "Action #{inspect(action)} failed: #{inspect(reason)}")
-          OK.failure(Error.execution_error(reason))
+          {:error, Error.execution_error(reason)}
 
         result ->
           dbug("Action returned unexpected result", result: result)
@@ -1044,7 +1042,7 @@ Debug info:
                 "Finished execution of #{inspect(action)}, result: #{inspect(validated_result)}"
               )
 
-              OK.success(validated_result)
+              {:ok, validated_result}
 
             {:error, validation_error} ->
               dbug("Action output validation failed", error: validation_error)
@@ -1055,7 +1053,7 @@ Debug info:
                 "Action #{inspect(action)} output validation failed: #{inspect(validation_error)}"
               )
 
-              OK.failure(validation_error)
+              {:error, validation_error}
           end
       end
     rescue
@@ -1065,12 +1063,11 @@ Debug info:
         log_level = Keyword.get(opts, :log_level, :info)
         cond_log(log_level, :error, "Action #{inspect(action)} failed: #{inspect(e)}")
 
-        OK.failure(
-          Error.execution_error(
-            "Server error in #{inspect(action)}: #{Exception.message(e)}",
-            %{original_exception: e, action: action, stacktrace: stacktrace}
-          )
-        )
+        {:error,
+         Error.execution_error(
+           "Server error in #{inspect(action)}: #{Exception.message(e)}",
+           %{original_exception: e, action: action, stacktrace: stacktrace}
+         )}
 
       e in ArgumentError ->
         dbug("Argument error in action", error: e)
@@ -1078,24 +1075,22 @@ Debug info:
         log_level = Keyword.get(opts, :log_level, :info)
         cond_log(log_level, :error, "Action #{inspect(action)} failed: #{inspect(e)}")
 
-        OK.failure(
-          Error.execution_error(
-            "Argument error in #{inspect(action)}: #{Exception.message(e)}",
-            %{original_exception: e, action: action, stacktrace: stacktrace}
-          )
-        )
+        {:error,
+         Error.execution_error(
+           "Argument error in #{inspect(action)}: #{Exception.message(e)}",
+           %{original_exception: e, action: action, stacktrace: stacktrace}
+         )}
 
       e ->
         stacktrace = __STACKTRACE__
         log_level = Keyword.get(opts, :log_level, :info)
         cond_log(log_level, :error, "Action #{inspect(action)} failed: #{inspect(e)}")
 
-        OK.failure(
-          Error.execution_error(
-            "An unexpected error occurred during execution of #{inspect(action)}: #{inspect(e)}",
-            %{original_exception: e, action: action, stacktrace: stacktrace}
-          )
-        )
+        {:error,
+         Error.execution_error(
+           "An unexpected error occurred during execution of #{inspect(action)}: #{inspect(e)}",
+           %{original_exception: e, action: action, stacktrace: stacktrace}
+         )}
     end
   end
 end

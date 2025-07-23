@@ -182,7 +182,6 @@ defmodule JidoAction.MixProject do
       {:ex_dbug, "~> 2.1"},
       {:jason, "~> 1.4"},
       {:nimble_options, "~> 1.1"},
-      {:ok, "~> 2.3"},
       {:private, "~> 0.1.2"},
       {:telemetry, "~> 1.3"},
       {:telemetry_metrics, "~> 1.1"},

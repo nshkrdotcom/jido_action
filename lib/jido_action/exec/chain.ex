@@ -22,8 +22,6 @@ defmodule Jido.Exec.Chain do
   alias Jido.Action.Error
   alias Jido.Exec
 
-  require OK
-
   @type chain_action :: module() | {module(), keyword()}
   @type ok_t :: {:ok, any()} | {:error, any()}
   @type chain_result :: {:ok, map()} | {:error, Error.t()} | {:interrupted, map()} | Task.t()
@@ -124,15 +122,15 @@ defmodule Jido.Exec.Chain do
           {:cont, ok_t()} | {:halt, chain_result()}
   defp run_action(action, params, context, opts) do
     case Exec.run(action, params, context, opts) do
-      OK.success(result) when is_map(result) ->
-        {:cont, OK.success(Map.merge(params, result))}
+      {:ok, result} when is_map(result) ->
+        {:cont, {:ok, Map.merge(params, result)}}
 
-      OK.success(result) ->
-        {:cont, OK.success(Map.put(params, :result, result))}
+      {:ok, result} ->
+        {:cont, {:ok, Map.put(params, :result, result)}}
 
-      OK.failure(error) ->
+      {:error, error} ->
         Logger.warning("Exec in chain failed: #{inspect(action)} #{inspect(error)}")
-        {:halt, OK.failure(error)}
+        {:halt, {:error, error}}
     end
   end
 end
