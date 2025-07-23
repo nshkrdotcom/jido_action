@@ -22,8 +22,6 @@ defmodule Jido.Exec.Chain do
   alias Jido.Action.Error
   alias Jido.Exec
 
-  require OK
-
   @type chain_action :: module() | {module(), keyword()}
   @type ok_t :: {:ok, any()} | {:error, any()}
   @type chain_result :: {:ok, map()} | {:error, Error.t()} | {:interrupted, map()} | Task.t()
@@ -100,7 +98,7 @@ defmodule Jido.Exec.Chain do
 
   @spec process_action(any(), map(), map(), keyword()) :: {:halt, {:error, Error.t()}}
   defp process_action(invalid_action, _params, _context, _opts) do
-    {:halt, {:error, Error.bad_request("Invalid chain action", %{action: invalid_action})}}
+    {:halt, {:error, Error.validation_error("Invalid chain action", %{action: invalid_action})}}
   end
 
   @spec validate_action_params(keyword() | map()) :: ok_t()
@@ -108,7 +106,7 @@ defmodule Jido.Exec.Chain do
     if Enum.all?(opts, fn {k, _v} -> is_atom(k) end) do
       {:ok, Map.new(opts)}
     else
-      {:error, Error.bad_request("Exec parameters must use atom keys")}
+      {:error, Error.validation_error("Exec parameters must use atom keys")}
     end
   end
 
@@ -116,7 +114,7 @@ defmodule Jido.Exec.Chain do
     if Enum.all?(Map.keys(opts), &is_atom/1) do
       {:ok, opts}
     else
-      {:error, Error.bad_request("Exec parameters must use atom keys")}
+      {:error, Error.validation_error("Exec parameters must use atom keys")}
     end
   end
 
@@ -124,15 +122,15 @@ defmodule Jido.Exec.Chain do
           {:cont, ok_t()} | {:halt, chain_result()}
   defp run_action(action, params, context, opts) do
     case Exec.run(action, params, context, opts) do
-      OK.success(result) when is_map(result) ->
-        {:cont, OK.success(Map.merge(params, result))}
+      {:ok, result} when is_map(result) ->
+        {:cont, {:ok, Map.merge(params, result)}}
 
-      OK.success(result) ->
-        {:cont, OK.success(Map.put(params, :result, result))}
+      {:ok, result} ->
+        {:cont, {:ok, Map.put(params, :result, result)}}
 
-      OK.failure(error) ->
+      {:error, error} ->
         Logger.warning("Exec in chain failed: #{inspect(action)} #{inspect(error)}")
-        {:halt, OK.failure(error)}
+        {:halt, {:error, error}}
     end
   end
 end

@@ -182,12 +182,12 @@ defmodule JidoAction.MixProject do
       {:ex_dbug, "~> 2.1"},
       {:jason, "~> 1.4"},
       {:nimble_options, "~> 1.1"},
-      {:ok, "~> 2.3"},
       {:private, "~> 0.1.2"},
       {:telemetry, "~> 1.3"},
       {:telemetry_metrics, "~> 1.1"},
       {:typed_struct, "~> 0.3.0"},
       {:uniq, "~> 0.6.1"},
+      {:splode, "~> 0.2.4"},
 
       # Skill & Action Dependencies for examples
       {:abacus, "~> 2.1"},
@@ -204,7 +204,7 @@ defmodule JidoAction.MixProject do
       {:excoveralls, "~> 0.18.3", only: [:dev, :test]},
       {:expublish, "~> 2.7", only: [:dev], runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
-      {:mimic, "~> 1.11", only: :test},
+      {:mimic, "~> 2.0", only: :test},
       {:stream_data, "~> 1.0", only: [:dev, :test]}
     ]
   end

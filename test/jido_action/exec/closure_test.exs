@@ -6,7 +6,6 @@ defmodule JidoTest.Exec.ClosureTest do
 
   setup :set_mimic_global
 
-  alias Jido.Action.Error
   alias Jido.Exec
   alias Jido.Exec.Closure
   alias JidoTest.TestActions.BasicAction
@@ -37,17 +36,16 @@ defmodule JidoTest.Exec.ClosureTest do
       capture_log(fn ->
         closure = Closure.closure(ErrorAction)
 
-        assert {:error, %Error{type: :execution_error, message: message}} =
-                 closure.(%{error_type: :runtime})
-
-        assert message =~ "Runtime error"
+        assert {:error, error} = closure.(%{error_type: :runtime})
+        assert is_exception(error)
+        assert Exception.message(error) =~ "Runtime error"
       end)
     end
 
     test "closure validates params before execution" do
       # capture_log(fn ->
       closure = Closure.closure(BasicAction, %{})
-      assert {:error, %Error{type: :validation_error}} = closure.(%{invalid: "params"})
+      assert {:error, %Jido.Action.Error.InvalidInputError{}} = closure.(%{invalid: "params"})
       # end)
     end
   end
@@ -85,10 +83,9 @@ defmodule JidoTest.Exec.ClosureTest do
         async_closure = Closure.async_closure(ErrorAction)
         async_ref = async_closure.(%{error_type: :runtime})
 
-        assert {:error, %Error{type: :execution_error, message: message}} =
-                 Exec.await(async_ref)
-
-        assert message =~ "Runtime error"
+        assert {:error, error} = Exec.await(async_ref)
+        assert is_exception(error)
+        assert Exception.message(error) =~ "Runtime error"
       end)
     end
   end
@@ -108,13 +105,13 @@ defmodule JidoTest.Exec.ClosureTest do
 
     test "closure with empty context and opts" do
       closure = Closure.closure(BasicAction)
-      assert {:error, %Error{type: :validation_error}} = closure.(%{})
+      assert {:error, %Jido.Action.Error.InvalidInputError{}} = closure.(%{})
     end
 
     test "async_closure with empty context and opts" do
       async_closure = Closure.async_closure(BasicAction)
       async_ref = async_closure.(%{})
-      assert {:error, %Error{type: :validation_error}} = Exec.await(async_ref)
+      assert {:error, %Jido.Action.Error.InvalidInputError{}} = Exec.await(async_ref)
     end
   end
 end

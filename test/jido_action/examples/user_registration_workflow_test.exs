@@ -185,7 +185,8 @@ defmodule JidoTest.Exec.Examples.UserRegistrationExecTest do
           invalid_data
         )
 
-      assert error.type == :validation_error
+      assert is_exception(error)
+      assert error.__struct__ == Jido.Action.Error.InvalidInputError
     end
 
     test "chain can be packaged as an action" do

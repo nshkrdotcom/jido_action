@@ -29,7 +29,8 @@ defmodule Jido.ExecTaskTest do
         )
 
       assert {:error, error} = result
-      assert error.type == :execution_error
+      assert is_exception(error)
+      assert error.__struct__ == Jido.Action.Error.ExecutionFailureError
     end
 
     test "properly cleans up linked tasks when task group is terminated" do

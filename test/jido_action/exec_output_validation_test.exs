@@ -1,7 +1,6 @@
 defmodule JidoTest.Exec.OutputValidationTest do
   use JidoTest.ActionCase, async: true
 
-  alias Jido.Action.Error
   alias Jido.Exec
   alias JidoTest.TestActions.InvalidOutputAction
   alias JidoTest.TestActions.NoOutputSchemaAction
@@ -25,7 +24,7 @@ defmodule JidoTest.Exec.OutputValidationTest do
       params = %{}
       context = %{}
 
-      assert {:error, %Error{type: :validation_error, message: error_message}} =
+      assert {:error, %Jido.Action.Error.InvalidInputError{message: error_message}} =
                Exec.run(InvalidOutputAction, params, context)
 
       assert error_message =~ "required :required_field option not found"
@@ -64,7 +63,7 @@ defmodule JidoTest.Exec.OutputValidationTest do
     test "async execution with invalid output fails" do
       async_ref = Exec.run_async(InvalidOutputAction, %{}, %{})
 
-      assert {:error, %Error{type: :validation_error, message: error_message}} =
+      assert {:error, %Jido.Action.Error.InvalidInputError{message: error_message}} =
                Exec.await(async_ref)
 
       assert error_message =~ "required :required_field option not found"
@@ -103,7 +102,7 @@ defmodule JidoTest.Exec.OutputValidationTest do
         end
       end
 
-      assert {:error, %Error{type: :validation_error}, directive} =
+      assert {:error, %Jido.Action.Error.InvalidInputError{}, directive} =
                Exec.run(InvalidTupleOutputAction, %{}, %{})
 
       assert directive == :continue
@@ -137,7 +136,7 @@ defmodule JidoTest.Exec.OutputValidationTest do
         end
       end
 
-      assert {:error, %Error{type: :validation_error, message: error_message}} =
+      assert {:error, %Jido.Action.Error.InvalidInputError{message: error_message}} =
                Exec.run(TypeErrorOutputAction, %{}, %{})
 
       assert error_message =~ "Action output"
@@ -157,11 +156,11 @@ defmodule JidoTest.Exec.OutputValidationTest do
         end
 
         def on_before_validate_output(_output) do
-          {:error, Error.validation_error("Callback failed")}
+          {:error, Jido.Action.Error.validation_error("Callback failed")}
         end
       end
 
-      assert {:error, %Error{type: :validation_error, message: "Callback failed"}} =
+      assert {:error, %Jido.Action.Error.InvalidInputError{message: "Callback failed"}} =
                Exec.run(CallbackErrorOutputAction, %{}, %{})
     end
   end

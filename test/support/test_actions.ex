@@ -1,6 +1,5 @@
 defmodule JidoTest.TestActions do
   @moduledoc false
-  import OK, only: [success: 1, failure: 1]
 
   alias Jido.Action
   alias Jido.Action.Error
@@ -524,11 +523,11 @@ defmodule JidoTest.TestActions do
       ]
 
     def run(%{result_type: :success}, _context) do
-      success(%{result: "success"})
+      {:ok, %{result: "success"}}
     end
 
     def run(%{result_type: :failure}, _context) do
-      failure(Error.internal_server_error("Simulated failure"))
+      {:error, Error.internal_error("Simulated failure")}
     end
 
     def run(%{result_type: :raw}, _context) do
@@ -559,7 +558,7 @@ defmodule JidoTest.TestActions do
       if attempts < max_attempts do
         # Simulate failure based on the failure_type
         case failure_type do
-          :error -> {:error, Error.internal_server_error("Retry needed")}
+          :error -> {:error, Error.internal_error("Retry needed")}
           :exception -> raise "Retry exception"
         end
       else
@@ -579,9 +578,9 @@ defmodule JidoTest.TestActions do
         if :persistent_term.get({__MODULE__, :cancel}, false), do: throw(:cancelled)
       end)
 
-      success("Exec completed")
+      {:ok, "Exec completed"}
     catch
-      :throw, :cancelled -> failure("Exec cancelled")
+      :throw, :cancelled -> {:error, "Exec cancelled"}
     after
       :persistent_term.erase({__MODULE__, :cancel})
     end

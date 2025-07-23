@@ -20,8 +20,6 @@ defmodule JidoTest.Exec.ActionTest do
   alias JidoTest.TestActions.StreamingAction
   alias JidoTest.TestActions.Subtract
 
-  require OK
-
   @moduletag :capture_log
 
   describe "error formatting" do
@@ -116,7 +114,7 @@ defmodule JidoTest.Exec.ActionTest do
 
       invalid_params = %{a: "not an integer", b: 2}
 
-      assert {:error, %Error{type: :validation_error, message: error_message}} =
+      assert {:error, %Jido.Action.Error.InvalidInputError{message: error_message}} =
                FullAction.validate_params(invalid_params)
 
       assert error_message =~ "Parameter 'a' must be a positive integer"
@@ -156,14 +154,14 @@ defmodule JidoTest.Exec.ActionTest do
 
   describe "parameter validation" do
     test "validates required parameters" do
-      assert {:error, %Error{type: :validation_error, message: error_message}} =
+      assert {:error, %Jido.Action.Error.InvalidInputError{message: error_message}} =
                FullAction.validate_params(%{})
 
       assert error_message =~ "Parameter 'a' must be a positive integer"
     end
 
     test "validates parameter types" do
-      assert {:error, %Error{type: :validation_error, message: error_message}} =
+      assert {:error, %Jido.Action.Error.InvalidInputError{message: error_message}} =
                FullAction.validate_params(%{a: "not an integer", b: 2})
 
       assert error_message =~ "Parameter 'a' must be a positive integer"
@@ -172,8 +170,9 @@ defmodule JidoTest.Exec.ActionTest do
 
   describe "error handling" do
     test "new returns an error tuple" do
-      assert {:error, %Error{type: :config_error, message: error_message}} = Action.new()
-      assert error_message =~ "Actions should not be defined at runtime"
+      assert {:error, error} = Action.new()
+      assert is_exception(error)
+      assert Exception.message(error) =~ "Actions should not be defined at runtime"
     end
   end
 
@@ -325,7 +324,7 @@ defmodule JidoTest.Exec.ActionTest do
     end
 
     test "action with invalid output fails validation" do
-      assert {:error, %Error{type: :validation_error, message: error_message}} =
+      assert {:error, %Jido.Action.Error.InvalidInputError{message: error_message}} =
                OutputSchemaAction.validate_output(%{result: "test"})
 
       assert error_message =~ "required :length option not found"

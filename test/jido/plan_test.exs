@@ -251,7 +251,8 @@ defmodule Jido.PlanTest do
     test "raises on invalid keyword list" do
       invalid_plan = [:not, :a, :keyword, :list]
 
-      assert {:error, %Jido.Action.Error{}} = Plan.build(invalid_plan)
+      assert {:error, error} = Plan.build(invalid_plan)
+      assert is_exception(error)
     end
 
     test "build!/3 raises on error" do
@@ -293,7 +294,8 @@ defmodule Jido.PlanTest do
         |> Plan.add(:step1, TestActions.FetchAction, depends_on: :step2)
         |> Plan.add(:step2, TestActions.ValidateAction, depends_on: :step1)
 
-      assert {:error, %Jido.Action.Error{}} = Plan.normalize(plan)
+      assert {:error, error} = Plan.normalize(plan)
+      assert is_exception(error)
     end
 
     test "normalize!/1 raises on error" do
