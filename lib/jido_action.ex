@@ -469,11 +469,12 @@ defmodule Jido.Action do
 
   ## Returns
 
-  - `{:ok, result}` where `result` is a map containing the 's output.
-  - `{:error, reason}` where `reason` describes why the  failed.
+  - `{:ok, result}` where `result` is a map containing the action's output.
+  - `{:ok, result, extras}` where `result` is a map and `extras` is additional data (e.g., directives).
+  - `{:error, reason}` where `reason` describes why the action failed.
   """
   @callback run(params :: map(), context :: map()) ::
-              {:ok, map()} | {:error, any()}
+              {:ok, map()} | {:ok, map(), any()} | {:error, any()}
 
   @doc """
   Called before parameter validation.
