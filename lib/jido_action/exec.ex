@@ -170,17 +170,18 @@ defmodule Jido.Exec do
       cond_log(
         log_level,
         :warning,
-        "Function invocation error in action: #{Exception.message(e)}"
+        "Function invocation error in action: #{extract_safe_error_message(e)}"
       )
 
-      {:error, Error.validation_error("Invalid action module: #{Exception.message(e)}")}
+      {:error, Error.validation_error("Invalid action module: #{extract_safe_error_message(e)}")}
 
     e ->
       log_level = Keyword.get(opts, :log_level, :info)
       dbug("Unexpected error in action", error: e)
-      cond_log(log_level, :error, "Unexpected error in action: #{Exception.message(e)}")
+      cond_log(log_level, :error, "Unexpected error in action: #{extract_safe_error_message(e)}")
 
-      {:error, Error.internal_error("An unexpected error occurred: #{Exception.message(e)}")}
+      {:error,
+       Error.internal_error("An unexpected error occurred: #{extract_safe_error_message(e)}")}
   catch
     kind, reason ->
       log_level = Keyword.get(opts, :log_level, :info)
@@ -189,7 +190,7 @@ defmodule Jido.Exec do
       cond_log(
         log_level,
         :warning,
-        "Caught unexpected throw/exit in action: #{Exception.message(reason)}"
+        "Caught unexpected throw/exit in action: #{extract_safe_error_message(reason)}"
       )
 
       {:error, Error.internal_error("Caught #{kind}: #{inspect(reason)}")}
@@ -697,14 +698,20 @@ defmodule Jido.Exec do
                 top_level_fields
               )
 
+            # Extract message from error struct properly using safe helper
+            error_message = extract_safe_error_message(original_error)
+
             Error.execution_error(
-              "Compensation completed for: #{inspect(original_error)}",
+              "Compensation completed for: #{error_message}",
               Map.merge(details, %{original_error: original_error})
             )
 
           {:error, comp_error} ->
+            # Extract message from error struct properly using safe helper
+            error_message = extract_safe_error_message(original_error)
+
             Error.execution_error(
-              "Compensation failed for: #{inspect(original_error)}",
+              "Compensation failed for: #{error_message}",
               %{
                 compensated: false,
                 compensation_error: comp_error,
@@ -990,7 +997,7 @@ Debug info:
 
         {:error,
          Error.execution_error(
-           "Server error in #{inspect(action)}: #{Exception.message(e)}",
+           "Server error in #{inspect(action)}: #{extract_safe_error_message(e)}",
            %{original_exception: e, action: action, stacktrace: stacktrace}
          )}
 
@@ -1002,7 +1009,7 @@ Debug info:
 
         {:error,
          Error.execution_error(
-           "Argument error in #{inspect(action)}: #{Exception.message(e)}",
+           "Argument error in #{inspect(action)}: #{extract_safe_error_message(e)}",
            %{original_exception: e, action: action, stacktrace: stacktrace}
          )}
 
@@ -1016,6 +1023,30 @@ Debug info:
            "An unexpected error occurred during execution of #{inspect(action)}: #{inspect(e)}",
            %{original_exception: e, action: action, stacktrace: stacktrace}
          )}
+    end
+  end
+
+  # Private helper to safely extract error messages, handling nil and nested cases
+  defp extract_safe_error_message(error) do
+    case error do
+      %{message: %{message: inner_message}} when is_binary(inner_message) ->
+        inner_message
+
+      %{message: nil} ->
+        ""
+
+      %{message: message} when is_binary(message) ->
+        message
+
+      %{message: message} when is_struct(message) ->
+        if Map.has_key?(message, :message) and is_binary(message.message) do
+          message.message
+        else
+          inspect(message)
+        end
+
+      _ ->
+        inspect(error)
     end
   end
 end
