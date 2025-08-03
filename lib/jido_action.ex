@@ -411,7 +411,7 @@ defmodule Jido.Action do
 
           The `run/2` function must be implemented in the module using Jido.Action.
           """
-          @spec run(map(), map()) :: {:ok, map()} | {:error, any()}
+          @spec run(map(), map()) :: {:ok, map()} | {:ok, map(), any()} | {:error, any()}
           def run(params, context) do
             "run/2 must be implemented in in your Action"
             |> Error.config_error()

@@ -125,10 +125,14 @@ defmodule Jido.Exec.Chain do
       {:ok, result} when is_map(result) ->
         {:cont, {:ok, Map.merge(params, result)}}
 
-      {:ok, result} ->
-        {:cont, {:ok, Map.put(params, :result, result)}}
+      {:ok, result, _directive} when is_map(result) ->
+        {:cont, {:ok, Map.merge(params, result)}}
 
       {:error, error} ->
+        Logger.warning("Exec in chain failed: #{inspect(action)} #{inspect(error)}")
+        {:halt, {:error, error}}
+
+      {:error, error, _directive} ->
         Logger.warning("Exec in chain failed: #{inspect(action)} #{inspect(error)}")
         {:halt, {:error, error}}
     end
