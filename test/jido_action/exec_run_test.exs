@@ -2,8 +2,8 @@ defmodule JidoTest.ExecRunTest do
   use JidoTest.ActionCase, async: false
   use Mimic
 
-  import ExUnit.CaptureLog
   import ExUnit.CaptureIO
+  import ExUnit.CaptureLog
 
   alias Jido.Action.Error
   alias Jido.Exec

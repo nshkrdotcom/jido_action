@@ -40,9 +40,10 @@ defmodule Jido.Plan do
   Plans can be normalized into a directed graph for execution analysis and validation.
   """
 
+  use TypedStruct
+
   alias Jido.Action.Error
   alias Jido.Instruction
-  use TypedStruct
 
   @type step_def ::
           module()
@@ -155,7 +156,7 @@ defmodule Jido.Plan do
   @spec add(t(), atom(), step_def(), keyword()) :: t() | no_return()
   def add(%__MODULE__{} = plan, step_name, step_def, opts \\ []) do
     depends_on = opts |> Keyword.get(:depends_on, []) |> List.wrap()
-    plan_opts = Keyword.drop(opts, [:depends_on])
+    plan_opts = Keyword.delete(opts, :depends_on)
 
     case Instruction.normalize_single(step_def, plan.context, []) do
       {:ok, instruction} ->
@@ -278,14 +279,12 @@ defmodule Jido.Plan do
   # Private helper functions
 
   defp add_step_from_def(plan, step_name, step_def) do
-    try do
-      case extract_depends_on_from_step_def(step_def) do
-        {clean_step_def, depends_on} ->
-          {:ok, add(plan, step_name, clean_step_def, depends_on: depends_on)}
-      end
-    rescue
-      error -> {:error, error}
+    case extract_depends_on_from_step_def(step_def) do
+      {clean_step_def, depends_on} ->
+        {:ok, add(plan, step_name, clean_step_def, depends_on: depends_on)}
     end
+  rescue
+    error -> {:error, error}
   end
 
   defp extract_depends_on_from_step_def(step_def) do
@@ -422,7 +421,7 @@ defmodule Jido.Plan do
 
   defp instruction_to_step_def(%Instruction{action: action, params: params, opts: opts}) do
     # Remove common opts that aren't part of the step definition
-    clean_opts = Keyword.drop(opts, [:opts])
+    clean_opts = Keyword.delete(opts, :opts)
 
     case {params, clean_opts} do
       {params, []} when map_size(params) == 0 -> action

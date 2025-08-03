@@ -1,5 +1,6 @@
 defmodule Jido.Action.ToolTest do
   use JidoTest.ActionCase, async: true
+
   alias Jido.Action.Tool
   alias JidoTest.TestActions
 

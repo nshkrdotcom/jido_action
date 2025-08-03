@@ -118,6 +118,7 @@ defmodule Jido.Tools.Workflow do
   @doc """
   Macro for setting up a module as a Workflow with step execution capabilities.
   """
+  @spec __using__(keyword()) :: Macro.t()
   defmacro __using__(opts) do
     escaped_schema = Macro.escape(@workflow_config_schema)
     valid_step_types = @valid_step_types
@@ -134,6 +135,10 @@ defmodule Jido.Tools.Workflow do
       # Validate WorkflowAction-specific options
       case NimbleOptions.validate(workflow_opts, unquote(escaped_schema)) do
         {:ok, validated_workflow_opts} ->
+          @behaviour Jido.Tools.Workflow
+
+          use Jido.Action, action_opts
+
           # Store validated workflow options for later use - steps will be stored as module attribute
           @workflow_steps validated_workflow_opts[:workflow]
 
@@ -141,10 +146,8 @@ defmodule Jido.Tools.Workflow do
           @workflow true
 
           # Pass the remaining options to the base Action
-          use Jido.Action, action_opts
 
           # Implement the behavior
-          @behaviour Jido.Tools.Workflow
 
           # Implement the run function that executes the workflow
           @impl Jido.Action
@@ -155,15 +158,18 @@ defmodule Jido.Tools.Workflow do
 
           # Add workflow-specific functionality
           @doc "Returns true if this module is a workflow."
+          @spec workflow?() :: boolean()
           def workflow?, do: @workflow
 
           @doc "Returns the workflow steps for this module."
+          @spec workflow_steps() :: list()
           def workflow_steps, do: @workflow_steps
 
           # Make to_json overridable before redefining it
           defoverridable to_json: 0
 
           @doc "Returns the workflow metadata as JSON including workflow flag and steps."
+          @spec to_json() :: map()
           def to_json do
             # Get the base JSON from Jido.Action
             base_json = super()
@@ -177,6 +183,7 @@ defmodule Jido.Tools.Workflow do
           defoverridable to_tool: 0
 
           @doc "Converts the workflow to an LLM-compatible tool format."
+          @spec to_tool() :: map()
           def to_tool do
             tool = super()
 
@@ -220,6 +227,7 @@ defmodule Jido.Tools.Workflow do
 
           Handles step, branch, converge, and parallel step types.
           """
+          @spec execute_step(tuple(), map(), map()) :: {:ok, any()} | {:error, any()}
           def execute_step(step, params, context) do
             case step do
               {:step, _metadata, [instruction]} ->
@@ -248,14 +256,7 @@ defmodule Jido.Tools.Workflow do
             # Normalize the instruction to a Jido.Instruction struct
             {:ok, normalized} = Instruction.normalize_single(instruction)
 
-            if not is_struct(normalized, Jido.Instruction) do
-              # Handle unexpected return from normalize
-              {:error,
-               %{
-                 type: :invalid_instruction,
-                 message: "Failed to normalize instruction: #{inspect(instruction)}"
-               }}
-            else
+            if is_struct(normalized, Jido.Instruction) do
               # Extract the action module
               action = normalized.action
 
@@ -277,7 +278,15 @@ defmodule Jido.Tools.Workflow do
                      type: :invalid_result,
                      message: "Action returned unexpected value: #{inspect(other)}"
                    }}
+
+                  # Handle unexpected return from normalize
               end
+            else
+              {:error,
+               %{
+                 type: :invalid_instruction,
+                 message: "Failed to normalize instruction: #{inspect(instruction)}"
+               }}
             end
           end
 

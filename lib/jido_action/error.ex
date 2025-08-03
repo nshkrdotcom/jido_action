@@ -31,8 +31,16 @@ defmodule Jido.Action.Error do
       # Convert any value to a proper error
       {:error, normalized} = Jido.Action.Error.to_error("Something went wrong")
   """
+  use Splode,
+    # Error class modules for Splode
+    error_classes: [
+      invalid: Invalid,
+      execution: Execution,
+      config: Config,
+      internal: Internal
+    ],
+    unknown_error: Internal.UnknownError
 
-  # Error class modules for Splode
   defmodule Invalid do
     @moduledoc "Invalid input error class"
     use Splode.ErrorClass, class: :invalid
@@ -65,15 +73,6 @@ defmodule Jido.Action.Error do
       end
     end
   end
-
-  use Splode,
-    error_classes: [
-      invalid: Invalid,
-      execution: Execution,
-      config: Config,
-      internal: Internal
-    ],
-    unknown_error: Internal.UnknownError
 
   # Define specific error structs inline
   defmodule InvalidInputError do
@@ -149,6 +148,7 @@ defmodule Jido.Action.Error do
   @doc """
   Creates a validation error for invalid input parameters.
   """
+  @spec validation_error(String.t(), map()) :: InvalidInputError.t()
   def validation_error(message, details \\ %{}) do
     InvalidInputError.exception(
       message: message,
@@ -161,6 +161,7 @@ defmodule Jido.Action.Error do
   @doc """
   Creates an execution error for runtime failures.
   """
+  @spec execution_error(String.t(), map()) :: ExecutionFailureError.t()
   def execution_error(message, details \\ %{}) do
     ExecutionFailureError.exception(
       message: message,
@@ -171,6 +172,7 @@ defmodule Jido.Action.Error do
   @doc """
   Creates a configuration error.
   """
+  @spec config_error(String.t(), map()) :: ConfigurationError.t()
   def config_error(message, details \\ %{}) do
     ConfigurationError.exception(
       message: message,
@@ -181,6 +183,7 @@ defmodule Jido.Action.Error do
   @doc """
   Creates a timeout error.
   """
+  @spec timeout_error(String.t(), map()) :: TimeoutError.t()
   def timeout_error(message, details \\ %{}) do
     TimeoutError.exception(
       message: message,
@@ -192,6 +195,7 @@ defmodule Jido.Action.Error do
   @doc """
   Creates an internal server error.
   """
+  @spec internal_error(String.t(), map()) :: InternalError.t()
   def internal_error(message, details \\ %{}) do
     InternalError.exception(
       message: message,

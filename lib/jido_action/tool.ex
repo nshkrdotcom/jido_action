@@ -167,6 +167,7 @@ defmodule Jido.Action.Tool do
     A string representing the equivalent JSON Schema type.
   """
   @spec nimble_type_to_json_schema_type(atom()) :: String.t()
+  @spec nimble_type_to_json_schema_type(atom() | tuple()) :: String.t()
   def nimble_type_to_json_schema_type(:string), do: "string"
   def nimble_type_to_json_schema_type(:number), do: "integer"
   def nimble_type_to_json_schema_type(:integer), do: "integer"

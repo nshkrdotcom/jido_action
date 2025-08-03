@@ -40,12 +40,12 @@ defmodule Jido.Exec do
   use Private
   use ExDbug, enabled: false
 
+  import Jido.Action.Util, only: [cond_log: 3]
+
   alias Jido.Action.Error
   alias Jido.Instruction
 
   require Logger
-
-  import Jido.Action.Util, only: [cond_log: 3]
 
   @default_timeout 5000
   @default_max_retries 1
@@ -291,6 +291,19 @@ defmodule Jido.Exec do
   @spec await(async_ref()) :: exec_result
   def await(async_ref), do: await(async_ref, get_default_timeout())
 
+  @doc """
+  Awaits the completion of an asynchronous Action with a custom timeout.
+
+  ## Parameters
+
+  - `async_ref`: The async reference returned by `run_async/4`.
+  - `timeout`: Maximum time to wait in milliseconds.
+
+  ## Returns
+
+  - `{:ok, result}` if the Action completes successfully.
+  - `{:error, reason}` if an error occurs or timeout is reached.
+  """
   @spec await(async_ref(), timeout()) :: exec_result
   def await(%{ref: ref, pid: pid}, timeout) do
     dbug("Awaiting async action result", ref: ref, pid: pid, timeout: timeout)
@@ -704,7 +717,7 @@ defmodule Jido.Exec do
 
             Error.execution_error(
               "Compensation completed for: #{error_message}",
-              Map.merge(details, %{original_error: original_error})
+              Map.put(details, :original_error, original_error)
             )
 
           {:error, comp_error} ->
@@ -855,12 +868,12 @@ defmodule Jido.Exec do
 Debug info:
 - Action module: #{inspect(action)}
 - Params: #{inspect(params)}
-- Context: #{inspect(Map.drop(context, [:__task_group__]))}",
+- Context: #{inspect(Map.delete(context, :__task_group__))}",
                %{
                  timeout: timeout,
                  action: action,
                  params: params,
-                 context: Map.drop(context, [:__task_group__])
+                 context: Map.delete(context, :__task_group__)
                }
              )}
         end

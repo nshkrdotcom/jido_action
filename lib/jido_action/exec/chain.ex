@@ -17,10 +17,10 @@ defmodule Jido.Exec.Chain do
       {:interrupted, %{value: 6}}
   """
 
-  require Logger
-
   alias Jido.Action.Error
   alias Jido.Exec
+
+  require Logger
 
   @type chain_action :: module() | {module(), keyword()}
   @type ok_t :: {:ok, any()} | {:error, any()}

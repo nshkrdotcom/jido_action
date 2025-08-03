@@ -4,13 +4,13 @@ defmodule JidoTest.Exec.ClosureTest do
   import ExUnit.CaptureLog
   import Mimic
 
-  setup :set_mimic_global
-
   alias Jido.Exec
   alias Jido.Exec.Closure
   alias JidoTest.TestActions.BasicAction
   alias JidoTest.TestActions.ContextAction
   alias JidoTest.TestActions.ErrorAction
+
+  setup :set_mimic_global
 
   describe "closure/3" do
     test "creates a closure that can be called with params" do

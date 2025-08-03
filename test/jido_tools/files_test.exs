@@ -1,5 +1,6 @@
 defmodule JidoTest.Actions.FilesTest do
   use JidoTest.ActionCase, async: true
+
   alias Jido.Tools.Files
 
   setup do

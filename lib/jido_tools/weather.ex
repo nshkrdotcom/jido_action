@@ -33,6 +33,7 @@ defmodule Jido.Tools.Weather do
   Usage in IEx:
     iex> Jido.Tools.Weather.demo()
   """
+  @spec demo() :: :ok
   @dialyzer {:no_match, demo: 0}
   def demo do
     demo_fake_text()

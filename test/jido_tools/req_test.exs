@@ -1,10 +1,11 @@
 defmodule JidoTest.Actions.ReqTest do
   use JidoTest.ActionCase, async: false
+
+  import Mimic
+
   alias Jido.Tools.ReqTool
 
   # Import Mimic for mocking
-  import Mimic
-
   setup :set_mimic_global
 
   # Example with custom transform_result

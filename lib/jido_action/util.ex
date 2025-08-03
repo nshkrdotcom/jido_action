@@ -39,6 +39,7 @@ defmodule Jido.Action.Util do
       iex> cond_log(:debug, :info, "test message")
       :ok
   """
+  @spec cond_log(Logger.level(), Logger.level(), Logger.message(), keyword()) :: :ok
   def cond_log(threshold_level, message_level, message, opts \\ []) do
     valid_levels = Logger.levels()
 

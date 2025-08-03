@@ -132,9 +132,10 @@ defmodule Jido.Instruction do
   - `Jido.Runner` - Instruction execution
   - `Jido.Agent` - Agent-based execution
   """
+  use TypedStruct
+
   alias Jido.Action.Error
   alias Jido.Instruction
-  use TypedStruct
 
   @type action_module :: module()
   @type action_params :: map()

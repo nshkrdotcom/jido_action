@@ -36,6 +36,7 @@ defmodule Jido.Tools.ReqTool do
   @doc """
   Macro for setting up a module as a ReqTool with HTTP request capabilities.
   """
+  @spec __using__(keyword()) :: Macro.t()
   defmacro __using__(opts) do
     escaped_schema = Macro.escape(@req_config_schema)
 
@@ -48,14 +49,15 @@ defmodule Jido.Tools.ReqTool do
       # Validate ReqTool-specific options
       case NimbleOptions.validate(req_opts, unquote(escaped_schema)) do
         {:ok, validated_req_opts} ->
+          @behaviour Jido.Tools.ReqTool
+
+          use Jido.Action, action_opts
           # Store validated req opts for later use
           @req_opts validated_req_opts
 
           # Pass the remaining options to the base Action
-          use Jido.Action, action_opts
 
           # Implement the behavior
-          @behaviour Jido.Tools.ReqTool
 
           # Implement the run function that uses req options
           @impl Jido.Action

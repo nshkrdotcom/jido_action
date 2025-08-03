@@ -1,8 +1,10 @@
 defmodule Jido.InstructionTest do
   use JidoTest.ActionCase, async: true
+
   alias Jido.Instruction
   alias JidoTest.TestActions.BasicAction
   alias JidoTest.TestActions.NoSchema
+
   @moduletag :capture_log
 
   describe "normalize/3" do
@@ -102,6 +104,38 @@ defmodule Jido.InstructionTest do
       assert {:ok, [normalized]} = Instruction.normalize(BasicAction, %{}, retry: true)
       assert normalized.opts == [retry: true]
     end
+
+    test "returns error for nested lists" do
+      nested_input = [
+        BasicAction,
+        [NoSchema, {BasicAction, %{value: 1}}]
+      ]
+
+      assert {:error, %_{} = error} = Instruction.normalize(nested_input)
+      assert is_exception(error)
+    end
+
+    test "handles nil context gracefully" do
+      assert {:ok, [instruction]} = Instruction.normalize(BasicAction, nil)
+      assert instruction.context == %{}
+    end
+
+    test "handles empty list" do
+      assert {:ok, []} = Instruction.normalize([])
+    end
+
+    test "stops on first error in list processing" do
+      input = [
+        BasicAction,
+        # This will cause an error
+        123,
+        # This shouldn't be processed
+        NoSchema
+      ]
+
+      assert {:error, %_{} = error} = Instruction.normalize(input)
+      assert is_exception(error)
+    end
   end
 
   describe "normalize!/3" do
@@ -158,6 +192,70 @@ defmodule Jido.InstructionTest do
     end
   end
 
+  describe "new/2" do
+    test "creates instruction with valid action" do
+      assert {:ok, instruction} = Instruction.new(%{action: BasicAction})
+      assert instruction.action == BasicAction
+      assert instruction.params == %{}
+      assert instruction.context == %{}
+      assert instruction.opts == []
+      assert is_binary(instruction.id)
+    end
+
+    test "creates instruction with all fields" do
+      attrs = %{
+        id: "custom-id",
+        action: BasicAction,
+        params: %{value: 42},
+        context: %{user_id: "123"},
+        opts: [retry: true]
+      }
+
+      assert {:ok, instruction} = Instruction.new(attrs)
+      assert instruction.id == "custom-id"
+      assert instruction.action == BasicAction
+      assert instruction.params == %{value: 42}
+      assert instruction.context == %{user_id: "123"}
+      assert instruction.opts == [retry: true]
+    end
+
+    test "creates instruction from keyword list" do
+      assert {:ok, instruction} = Instruction.new(action: BasicAction, params: %{value: 1})
+      assert instruction.action == BasicAction
+      assert instruction.params == %{value: 1}
+    end
+
+    test "returns error for missing action" do
+      assert {:error, :missing_action} = Instruction.new(%{params: %{value: 1}})
+    end
+
+    test "returns error for invalid action" do
+      assert {:error, :invalid_action} = Instruction.new(%{action: "not_a_module"})
+    end
+
+    test "returns error for non-atom action" do
+      assert {:error, :invalid_action} = Instruction.new(%{action: 123})
+    end
+  end
+
+  describe "new!/2" do
+    test "creates instruction successfully" do
+      instruction = Instruction.new!(%{action: BasicAction, params: %{value: 42}})
+      assert instruction.action == BasicAction
+      assert instruction.params == %{value: 42}
+    end
+
+    test "returns error tuple for missing action" do
+      assert {:error, %_{} = error} = Instruction.new!(%{params: %{value: 1}})
+      assert is_exception(error)
+    end
+
+    test "returns error tuple for invalid action" do
+      assert {:error, %_{} = error} = Instruction.new!(%{action: "not_a_module"})
+      assert is_exception(error)
+    end
+  end
+
   describe "normalize_single/3" do
     test "normalizes instruction struct" do
       instruction = %Instruction{
@@ -195,9 +293,23 @@ defmodule Jido.InstructionTest do
       assert instruction.context == %{}
     end
 
+    test "normalizes action tuple with nil params" do
+      assert {:ok, instruction} = Instruction.normalize_single({BasicAction, nil})
+      assert instruction.action == BasicAction
+      assert instruction.params == %{}
+      assert instruction.context == %{}
+    end
+
     test "returns error for invalid params format" do
       assert {:error, %_{} = error} =
                Instruction.normalize_single({BasicAction, "invalid"})
+
+      assert is_exception(error)
+    end
+
+    test "returns error for non-keyword list params" do
+      assert {:error, %_{} = error} =
+               Instruction.normalize_single({BasicAction, ["not", "keyword", "list"]})
 
       assert is_exception(error)
     end
@@ -209,6 +321,16 @@ defmodule Jido.InstructionTest do
 
     test "returns error for list input" do
       assert {:error, %_{} = error} = Instruction.normalize_single([BasicAction])
+      assert is_exception(error)
+    end
+
+    test "handles nil context in normalize_single" do
+      assert {:ok, instruction} = Instruction.normalize_single(BasicAction, nil)
+      assert instruction.context == %{}
+    end
+
+    test "handles non-atom action in tuple" do
+      assert {:error, %_{} = error} = Instruction.normalize_single({"not_atom", %{}})
       assert is_exception(error)
     end
 

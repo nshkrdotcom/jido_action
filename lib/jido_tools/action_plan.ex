@@ -35,8 +35,8 @@ defmodule Jido.Tools.ActionPlan do
   - `transform_result/1` (optional) - Transform the execution result
   """
 
-  alias Jido.Plan
   alias Jido.Exec
+  alias Jido.Plan
 
   @doc """
   Required callback for building a Plan struct.
@@ -59,13 +59,14 @@ defmodule Jido.Tools.ActionPlan do
   @doc """
   Macro for setting up a module as an ActionPlan with plan execution capabilities.
   """
+  @spec __using__(keyword()) :: Macro.t()
   defmacro __using__(opts) do
     quote location: :keep do
+      @behaviour Jido.Tools.ActionPlan
       # Pass all options to the base Action
       use Jido.Action, unquote(opts)
 
       # Implement the behavior
-      @behaviour Jido.Tools.ActionPlan
 
       # Implement the run function that builds and executes the plan
       @impl Jido.Action

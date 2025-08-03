@@ -155,10 +155,10 @@ defmodule Jido.Action do
   > downstream Actions or systems.
   """
 
+  use TypedStruct
+
   alias Jido.Action.Error
   alias Jido.Action.Tool
-
-  use TypedStruct
 
   typedstruct do
     field(:name, String.t(), enforce: true)
@@ -328,11 +328,8 @@ defmodule Jido.Action do
           @spec validate_params(map()) :: {:ok, map()} | {:error, String.t()}
           def validate_params(params) do
             with {:ok, params} <- on_before_validate_params(params),
-                 {:ok, validated_params} <- do_validate_params(params),
-                 {:ok, after_params} <- on_after_validate_params(validated_params) do
-              {:ok, after_params}
-            else
-              {:error, reason} -> {:error, reason}
+                 {:ok, validated_params} <- do_validate_params(params) do
+              on_after_validate_params(validated_params)
             end
           end
 
@@ -358,11 +355,8 @@ defmodule Jido.Action do
           @spec validate_output(map()) :: {:ok, map()} | {:error, String.t()}
           def validate_output(output) do
             with {:ok, output} <- on_before_validate_output(output),
-                 {:ok, validated_output} <- do_validate_output(output),
-                 {:ok, after_output} <- on_after_validate_output(validated_output) do
-              {:ok, after_output}
-            else
-              {:error, reason} -> {:error, reason}
+                 {:ok, validated_output} <- do_validate_output(output) do
+              on_after_validate_output(validated_output)
             end
           end
 
@@ -425,21 +419,27 @@ defmodule Jido.Action do
           end
 
           @doc "Lifecycle hook called before parameter validation."
+          @spec on_before_validate_params(map()) :: {:ok, map()} | {:error, any()}
           def on_before_validate_params(params), do: {:ok, params}
 
           @doc "Lifecycle hook called after parameter validation."
+          @spec on_after_validate_params(map()) :: {:ok, map()} | {:error, any()}
           def on_after_validate_params(params), do: {:ok, params}
 
           @doc "Lifecycle hook called before output validation."
+          @spec on_before_validate_output(map()) :: {:ok, map()} | {:error, any()}
           def on_before_validate_output(output), do: {:ok, output}
 
           @doc "Lifecycle hook called after output validation."
+          @spec on_after_validate_output(map()) :: {:ok, map()} | {:error, any()}
           def on_after_validate_output(output), do: {:ok, output}
 
           @doc "Lifecycle hook called after Action execution."
+          @spec on_after_run({:ok, map()} | {:error, any()}) :: {:ok, map()} | {:error, any()}
           def on_after_run(result), do: {:ok, result}
 
           @doc "Lifecycle hook called when an error occurs."
+          @spec on_error(map(), any(), map(), keyword()) :: {:ok, map()} | {:error, any()}
           def on_error(failed_params, _error, _context, _opts), do: {:ok, failed_params}
 
           defoverridable on_before_validate_params: 1,
