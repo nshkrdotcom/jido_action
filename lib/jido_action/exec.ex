@@ -129,7 +129,19 @@ defmodule Jido.Exec do
       #   end
       # end
   """
-  @spec run(action(), params(), context(), run_opts()) :: exec_result
+  @spec run(Instruction.t()) :: exec_result()
+  @spec run(action(), params(), context(), run_opts()) :: exec_result()
+  def run(%Instruction{} = instruction) do
+    dbug("Running instruction", instruction: instruction)
+
+    run(
+      instruction.action,
+      instruction.params,
+      instruction.context,
+      instruction.opts
+    )
+  end
+
   def run(action, params \\ %{}, context \\ %{}, opts \\ [])
 
   def run(action, params, context, opts) when is_atom(action) and is_list(opts) do
@@ -194,17 +206,6 @@ defmodule Jido.Exec do
       )
 
       {:error, Error.internal_error("Caught #{kind}: #{inspect(reason)}")}
-  end
-
-  def run(%Instruction{} = instruction, _params, _context, _opts) do
-    dbug("Running instruction", instruction: instruction)
-
-    run(
-      instruction.action,
-      instruction.params,
-      instruction.context,
-      instruction.opts
-    )
   end
 
   def run(action, _params, _context, _opts) do
