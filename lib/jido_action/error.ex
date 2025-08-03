@@ -39,7 +39,7 @@ defmodule Jido.Action.Error do
       config: Config,
       internal: Internal
     ],
-    unknown_error: Internal.UnknownError
+    unknown_error: __MODULE__.Internal.UnknownError
 
   defmodule Invalid do
     @moduledoc "Invalid input error class"
@@ -64,6 +64,11 @@ defmodule Jido.Action.Error do
       @moduledoc "Unknown internal error"
       defexception [:message, :details]
 
+      @type t :: %__MODULE__{
+              message: String.t(),
+              details: map()
+            }
+
       @impl true
       def exception(opts) do
         %__MODULE__{
@@ -78,6 +83,13 @@ defmodule Jido.Action.Error do
   defmodule InvalidInputError do
     @moduledoc "Error for invalid input parameters"
     defexception [:message, :field, :value, :details]
+
+    @type t :: %__MODULE__{
+            message: String.t(),
+            field: atom() | nil,
+            value: any() | nil,
+            details: map()
+          }
 
     @impl true
     def exception(opts) do
@@ -96,6 +108,11 @@ defmodule Jido.Action.Error do
     @moduledoc "Error for runtime execution failures"
     defexception [:message, :details]
 
+    @type t :: %__MODULE__{
+            message: String.t(),
+            details: map()
+          }
+
     @impl true
     def exception(opts) do
       %__MODULE__{
@@ -108,6 +125,12 @@ defmodule Jido.Action.Error do
   defmodule TimeoutError do
     @moduledoc "Error for action timeouts"
     defexception [:message, :timeout, :details]
+
+    @type t :: %__MODULE__{
+            message: String.t(),
+            timeout: non_neg_integer() | nil,
+            details: map()
+          }
 
     @impl true
     def exception(opts) do
@@ -123,6 +146,11 @@ defmodule Jido.Action.Error do
     @moduledoc "Error for configuration issues"
     defexception [:message, :details]
 
+    @type t :: %__MODULE__{
+            message: String.t(),
+            details: map()
+          }
+
     @impl true
     def exception(opts) do
       %__MODULE__{
@@ -135,6 +163,11 @@ defmodule Jido.Action.Error do
   defmodule InternalError do
     @moduledoc "Error for unexpected internal failures"
     defexception [:message, :details]
+
+    @type t :: %__MODULE__{
+            message: String.t(),
+            details: map()
+          }
 
     @impl true
     def exception(opts) do

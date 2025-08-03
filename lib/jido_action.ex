@@ -559,7 +559,8 @@ defmodule Jido.Action do
   - `{:ok, modified_result}` where `modified_result` is a potentially modified result map.
   - `{:error, reason}` if post-processing fails.
   """
-  @callback on_after_run(result :: map()) :: {:ok, map()} | {:error, any()}
+  @callback on_after_run(result :: {:ok, map()} | {:error, any()}) ::
+              {:ok, map()} | {:error, any()}
 
   @doc """
   Handles errors and performs compensation when enabled.
