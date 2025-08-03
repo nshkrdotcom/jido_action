@@ -1,16 +1,18 @@
-name: CI
+name: Publish to Hex.pm
 
 on:
-  pull_request:
-    branches: ["main"]
-  push:
-    branches: ["main"]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.0.1)'
+        required: true
+        type: string
 
 permissions:
-  contents: read
+  contents: write  # Needed for creating releases and tags
 
 jobs:
+  # Reuse the quality gate job from the main CI workflow
   quality_gate:
     name: Quality Gate
     runs-on: ubuntu-latest
@@ -18,7 +20,7 @@ jobs:
       fail-fast: true
       matrix:
         otp: ["27"]
-        elixir: ["1.17", "1.18"]
+        elixir: ["1.18"]  # Use only latest for releases
 
     steps:
       - uses: actions/checkout@v3
@@ -52,15 +54,7 @@ jobs:
       - name: Run quality checks
         run: mix quality
 
-      - name: Generate license report
-        run: mix licenses --report
-
-      - name: Upload license report
-        uses: actions/upload-artifact@v3
-        with:
-          name: license-report-${{ matrix.elixir }}-${{ matrix.otp }}
-          path: license_report.json
-
+  # Reuse the test job from the main CI workflow
   test:
     name: Tests
     runs-on: ubuntu-latest
@@ -68,7 +62,7 @@ jobs:
       fail-fast: true
       matrix:
         otp: ["27"]
-        elixir: ["1.17", "1.18"]
+        elixir: ["1.18"]  # Use only latest for releases
 
     steps:
       - uses: actions/checkout@v3
@@ -99,23 +93,59 @@ jobs:
       - name: Install dependencies
         run: mix deps.get
 
-      - name: Run tests with coverage
-        run: mix coveralls.github
-        env:
-          MIX_ENV: test
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run tests
+        run: mix test
 
-  # Ensure both quality gate and tests pass before allowing merges
-  ci_success:
-    name: CI Success
+  # Only runs if both quality gate and tests pass
+  publish:
+    name: Publish to Hex.pm
     runs-on: ubuntu-latest
     needs: [quality_gate, test]
-    if: always()
+    
     steps:
-      - name: Check all jobs succeeded
+      - uses: actions/checkout@v3
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+
+      - name: Restore dependencies cache
+        uses: actions/cache@v3
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Build package
+        run: mix expublish.build
+
+      - name: Publish to Hex.pm
+        run: mix expublish.publish
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+
+      - name: Create Git tag
         run: |
-          if [[ "${{ needs.quality_gate.result }}" != "success" || "${{ needs.test.result }}" != "success" ]]; then
-            echo "Quality gate or tests failed"
-            exit 1
-          fi
-          echo "All CI checks passed!"
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ inputs.version }}"
+          git push origin "v${{ inputs.version }}"
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "v${{ inputs.version }}"
+          release_name: "Release v${{ inputs.version }}"
+          body: |
+            Release v${{ inputs.version }}
+            
+            See [CHANGELOG.md](https://github.com/agentjido/jido_action/blob/v${{ inputs.version }}/CHANGELOG.md) for details.
+          draft: false
+          prerelease: false

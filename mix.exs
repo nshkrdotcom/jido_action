@@ -30,10 +30,7 @@ defmodule JidoAction.MixProject do
 
       # Coverage
       test_coverage: [
-        tool: ExCoveralls,
-        # summary: [threshold: 80],
-        # export: "cov",
-        ignore_modules: [~r/^JidoTest\.TestActions\./]
+        tool: ExCoveralls
       ],
       preferred_cli_env: [
         coveralls: :test,
@@ -69,62 +66,50 @@ defmodule JidoAction.MixProject do
       authors: ["Mike Hostetler <mike.hostetler@gmail.com>"],
       groups_for_extras: [
         "Start Here": [
-          "guides/getting-started.livemd"
+          "guides/overview.md",
+          "guides/quick-start.md"
         ],
-        "About JidoAction": [
-          "guides/about/what-is-jido-action.md",
-          "guides/about/design-principles.md",
-          "guides/about/alternatives.md",
-          "CONTRIBUTING.md",
+        "Core Concepts": [
+          "guides/core-concepts.md",
+          "guides/actions.md",
+          "guides/instructions.md",
+          "guides/runners.md"
+        ],
+        "Tools & Integration": [
+          "guides/built-in-tools.md",
+          "guides/actions-as-tools.md"
+        ],
+        "Testing & Advanced": [
+          "guides/testing.md",
+          "guides/workflows.md"
+        ],
+        Reference: [
+          "guides/directives.md",
           "CHANGELOG.md",
           "LICENSE.md"
-        ],
-        Examples: [
-          "guides/examples/your-first-action.livemd",
-          "guides/examples/tool-use.livemd",
-          "guides/examples/chain-of-thought.livemd",
-          "guides/examples/think-plan-act.livemd",
-          "guides/examples/multi-agent.livemd"
-        ],
-        Actions: [
-          "guides/actions/overview.md",
-          "guides/actions/workflows.md",
-          "guides/actions/instructions.md",
-          "guides/actions/directives.md",
-          "guides/actions/runners.md",
-          "guides/actions/actions-as-tools.md",
-          "guides/actions/testing.md"
         ]
       ],
       extras: [
         # Home & Project
         {"README.md", title: "Home"},
-        # Getting Started Section
-        {"guides/getting-started.livemd", title: "Quick Start"},
-        # About JidoAction
-        {"guides/about/what-is-jido-action.md", title: "What is JidoAction?"},
-        {"guides/about/design-principles.md", title: "Design Principles"},
-        {"guides/about/alternatives.md", title: "Alternatives"},
-        {"CONTRIBUTING.md", title: "Contributing"},
+        # Start Here
+        {"guides/overview.md", title: "Overview"},
+        {"guides/quick-start.md", title: "Quick Start"},
+        # Core Concepts
+        {"guides/core-concepts.md", title: "Core Concepts"},
+        {"guides/actions.md", title: "Writing Actions"},
+        {"guides/instructions.md", title: "Instructions & Plans"},
+        {"guides/runners.md", title: "Execution Engine"},
+        # Tools & Integration
+        {"guides/built-in-tools.md", title: "Built-in Tools"},
+        {"guides/actions-as-tools.md", title: "AI Integration"},
+        # Testing & Advanced
+        {"guides/testing.md", title: "Testing"},
+        {"guides/workflows.md", title: "Advanced Topics"},
+        # Reference
+        {"guides/directives.md", title: "Directives (Legacy)"},
         {"CHANGELOG.md", title: "Changelog"},
-        {"LICENSE.md", title: "Apache 2.0 License"},
-        # Examples
-        {"guides/examples/hello-world.livemd", title: "Hello World"},
-        {"guides/examples/tool-use.livemd", title: "Actions with Tools"},
-        {"guides/examples/think-plan-act.livemd", title: "Think-Plan-Act"},
-        {"guides/examples/chain-of-thought.livemd", title: "Chain of Thought"},
-        {"guides/examples/multi-agent.livemd", title: "Multi-Agent Systems"},
-        # Actions
-        {"guides/actions/overview.md", title: "Overview"},
-        {"guides/actions/workflows.md", title: "Executing Actions"},
-        {"guides/actions/instructions.md", title: "Instructions"},
-        {"guides/actions/directives.md", title: "Directives"},
-        {"guides/actions/runners.md", title: "Runners"},
-        {"guides/actions/actions-as-tools.md", title: "Actions as LLM Tools"},
-        {"guides/actions/testing.md", title: "Testing"},
-        # Skills
-        {"guides/skills/overview.md", title: "Overview"},
-        {"guides/skills/testing.md", title: "Testing Skills"}
+        {"LICENSE.md", title: "Apache 2.0 License"}
       ],
       extra_section: "Guides",
       formatters: ["html"],
@@ -199,7 +184,9 @@ defmodule JidoAction.MixProject do
       # Development & Test Dependencies
       {:credo, "~> 1.7", only: [:dev, :test]},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:mix_audit, "~> 2.0", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
+      {:quokka, "~> 2.10", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:excoveralls, "~> 0.18.3", only: [:dev, :test]},
       {:expublish, "~> 2.7", only: [:dev], runtime: false},
@@ -214,16 +201,20 @@ defmodule JidoAction.MixProject do
       # Helper to run tests with trace when needed
       # test: "test --trace --exclude flaky",
       test: "test --exclude flaky",
+
       # Helper to run docs
-      # docs: "docs -f html --open",
+      docs: "docs -f html --open",
+
       # Run to check the quality of your code
       q: ["quality"],
       quality: [
-        "format",
         "format --check-formatted",
+        "deps.unlock --check-unused",
         "compile --warnings-as-errors",
-        "dialyzer --format dialyxir",
-        "credo --all"
+        "dialyzer",
+        "credo --strict",
+        "doctor",
+        "deps.audit --format brief"
       ]
     ]
   end

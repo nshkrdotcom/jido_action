@@ -3,6 +3,7 @@
 [![Hex.pm](https://img.shields.io/hexpm/v/jido_action.svg)](https://hex.pm/packages/jido_action)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/jido_action/)
 [![CI](https://github.com/agentjido/jido_action/actions/workflows/elixir-ci.yml/badge.svg)](https://github.com/agentjido/jido_action/actions/workflows/elixir-ci.yml)
+[![Quality Gate](https://github.com/agentjido/jido_action/actions/workflows/elixir-ci.yml/badge.svg?event=push&job=quality_gate)](https://github.com/agentjido/jido_action/actions/workflows/elixir-ci.yml)
 [![License](https://img.shields.io/hexpm/l/jido_action.svg)](https://github.com/agentjido/jido_action/blob/main/LICENSE.md)
 [![Coverage Status](https://coveralls.io/repos/github/agentjido/jido_action/badge.svg?branch=main)](https://coveralls.io/github/agentjido/jido_action?branch=main)
 
@@ -399,6 +400,19 @@ config :jido_action,
   default_backoff: 500
 ```
 
+## Maintenance and Support
+
+![Maintenance](https://img.shields.io/maintenance/yes/2024.svg)
+
+Jido Action is actively maintained with the following commitments:
+
+- **Issue Response**: Best-effort response within 7 days for bugs, 24 hours for security issues
+- **Security Updates**: Critical security fixes within 7 days, backported to supported versions
+- **Release Cadence**: Monthly minor releases, bi-weekly patch releases as needed
+- **Long-term Support**: Major versions supported for minimum 18 months
+
+For detailed information about our maintenance policy, support windows, and issue response times, see [MAINTENANCE.md](MAINTENANCE.md).
+
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
@@ -408,6 +422,8 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 Copyright 2024 Mike Hostetler
 
 Licensed under the Apache License, Version 2.0. See [LICENSE.md](LICENSE.md) for details.
+
+For information about dependency licenses and our license policy, see [LICENSE_POLICY.md](LICENSE_POLICY.md).
 
 ## Links
 
