@@ -1,4 +1,4 @@
-name: CI
+name: Elixir CI
 
 on:
   pull_request:
@@ -11,61 +11,10 @@ permissions:
   contents: read
 
 jobs:
-  quality_gate:
-    name: Quality Gate
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: true
-      matrix:
-        otp: ["27"]
-        elixir: ["1.17", "1.18"]
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up Elixir
-        uses: erlef/setup-beam@v1
-        with:
-          otp-version: ${{ matrix.otp }}
-          elixir-version: ${{ matrix.elixir }}
-
-      - name: Restore dependencies cache
-        uses: actions/cache@v3
-        with:
-          path: deps
-          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
-          restore-keys: ${{ runner.os }}-mix-
-
-      - name: Restore build cache
-        uses: actions/cache@v3
-        with:
-          path: _build
-          key: ${{ runner.os }}-build-${{ matrix.otp }}-${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-build-${{ matrix.otp }}-${{ matrix.elixir }}-
-            ${{ runner.os }}-build-${{ matrix.otp }}-
-            ${{ runner.os }}-build-
-
-      - name: Install dependencies
-        run: mix deps.get
-
-      - name: Run quality checks
-        run: mix quality
-
-      - name: Generate license report
-        run: mix licenses --report
-
-      - name: Upload license report
-        uses: actions/upload-artifact@v3
-        with:
-          name: license-report-${{ matrix.elixir }}-${{ matrix.otp }}
-          path: license_report.json
-
   test:
-    name: Tests
+    name: Build and test
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: true
       matrix:
         otp: ["27"]
         elixir: ["1.17", "1.18"]
@@ -79,43 +28,42 @@ jobs:
           otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
 
-      - name: Restore dependencies cache
+      - name: Restore dependencies and build cache
         uses: actions/cache@v3
         with:
-          path: deps
-          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
-          restore-keys: ${{ runner.os }}-mix-
-
-      - name: Restore build cache
-        uses: actions/cache@v3
-        with:
-          path: _build
-          key: ${{ runner.os }}-build-${{ matrix.otp }}-${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ matrix.otp }}-${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-build-${{ matrix.otp }}-${{ matrix.elixir }}-
-            ${{ runner.os }}-build-${{ matrix.otp }}-
-            ${{ runner.os }}-build-
+            ${{ runner.os }}-mix-${{ matrix.otp }}-${{ matrix.elixir }}-
+            ${{ runner.os }}-mix-
 
       - name: Install dependencies
         run: mix deps.get
+
+      - name: Check formatting
+        run: mix format --check-formatted
+
+      - name: Compile with warnings as errors
+        run: mix compile --warnings-as-errors
+
+      - name: Run static analysis with Dialyzer
+        run: mix dialyzer --format dialyxir
+
+      - name: Run code analysis with Credo
+        run: mix credo --min-priority higher
+
+      - name: Run documentation coverage with Doctor
+        run: mix doctor --summary
+
+      - name: Check for unused dependencies
+        run: mix deps.unlock --check-unused
+
+      - name: Audit dependencies for vulnerabilities
+        run: mix hex.audit
 
       - name: Run tests with coverage
         run: mix coveralls.github
         env:
-          MIX_ENV: test
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # Ensure both quality gate and tests pass before allowing merges
-  ci_success:
-    name: CI Success
-    runs-on: ubuntu-latest
-    needs: [quality_gate, test]
-    if: always()
-    steps:
-      - name: Check all jobs succeeded
-        run: |
-          if [[ "${{ needs.quality_gate.result }}" != "success" || "${{ needs.test.result }}" != "success" ]]; then
-            echo "Quality gate or tests failed"
-            exit 1
-          fi
-          echo "All CI checks passed!"

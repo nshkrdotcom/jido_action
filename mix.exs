@@ -65,26 +65,25 @@ defmodule JidoAction.MixProject do
       source_url: "https://github.com/agentjido/jido_action",
       authors: ["Mike Hostetler <mike.hostetler@gmail.com>"],
       groups_for_extras: [
-        "Start Here": [
-          "guides/overview.md",
-          "guides/quick-start.md"
+        "Getting Started": [
+          "guides/getting-started.md",
+          "guides/your-second-action.md"
         ],
         "Core Concepts": [
-          "guides/core-concepts.md",
-          "guides/actions.md",
-          "guides/instructions.md",
-          "guides/runners.md"
+          "guides/actions-guide.md",
+          "guides/execution-engine.md",
+          "guides/instructions-plans.md",
+          "guides/error-handling.md"
         ],
-        "Tools & Integration": [
-          "guides/built-in-tools.md",
-          "guides/actions-as-tools.md"
+        "How-To Guides": [
+          "guides/tools-reference.md",
+          "guides/ai-integration.md",
+          "guides/configuration.md",
+          "guides/security.md",
+          "guides/testing.md"
         ],
-        "Testing & Advanced": [
-          "guides/testing.md",
-          "guides/workflows.md"
-        ],
-        Reference: [
-          "guides/directives.md",
+        "Help & Reference": [
+          "guides/faq.md",
           "CHANGELOG.md",
           "LICENSE.md"
         ]
@@ -92,22 +91,22 @@ defmodule JidoAction.MixProject do
       extras: [
         # Home & Project
         {"README.md", title: "Home"},
-        # Start Here
-        {"guides/overview.md", title: "Overview"},
-        {"guides/quick-start.md", title: "Quick Start"},
+        # Getting Started
+        {"guides/getting-started.md", title: "Getting Started"},
+        {"guides/your-second-action.md", title: "Your Second Action"},
         # Core Concepts
-        {"guides/core-concepts.md", title: "Core Concepts"},
-        {"guides/actions.md", title: "Writing Actions"},
-        {"guides/instructions.md", title: "Instructions & Plans"},
-        {"guides/runners.md", title: "Execution Engine"},
-        # Tools & Integration
-        {"guides/built-in-tools.md", title: "Built-in Tools"},
-        {"guides/actions-as-tools.md", title: "AI Integration"},
-        # Testing & Advanced
+        {"guides/actions-guide.md", title: "Actions"},
+        {"guides/execution-engine.md", title: "Execution Engine"},
+        {"guides/instructions-plans.md", title: "Instructions & Plans"},
+        {"guides/error-handling.md", title: "Error Handling"},
+        # How-To Guides
+        {"guides/tools-reference.md", title: "Built-in Tools"},
+        {"guides/ai-integration.md", title: "AI Integration"},
+        {"guides/configuration.md", title: "Configuration"},
+        {"guides/security.md", title: "Security"},
         {"guides/testing.md", title: "Testing"},
-        {"guides/workflows.md", title: "Advanced Topics"},
-        # Reference
-        {"guides/directives.md", title: "Directives (Legacy)"},
+        # Help & Reference
+        {"guides/faq.md", title: "FAQ"},
         {"CHANGELOG.md", title: "Changelog"},
         {"LICENSE.md", title: "Apache 2.0 License"}
       ],
@@ -121,28 +120,53 @@ defmodule JidoAction.MixProject do
         Core: [
           Jido.Action,
           Jido.Action.Error,
-          Jido.Action.Exec,
           Jido.Action.Tool,
           Jido.Action.Util
         ],
-        "Actions: Execution": [
-          Jido.Action.Exec.Chain,
-          Jido.Action.Exec.Closure
+        "Execution Engine": [
+          Jido.Exec,
+          Jido.Exec.Chain,
+          Jido.Exec.Closure
         ],
-        "Actions: Tools": [
+        "Planning & Workflows": [
+          Jido.Plan,
+          Jido.Plan.PlanInstruction,
+          Jido.Instruction
+        ],
+        "Actions: Basic Tools": [
           Jido.Tools.Arithmetic,
           Jido.Tools.Basic,
           Jido.Tools.Files,
-          Jido.Tools.Req,
           Jido.Tools.Simplebot,
           Jido.Tools.Weather,
           Jido.Tools.Workflow
         ],
-        "Actions: GitHub": [
-          Jido.Tools.Github.Issues
+        "Actions: HTTP & Requests": [
+          Jido.Tools.Req,
+          Jido.Tools.ReqTool
         ],
-        Utilities: [
-          Jido.Instruction
+        "Actions: GitHub": [
+          Jido.Tools.Github.Issues,
+          Jido.Tools.Github.Issues.Create,
+          Jido.Tools.Github.Issues.Filter,
+          Jido.Tools.Github.Issues.Find,
+          Jido.Tools.Github.Issues.List,
+          Jido.Tools.Github.Issues.Update
+        ],
+        "Actions: Advanced": [
+          Jido.Tools.ActionPlan
+        ],
+        "Error Types": [
+          Jido.Action.Error.Config,
+          Jido.Action.Error.ConfigurationError,
+          Jido.Action.Error.Execution,
+          Jido.Action.Error.ExecutionFailureError,
+          Jido.Action.Error.Internal,
+          Jido.Action.Error.Internal.UnknownError,
+          Jido.Action.Error.InternalError,
+          Jido.Action.Error.Invalid,
+          Jido.Action.Error.InvalidInputError,
+          Jido.Action.Error.TimeoutError
         ]
       ]
     ]
@@ -150,7 +174,7 @@ defmodule JidoAction.MixProject do
 
   defp package do
     [
-      files: ["lib", "mix.exs", "README.md", "LICENSE.md"],
+      files: ["lib", "mix.exs", "README.md", "LICENSE.md", "usage-rules.md"],
       maintainers: ["Mike Hostetler"],
       licenses: ["Apache-2.0"],
       links: %{

@@ -1,354 +1,671 @@
-# Testing Actions
+# Testing Guide
 
-This guide covers comprehensive testing strategies for Jido Actions, including unit testing, property-based testing, integration testing, and testing complex scenarios like compensation and concurrency.
+**Prerequisites**: [Actions Guide](actions-guide.md) • [Error Handling Guide](error-handling.md)
 
-## Core Testing Principles
+Comprehensive testing strategies for actions, workflows, error scenarios, and AI integrations using ExUnit and property-based testing.
 
-When testing Actions, focus on:
+## Basic Action Testing
 
-1. Input validation and parameter handling
-2. Core business logic execution
-3. Error handling and compensation
-4. Context propagation
-5. Integration with other system components
-
-## Basic Test Structure
-
-Here's a basic test module structure for Actions:
+### Unit Testing Actions
 
 ```elixir
-defmodule MyApp.Actions.CalculatorTest do
-  use ExUnit.Case, async: true
-  alias MyApp.Actions.Calculator
+defmodule MyApp.Actions.ProcessUserTest do
+  use ExUnit.Case
 
-  describe "basic execution" do
-    test "adds two numbers correctly" do
-      params = %{value: 5, amount: 3}
-      assert {:ok, %{result: 8}} = Calculator.run(params, %{})
+  alias MyApp.Actions.ProcessUser
+
+  describe "process_user/2" do
+    test "processes valid user data" do
+      params = %{
+        name: "John Doe",
+        email: "john@example.com",
+        age: 30
+      }
+      
+      assert {:ok, result} = ProcessUser.run(params, %{})
+      assert result.name == "John Doe"
+      assert result.email == "john@example.com"
+      assert result.processed_at
+    end
+
+    test "rejects invalid email format" do
+      params = %{
+        name: "John Doe",
+        email: "invalid-email",
+        age: 30
+      }
+      
+      assert {:error, error} = ProcessUser.run(params, %{})
+      assert error.type == :validation_error
+      assert error.message =~ "Invalid email"
+    end
+
+    test "applies default values" do
+      params = %{
+        name: "John Doe",
+        email: "john@example.com"
+        # age not provided, should use default
+      }
+      
+      assert {:ok, result} = ProcessUser.run(params, %{})
+      assert result.age == 18  # default value
     end
 
     test "validates required parameters" do
-      params = %{value: 5}
-      assert {:error, error} = Calculator.run(params, %{})
+      params = %{name: "John Doe"}  # missing email
+      
+      assert {:error, error} = ProcessUser.run(params, %{})
       assert error.type == :validation_error
+    end
+  end
+
+  describe "context handling" do
+    test "uses context for business logic" do
+      params = %{
+        name: "John Doe",
+        email: "john@example.com",
+        age: 30
+      }
+      
+      context = %{user_id: "admin_123", role: :admin}
+      
+      assert {:ok, result} = ProcessUser.run(params, context)
+      assert result.processed_by == "admin_123"
+    end
+
+    test "handles missing context gracefully" do
+      params = %{
+        name: "John Doe", 
+        email: "john@example.com",
+        age: 30
+      }
+      
+      # Empty context should still work
+      assert {:ok, result} = ProcessUser.run(params, %{})
+      refute Map.has_key?(result, :processed_by)
     end
   end
 end
 ```
 
-## Testing Parameter Validation
-
-Test both valid and invalid parameter scenarios:
+### Testing Lifecycle Hooks
 
 ```elixir
-describe "parameter validation" do
-  test "accepts valid parameters" do
-    params = %{name: "test", count: 42}
-    assert {:ok, validated} = MyAction.validate_params(params)
-    assert validated.name == "test"
-    assert validated.count == 42
+defmodule MyApp.Actions.LifecycleActionTest do
+  use ExUnit.Case
+
+  # Test action with all lifecycle hooks
+  defmodule TestAction do
+    use Jido.Action,
+      schema: [input: [type: :string, required: true]]
+
+    def on_before_validate_params(params) do
+      # Add test marker
+      {:ok, Map.put(params, :preprocessed, true)}
+    end
+
+    def run(params, _context) do
+      {:ok, %{result: params.input, preprocessed: params.preprocessed}}
+    end
+
+    def on_after_run(result) do
+      # Add post-processing marker
+      {:ok, Map.put(result, :postprocessed, true)}
+    end
+
+    def on_error(_params, _error, _context, _opts) do
+      {:ok, %{error_handled: true}}
+    end
   end
 
-  test "rejects invalid parameter types" do
-    params = %{name: 123, count: "not a number"}
-    assert {:error, error} = MyAction.validate_params(params)
-    assert error.type == :validation_error
+  test "lifecycle hooks are called in order" do
+    assert {:ok, result} = TestAction.run(%{input: "test"}, %{})
+    
+    # Check preprocessing happened
+    assert result.preprocessed == true
+    
+    # Check post-processing happened  
+    assert result.postprocessed == true
+    
+    # Check main logic ran
+    assert result.result == "test"
   end
 
-  test "handles missing required parameters" do
-    params = %{name: "test"}
-    assert {:error, error} = MyAction.validate_params(params)
-    assert error.message =~ "Required key :count not found"
-  end
-
-  test "allows additional parameters" do
-    params = %{name: "test", count: 42, extra: "data"}
-    assert {:ok, validated} = MyAction.validate_params(params)
-    assert validated.extra == "data"
+  test "error hook is called on failure" do
+    # This would need to be tested with an action that can fail
+    # and has compensation enabled
   end
 end
 ```
 
-## Testing Error Handling
+## Testing with Execution Engine
 
-Test various error scenarios and compensation logic:
+### Testing Timeouts
 
 ```elixir
-describe "error handling" do
-  test "handles runtime errors" do
-    assert {:error, error} = ErrorAction.run(%{error_type: :runtime}, %{})
+defmodule MyApp.Actions.TimeoutTest do
+  use ExUnit.Case
+
+  defmodule SlowAction do
+    use Jido.Action,
+      schema: [delay_ms: [type: :integer, default: 1000]]
+
+    def run(%{delay_ms: delay}, _context) do
+      :timer.sleep(delay)
+      {:ok, %{completed_after: delay}}
+    end
+  end
+
+  test "respects timeout configuration" do
+    # Should complete within timeout
+    assert {:ok, result} = Jido.Exec.run(
+      SlowAction,
+      %{delay_ms: 100},
+      %{},
+      timeout: 500
+    )
+    
+    assert result.completed_after == 100
+  end
+
+  test "times out when execution exceeds limit" do
+    assert {:error, error} = Jido.Exec.run(
+      SlowAction,
+      %{delay_ms: 1000},
+      %{},
+      timeout: 500
+    )
+    
+    assert error.type == :timeout_error
+  end
+end
+```
+
+### Testing Retries
+
+```elixir
+defmodule MyApp.Actions.RetryTest do
+  use ExUnit.Case
+
+  defmodule FlakyAction do
+    use Jido.Action,
+      schema: [fail_count: [type: :integer, default: 0]]
+
+    def run(%{fail_count: fail_count}, context) do
+      attempt = Map.get(context, :attempt, 1)
+      
+      if attempt <= fail_count do
+        {:error, Jido.Action.Error.execution_error("Simulated failure")}
+      else
+        {:ok, %{succeeded_on_attempt: attempt}}
+      end
+    end
+  end
+
+  test "retries on failure and eventually succeeds" do
+    # Should fail twice, succeed on third attempt
+    assert {:ok, result} = Jido.Exec.run(
+      FlakyAction,
+      %{fail_count: 2},
+      %{},
+      max_retries: 3,
+      retry_delay: 10  # Fast retries for tests
+    )
+    
+    assert result.succeeded_on_attempt == 3
+  end
+
+  test "gives up after max retries" do
+    assert {:error, error} = Jido.Exec.run(
+      FlakyAction,
+      %{fail_count: 10},  # Always fails
+      %{},
+      max_retries: 2,
+      retry_delay: 10
+    )
+    
     assert error.type == :execution_error
   end
+end
+```
 
-  test "handles validation errors" do
-    assert {:error, error} = ErrorAction.run(%{error_type: :validation}, %{})
-    assert error.type == :validation_error
+## Testing Workflows
+
+### Testing Chains
+
+```elixir
+defmodule MyApp.Workflows.ChainTest do
+  use ExUnit.Case
+
+  defmodule Step1 do
+    use Jido.Action,
+      schema: [input: [type: :string, required: true]]
+
+    def run(%{input: input}, _context) do
+      {:ok, %{step1_output: "processed_#{input}"}}
+    end
   end
 
-  test "compensates for failures when enabled" do
-    params = %{should_fail: true}
-    assert {:error, error} = CompensatingAction.run(params, %{})
-    assert {:ok, result} = CompensatingAction.on_error(params, error, %{}, [])
-    assert result.compensated == true
+  defmodule Step2 do
+    use Jido.Action,
+      schema: [step1_output: [type: :string, required: true]]
+
+    def run(%{step1_output: input}, _context) do
+      {:ok, %{final_result: "final_#{input}"}}
+    end
+  end
+
+  test "chain executes steps in sequence" do
+    {:ok, result} = Jido.Exec.Chain.chain([
+      Step1,
+      Step2
+    ], %{input: "test"}, %{})
+    
+    assert result.final_result == "final_processed_test"
+  end
+
+  test "chain stops on first error" do
+    defmodule FailingStep do
+      use Jido.Action
+      def run(_params, _context) do
+        {:error, Jido.Action.Error.execution_error("Step failed")}
+      end
+    end
+
+    assert {:error, {FailingStep, error, partial_results}} = 
+      Jido.Exec.Chain.chain([
+        Step1,
+        FailingStep,
+        Step2  # Should not execute
+      ], %{input: "test"}, %{})
+    
+    assert error.message == "Step failed"
+    # Partial results should include Step1 output
+    assert partial_results["Step1"].step1_output == "processed_test"
   end
 end
 ```
 
-## Testing Asynchronous Actions
-
-For Actions with async operations:
+### Testing Plans
 
 ```elixir
-describe "async operations" do
-  setup do
-    # Start any required processes
-    {:ok, pid} = start_supervised(MyApp.AsyncProcessor)
-    %{processor: pid}
-  end
+defmodule MyApp.Workflows.PlanTest do
+  use ExUnit.Case
 
-  test "processes async operations", %{processor: pid} do
-    params = %{data: "test", processor: pid}
-    assert {:ok, result} = AsyncAction.run(params, %{})
-    assert_receive {:processing_complete, ^result}, 1000
-  end
+  describe "plan execution" do
+    test "executes phases in correct order" do
+      plan = Jido.Plan.new()
+      |> Jido.Plan.add("input", InputAction, %{}, [])
+      |> Jido.Plan.add("process_a", ProcessA, %{}, ["input"])
+      |> Jido.Plan.add("process_b", ProcessB, %{}, ["input"])
+      |> Jido.Plan.add("merge", MergeAction, %{}, ["process_a", "process_b"])
+      
+      {:ok, results} = Jido.Tools.ActionPlan.run(%{
+        plan: plan,
+        initial_data: %{data: "test"}
+      }, %{})
+      
+      # Verify all steps executed
+      assert Map.has_key?(results, "input")
+      assert Map.has_key?(results, "process_a")
+      assert Map.has_key?(results, "process_b")
+      assert Map.has_key?(results, "merge")
+    end
 
-  test "handles async timeouts", %{processor: pid} do
-    params = %{data: "slow", processor: pid}
-    assert {:error, error} = AsyncAction.run(params, %{timeout: 50})
-    assert error.type == :timeout
+    test "handles dependency failures" do
+      plan = Jido.Plan.new()
+      |> Jido.Plan.add("step1", SuccessAction, %{}, [])
+      |> Jido.Plan.add("step2", FailingAction, %{}, ["step1"])
+      |> Jido.Plan.add("step3", SuccessAction, %{}, ["step2"])  # Should not run
+      
+      assert {:error, {failed_id, error, partial_results}} = 
+        Jido.Tools.ActionPlan.run(%{
+          plan: plan,
+          initial_data: %{}
+        }, %{})
+      
+      assert failed_id == "step2"
+      assert Map.has_key?(partial_results, "step1")
+      refute Map.has_key?(partial_results, "step3")
+    end
   end
 end
 ```
 
 ## Property-Based Testing
 
-Use property-based testing for comprehensive input coverage:
+### Using StreamData
 
 ```elixir
-defmodule CalcActionTest do
+defmodule MyApp.Actions.PropertyTest do
   use ExUnit.Case
   use ExUnitProperties
 
-  describe "arithmetic operations" do
-    property "addition is commutative" do
-      check all(
-        x <- integer(),
-        y <- integer()
-      ) do
-        params1 = %{value: x, amount: y}
-        params2 = %{value: y, amount: x}
+  alias MyApp.Actions.Calculator
 
-        assert {:ok, result1} = AddAction.run(params1, %{})
-        assert {:ok, result2} = AddAction.run(params2, %{})
-        assert result1.result == result2.result
-      end
-    end
-
-    property "multiplication by zero yields zero" do
-      check all(x <- integer()) do
-        params = %{value: x, amount: 0}
-        assert {:ok, %{result: 0}} = MultiplyAction.run(params, %{})
-      end
+  property "addition is commutative" do
+    check all a <- integer(),
+              b <- integer() do
+      {:ok, result1} = Calculator.Add.run(%{value: a, amount: b}, %{})
+      {:ok, result2} = Calculator.Add.run(%{value: b, amount: a}, %{})
+      
+      assert result1.result == result2.result
     end
   end
+
+  property "string processing handles all valid inputs" do
+    check all input <- string(:alphanumeric, min_length: 1, max_length: 100) do
+      case MyApp.Actions.ProcessString.run(%{text: input}, %{}) do
+        {:ok, result} ->
+          # Result should always be a string
+          assert is_binary(result.processed)
+          # Result should not be empty
+          assert String.length(result.processed) > 0
+          
+        {:error, error} ->
+          # If it fails, should be a validation error
+          assert error.type == :validation_error
+      end
+    end
+  end
+
+  property "user age validation" do
+    check all age <- integer() do
+      case MyApp.Actions.ValidateUser.run(%{
+        name: "Test User",
+        email: "test@example.com", 
+        age: age
+      }, %{}) do
+        {:ok, result} when age >= 13 and age <= 150 ->
+          assert result.age == age
+          
+        {:error, error} when age < 13 or age > 150 ->
+          assert error.type == :validation_error
+          assert error.message =~ "age"
+      end
+    end
+  end
 end
 ```
 
-## Testing Context Propagation
+## Testing Error Scenarios
 
-Verify that Actions properly handle and propagate context:
+### Testing Error Types
 
 ```elixir
-describe "context handling" do
-  test "propagates context through execution" do
-    context = %{user_id: "user_123", tenant: "tenant_456"}
-    params = %{operation: "test"}
+defmodule MyApp.Actions.ErrorHandlingTest do
+  use ExUnit.Case
 
-    assert {:ok, result} = ContextAwareAction.run(params, context)
-    assert result.user_id == "user_123"
-    assert result.tenant == "tenant_456"
+  describe "validation errors" do
+    test "missing required parameter" do
+      assert {:error, error} = MyAction.run(%{}, %{})
+      assert error.type == :validation_error
+      assert error.message =~ "required"
+    end
+
+    test "invalid parameter type" do
+      assert {:error, error} = MyAction.run(%{age: "not_a_number"}, %{})
+      assert error.type == :validation_error
+      assert error.message =~ "type"
+    end
+
+    test "parameter out of range" do
+      assert {:error, error} = MyAction.run(%{age: -5}, %{})
+      assert error.type == :validation_error
+      assert error.message =~ "range"
+    end
   end
 
-  test "enriches context during execution" do
-    initial_context = %{request_id: "req_123"}
-    params = %{add_timestamp: true}
+  describe "execution errors" do
+    test "external service failure" do
+      # Mock external service to fail
+      expect(ExternalService, :call, fn _ -> {:error, :service_unavailable} end)
+      
+      assert {:error, error} = MyAction.run(%{valid: "params"}, %{})
+      assert error.type == :execution_error
+      assert error.message =~ "service"
+    end
 
-    assert {:ok, result} = ContextAction.run(params, initial_context)
-    assert result.context.request_id == "req_123"
-    assert is_integer(result.context.timestamp)
+    test "database connection failure" do
+      # Test with database down
+      assert {:error, error} = DatabaseAction.run(%{query: "SELECT 1"}, %{})
+      assert error.type == :execution_error
+    end
+  end
+
+  describe "compensation" do
+    test "compensation runs on error" do
+      # Action that creates resource then fails
+      assert {:error, _} = CreateAndFailAction.run(%{}, %{})
+      
+      # Verify compensation cleaned up the resource
+      refute resource_exists?("test_resource")
+    end
   end
 end
 ```
 
-## Testing Complex Workflows
+## Testing AI Integration
 
-Test Actions as part of larger workflows:
+### Testing Tool Conversion
 
 ```elixir
-describe "workflow integration" do
-  test "executes in workflow chain" do
-    {:ok, result} = Jido.Workflow.run_chain(
-      [
-        ValidateAction,
-        ProcessAction,
-        NotifyAction
-      ],
-      %{input: "test data"},
-      %{context_key: "value"}
+defmodule MyApp.Actions.AIIntegrationTest do
+  use ExUnit.Case
+
+  test "action converts to valid tool definition" do
+    tool_def = MyApp.Actions.SearchUsers.to_tool()
+    
+    assert tool_def["type"] == "function"
+    assert is_map(tool_def["function"])
+    
+    function = tool_def["function"]
+    assert function["name"] == "search_users"
+    assert is_binary(function["description"])
+    assert is_map(function["parameters"])
+    
+    params = function["parameters"]
+    assert params["type"] == "object"
+    assert is_map(params["properties"])
+    assert is_list(params["required"])
+  end
+
+  test "tool execution from AI parameters" do
+    ai_params = %{
+      "query" => "john@example.com",
+      "limit" => 5,
+      "include_inactive" => false
+    }
+    
+    {:ok, result} = Jido.Action.Tool.execute_action(
+      MyApp.Actions.SearchUsers,
+      ai_params,
+      %{}
     )
-
-    assert result.validated == true
-    assert result.processed == true
-    assert result.notified == true
+    
+    assert is_list(result.users)
+    assert result.count <= 5
   end
 
-  test "handles workflow failures" do
-    {:error, error} = Jido.Workflow.run_chain(
-      [
-        ValidateAction,
-        FailingAction,
-        NotifyAction
-      ],
-      %{input: "test data"}
+  test "handles invalid AI parameters" do
+    invalid_params = %{
+      "query" => nil,  # Required parameter missing
+      "limit" => "not_a_number"
+    }
+    
+    assert {:error, error} = Jido.Action.Tool.execute_action(
+      MyApp.Actions.SearchUsers,
+      invalid_params,
+      %{}
     )
-
-    assert error.type == :execution_error
-    assert error.message =~ "Workflow failed"
-  end
-end
-```
-
-## Testing Concurrent Operations
-
-For Actions that perform concurrent operations:
-
-```elixir
-describe "concurrent operations" do
-  test "processes items concurrently" do
-    inputs = [1, 2, 3, 4, 5]
-    assert {:ok, %{results: results}} =
-      ConcurrentAction.run(%{inputs: inputs}, %{})
-
-    assert length(results) == 5
-    assert Enum.all?(results, fn r -> is_integer(r) end)
-  end
-
-  test "handles partial failures in concurrent operations" do
-    inputs = [1, :error, 3, :error, 5]
-    assert {:ok, %{results: results, errors: errors}} =
-      ConcurrentAction.run(%{inputs: inputs}, %{})
-
-    assert length(results) == 3
-    assert length(errors) == 2
-  end
-end
-```
-
-## Testing Helper Functions
-
-Common test helpers for Action testing:
-
-```elixir
-defmodule ActionTestHelper do
-  def assert_validation_error(result, expected_message) do
-    assert {:error, error} = result
+    
     assert error.type == :validation_error
-    assert error.message =~ expected_message
+  end
+end
+```
+
+## Testing Helpers and Utilities
+
+### Custom Test Helpers
+
+```elixir
+defmodule MyApp.TestHelpers do
+  @moduledoc "Utilities for testing actions"
+
+  def assert_success(result) do
+    case result do
+      {:ok, data} -> data
+      {:error, error} -> 
+        ExUnit.Assertions.flunk("Expected success, got error: #{inspect(error)}")
+    end
   end
 
-  def assert_execution_error(result, expected_message) do
-    assert {:error, error} = result
-    assert error.type == :execution_error
-    assert error.message =~ expected_message
+  def assert_error(result, expected_type \\ nil) do
+    case result do
+      {:error, error} ->
+        if expected_type do
+          assert error.type == expected_type, 
+            "Expected error type #{expected_type}, got #{error.type}"
+        end
+        error
+      
+      {:ok, data} ->
+        ExUnit.Assertions.flunk("Expected error, got success: #{inspect(data)}")
+    end
   end
 
-  def with_timeout(timeout, fun) do
-    Task.await(Task.async(fun), timeout)
+  def with_timeout(action, params, context, timeout_ms) do
+    Jido.Exec.run(action, params, context, timeout: timeout_ms)
+  end
+
+  def run_async_and_wait(action, params, context, timeout_ms \\ 5000) do
+    async_ref = Jido.Exec.run_async(action, params, context)
+    Jido.Exec.await(async_ref, timeout_ms)
+  end
+end
+
+# Use in tests
+defmodule MyApp.Actions.SomeTest do
+  use ExUnit.Case
+  import MyApp.TestHelpers
+
+  test "action succeeds" do
+    result = assert_success(MyAction.run(%{valid: "params"}, %{}))
+    assert result.processed == true
+  end
+
+  test "action fails with validation error" do
+    error = assert_error(MyAction.run(%{}, %{}), :validation_error)
+    assert error.message =~ "required"
+  end
+end
+```
+
+### Test Configuration
+
+```elixir
+# test/support/test_config.ex
+defmodule MyApp.TestConfig do
+  def setup_test_environment do
+    # Configure for fast tests
+    Application.put_env(:jido_action, :default_timeout, 1_000)
+    Application.put_env(:jido_action, :default_max_retries, 0)
+    Application.put_env(:jido_action, :telemetry_enabled, false)
+    
+    # Mock external dependencies
+    Application.put_env(:my_app, :external_api_base_url, "http://localhost:4002")
+    Application.put_env(:my_app, :use_real_database, false)
+  end
+
+  def cleanup_test_environment do
+    # Cleanup any test data
+    File.rm_rf("/tmp/test_files")
+    :ets.delete_all_objects(:test_cache)
+  end
+end
+
+# In test_helper.exs
+MyApp.TestConfig.setup_test_environment()
+
+ExUnit.configure(exclude: [:integration, :slow])
+ExUnit.start()
+```
+
+## Integration Testing
+
+### Testing with External Services
+
+```elixir
+defmodule MyApp.Actions.IntegrationTest do
+  use ExUnit.Case
+
+  @moduletag :integration
+
+  setup_all do
+    # Start test server or ensure external services are available
+    {:ok, server} = start_test_server(port: 4002)
+    on_exit(fn -> stop_test_server(server) end)
+    %{server: server}
+  end
+
+  test "real HTTP API integration" do
+    {:ok, result} = MyApp.Actions.FetchUserProfile.run(%{
+      user_id: "test_user_123"
+    }, %{})
+    
+    assert result.user_id == "test_user_123"
+    assert is_binary(result.name)
+    assert is_binary(result.email)
+  end
+
+  test "database integration" do
+    # Use test database
+    {:ok, result} = MyApp.Actions.CreateUser.run(%{
+      name: "Test User",
+      email: "test@example.com"
+    }, %{})
+    
+    # Verify user was actually created in database
+    user = MyApp.Repo.get_by(User, email: "test@example.com")
+    assert user.name == "Test User"
+    
+    # Cleanup
+    MyApp.Repo.delete(user)
   end
 end
 ```
 
 ## Best Practices
 
-1. **Test Organization**
+### Test Organization
+- **Unit Tests**: Test actions in isolation
+- **Integration Tests**: Test with real external dependencies
+- **Property Tests**: Test with generated inputs
+- **Error Tests**: Test all error scenarios
 
-   - Group related tests using `describe` blocks
-   - Use meaningful test names that describe behavior
-   - Keep test cases focused and isolated
+### Test Data
+- **Fixtures**: Use consistent test data
+- **Factories**: Generate test data programmatically
+- **Mocking**: Mock external dependencies in unit tests
+- **Cleanup**: Clean up test data after tests
 
-2. **Validation Testing**
+### Performance
+- **Fast Tests**: Keep unit tests fast (< 100ms)
+- **Parallel Execution**: Run tests in parallel when possible
+- **Selective Running**: Tag slow tests for selective execution
+- **Resource Management**: Avoid resource leaks in tests
 
-   - Test all schema constraints
-   - Include edge cases and boundary values
-   - Test optional parameter handling
+### Coverage
+- **Happy Path**: Test successful execution
+- **Error Cases**: Test all error conditions
+- **Edge Cases**: Test boundary conditions
+- **Lifecycle Hooks**: Test all lifecycle callbacks
 
-3. **Error Handling**
+## Next Steps
 
-   - Test all error paths
-   - Verify error types and messages
-   - Test compensation logic when enabled
+**→ [FAQ](faq.md)** - Common testing questions and solutions  
+**→ [Configuration Guide](configuration.md)** - Test configuration  
+**→ [Security Guide](security.md)** - Security testing
 
-4. **Asynchronous Testing**
-
-   - Use appropriate timeouts
-   - Test timeout handling
-   - Clean up resources in `on_exit` callbacks
-
-5. **Context Management**
-   - Test context propagation
-   - Verify context modifications
-   - Test context-dependent behavior
-
-## Common Issues and Solutions
-
-1. **Flaky Tests**
-
-   ```elixir
-   # Bad - timing dependent
-   test "processes async operation" do
-     {:ok, pid} = AsyncAction.run(params, %{})
-     Process.sleep(100)
-     assert Process.alive?(pid)
-   end
-
-   # Good - use assertions with timeouts
-   test "processes async operation" do
-     {:ok, pid} = AsyncAction.run(params, %{})
-     assert_receive {:operation_complete, ^pid}, 1000
-   end
-   ```
-
-2. **Resource Cleanup**
-
-   ```elixir
-   describe "file operations" do
-     setup do
-       path = "/tmp/test_#{:rand.uniform(1000)}"
-       on_exit(fn -> File.rm_rf!(path) end)
-       {:ok, path: path}
-     end
-
-     test "writes file", %{path: path} do
-       assert {:ok, _} = FileAction.run(%{path: path}, %{})
-     end
-   end
-   ```
-
-3. **Context Isolation**
-   ```elixir
-   # Use setup blocks for shared context
-   setup do
-     context = %{
-       request_id: "req_#{System.unique_integer()}",
-       timestamp: System.system_time()
-     }
-     {:ok, context: context}
-   end
-   ```
-
-## See Also
-
-- [Actions Overview](actions/overview.md)
-- [Workflow Testing](workflow/testing.md)
-- [ExUnit Documentation](https://hexdocs.pm/ex_unit/)
-- [StreamData Documentation](https://hexdocs.pm/stream_data/)
+---
+← [AI Integration](ai-integration.md) | **Next: [FAQ](faq.md)** →
