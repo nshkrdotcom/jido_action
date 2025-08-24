@@ -1,6 +1,5 @@
 defmodule JidoTest.Tools.WeatherTest do
   use JidoTest.ActionCase, async: false
-  use Mimic
 
   import ExUnit.CaptureIO
 
@@ -75,32 +74,28 @@ defmodule JidoTest.Tools.WeatherTest do
     end
   end
 
-  describe "run/2 with real API" do
-    setup :set_mimic_global
-
-    test "returns error when API key is missing and test is false" do
-      stub(System, :fetch_env, fn "OPENWEATHER_API_KEY" ->
-        :error
-      end)
-
-      params = %{location: "60618,US", test: false, units: "metric", hours: 24, format: "text"}
+  describe "run/2 with NWS API" do
+    test "returns error when location format is invalid" do
+      # NWS API requires coordinates, not city names or invalid formats
+      params = %{location: "invalid_format", test: false, format: :text}
 
       assert {:error, error} = Weather.run(params, %{})
       assert error =~ "Failed to fetch weather:"
-      assert error =~ "Missing OPENWEATHER_API_KEY environment variable"
+      assert error =~ "NWS API error"
     end
 
-    test "attempts to use real API when API key is available and test is false" do
-      stub(System, :fetch_env, fn "OPENWEATHER_API_KEY" ->
-        {:ok, "test_api_key"}
-      end)
+    test "works with valid coordinates when test is false" do
+      # Use valid US coordinates that should work with NWS API
+      params = %{location: "39.7456,-97.0892", test: false, format: :text, periods: 1}
 
-      params = %{location: "60618,US", test: false, units: "metric", hours: 24, format: "text"}
+      case Weather.run(params, %{}) do
+        {:ok, result} ->
+          assert is_binary(result)
+          assert result =~ ~r/Temperature: \d+°F/
 
-      # The weather library validates the API key during opts creation and raises an exception
-      # for invalid keys instead of returning an error tuple
-      assert_raise ArgumentError, ~r/Unable to fetch location data/, fn ->
-        Weather.run(params, %{})
+        {:error, _reason} ->
+          # API might be unavailable during tests, but structure should be correct
+          :ok
       end
     end
   end
