@@ -87,7 +87,9 @@ defmodule Jido.Tools.Weather do
     handle_demo_result(run(%{location: "40.7128,-74.0060", format: :detailed, periods: 3}, %{}))
   end
 
-  defp handle_demo_result({:ok, result}) when is_binary(result), do: IO.puts(result)
+  defp handle_demo_result({:ok, %{forecast: forecast}}) when is_binary(forecast),
+    do: IO.puts(forecast)
+
   # credo:disable-for-next-line Credo.Check.Warning.IoInspect
   defp handle_demo_result({:ok, result}), do: IO.inspect(result, label: "Weather Data")
   defp handle_demo_result({:error, error}), do: IO.puts("Error: #{error}")
