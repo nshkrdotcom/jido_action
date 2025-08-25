@@ -1,7 +1,7 @@
 defmodule Jido.Tools.Weather.LocationToGrid do
   @moduledoc """
   Converts a location (coordinates) to NWS grid information using ReqTool.
-  
+
   This is the first step in getting weather forecast data from the National Weather Service API.
   Returns grid coordinates and forecast URLs needed for detailed weather information.
   """
@@ -23,7 +23,7 @@ defmodule Jido.Tools.Weather.LocationToGrid do
   @impl Jido.Action
   def run(%{location: location} = params, _context) do
     url = "https://api.weather.gov/points/#{location}"
-    
+
     req_options = [
       method: :get,
       url: url,
@@ -35,6 +35,7 @@ defmodule Jido.Tools.Weather.LocationToGrid do
 
     try do
       response = Req.request!(req_options)
+
       transform_result(%{
         request: %{url: url, method: :get, params: params},
         response: %{status: response.status, body: response.body, headers: response.headers}
@@ -46,12 +47,12 @@ defmodule Jido.Tools.Weather.LocationToGrid do
 
   defp transform_result(%{request: %{params: params}, response: %{status: 200, body: body}}) do
     properties = body["properties"]
-    
+
     result = %{
       location: params.location,
       grid: %{
         office: properties["gridId"],
-        grid_x: properties["gridX"], 
+        grid_x: properties["gridX"],
         grid_y: properties["gridY"]
       },
       urls: %{
@@ -64,7 +65,7 @@ defmodule Jido.Tools.Weather.LocationToGrid do
       city: properties["relativeLocation"]["properties"]["city"],
       state: properties["relativeLocation"]["properties"]["state"]
     }
-    
+
     {:ok, result}
   end
 

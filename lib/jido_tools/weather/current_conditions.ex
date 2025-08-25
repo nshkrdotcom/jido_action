@@ -1,7 +1,7 @@
 defmodule Jido.Tools.Weather.CurrentConditions do
   @moduledoc """
   Gets current weather conditions from nearby NWS observation stations.
-  
+
   First gets the list of observation stations for a location, then fetches
   the latest conditions from the nearest station using ReqTool architecture.
   """
@@ -22,11 +22,8 @@ defmodule Jido.Tools.Weather.CurrentConditions do
 
   @impl Jido.Action
   def run(params, _context) do
-    with {:ok, stations} <- get_observation_stations(params.observation_stations_url),
-         {:ok, conditions} <- get_current_conditions(List.first(stations)) do
-      {:ok, conditions}
-    else
-      {:error, reason} -> {:error, reason}
+    with {:ok, stations} <- get_observation_stations(params.observation_stations_url) do
+      get_current_conditions(List.first(stations))
     end
   end
 
@@ -42,18 +39,21 @@ defmodule Jido.Tools.Weather.CurrentConditions do
 
     try do
       response = Req.request!(req_options)
+
       case response do
         %{status: 200, body: body} ->
-          stations = body["features"]
-          |> Enum.map(fn feature -> 
-            %{
-              id: feature["properties"]["stationIdentifier"],
-              name: feature["properties"]["name"],
-              url: feature["id"]
-            }
-          end)
+          stations =
+            body["features"]
+            |> Enum.map(fn feature ->
+              %{
+                id: feature["properties"]["stationIdentifier"],
+                name: feature["properties"]["name"],
+                url: feature["id"]
+              }
+            end)
+
           {:ok, stations}
-        
+
         %{status: status, body: body} ->
           {:error, "Failed to get observation stations (#{status}): #{inspect(body)}"}
       end
@@ -64,7 +64,7 @@ defmodule Jido.Tools.Weather.CurrentConditions do
 
   defp get_current_conditions(%{url: station_url}) do
     observations_url = "#{station_url}/observations/latest"
-    
+
     req_options = [
       method: :get,
       url: observations_url,
@@ -76,10 +76,11 @@ defmodule Jido.Tools.Weather.CurrentConditions do
 
     try do
       response = Req.request!(req_options)
+
       case response do
         %{status: 200, body: body} ->
           props = body["properties"]
-          
+
           conditions = %{
             station: props["station"],
             timestamp: props["timestamp"],
@@ -102,9 +103,9 @@ defmodule Jido.Tools.Weather.CurrentConditions do
             cloud_layers: props["cloudLayers"],
             text_description: props["textDescription"]
           }
-          
+
           {:ok, conditions}
-        
+
         %{status: status, body: body} ->
           {:error, "Failed to get current conditions (#{status}): #{inspect(body)}"}
       end
@@ -118,9 +119,11 @@ defmodule Jido.Tools.Weather.CurrentConditions do
   end
 
   defp format_measurement(%{"value" => nil}), do: nil
+
   defp format_measurement(%{"value" => value, "unitCode" => unit_code}) do
     %{value: value, unit: parse_unit_code(unit_code)}
   end
+
   defp format_measurement(nil), do: nil
 
   defp parse_unit_code("wmoUnit:" <> unit), do: unit

@@ -1,7 +1,7 @@
 defmodule Jido.Tools.Weather.Forecast do
   @moduledoc """
   Fetches detailed weather forecast data from the National Weather Service API using ReqTool.
-  
+
   Uses the forecast URL obtained from LocationToGrid to get detailed period-by-period
   weather information including temperature, wind, and conditions.
   """
@@ -9,7 +9,7 @@ defmodule Jido.Tools.Weather.Forecast do
   use Jido.Action,
     name: "weather_forecast",
     description: "Get detailed weather forecast from NWS forecast URL",
-    category: "Weather", 
+    category: "Weather",
     tags: ["weather", "forecast", "nws"],
     vsn: "1.0.0",
     schema: [
@@ -43,6 +43,7 @@ defmodule Jido.Tools.Weather.Forecast do
 
     try do
       response = Req.request!(req_options)
+
       transform_result(%{
         request: %{url: forecast_url, method: :get, params: params},
         response: %{status: response.status, body: response.body, headers: response.headers}
@@ -55,12 +56,13 @@ defmodule Jido.Tools.Weather.Forecast do
   defp transform_result(%{request: %{params: params}, response: %{status: 200, body: body}}) do
     periods = body["properties"]["periods"]
     limited_periods = Enum.take(periods, params[:periods] || 14)
-    
-    formatted_periods = case params[:format] do
-      :detailed -> format_detailed_periods(limited_periods)
-      _ -> format_summary_periods(limited_periods)
-    end
-    
+
+    formatted_periods =
+      case params[:format] do
+        :detailed -> format_detailed_periods(limited_periods)
+        _ -> format_summary_periods(limited_periods)
+      end
+
     result = %{
       forecast_url: params.forecast_url,
       updated: body["properties"]["updated"],
@@ -68,7 +70,7 @@ defmodule Jido.Tools.Weather.Forecast do
       periods: formatted_periods,
       total_periods: length(periods)
     }
-    
+
     {:ok, result}
   end
 

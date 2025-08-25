@@ -4,7 +4,7 @@ defmodule Jido.Tools.Weather do
 
   Uses the free NWS API (no API key required) to get weather forecasts.
   Default location is Chicago, IL if no location is specified.
-  
+
   For more advanced usage, see the specific weather modules:
   - `Jido.Tools.Weather.ByLocation` - Unified weather lookup by location
   - `Jido.Tools.Weather.LocationToGrid` - Convert location to NWS grid
@@ -40,7 +40,7 @@ defmodule Jido.Tools.Weather do
   @impl Jido.Action
   def run(params, context) do
     location = params[:location] || "41.8781,-87.6298"
-    
+
     by_location_params = %{
       location: location,
       periods: params[:periods] || 5,
@@ -49,10 +49,13 @@ defmodule Jido.Tools.Weather do
     }
 
     case Jido.Exec.run(Jido.Tools.Weather.ByLocation, by_location_params, context) do
-      {:ok, weather_data} -> {:ok, weather_data}
-      {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} -> 
+      {:ok, weather_data} ->
+        {:ok, weather_data}
+
+      {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} ->
         {:error, "Failed to fetch weather: #{message}"}
-      {:error, reason} -> 
+
+      {:error, reason} ->
         {:error, "Failed to fetch weather: #{inspect(reason)}"}
     end
   end
