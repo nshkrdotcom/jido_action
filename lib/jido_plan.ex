@@ -59,53 +59,47 @@ defmodule Jido.Plan do
     """
 
     # Define Zoi schema for PlanInstruction
-    @plan_instruction_schema Zoi.struct(
-                               __MODULE__,
-                               %{
-                                 id:
-                                   Zoi.string(description: "Unique plan instruction identifier")
-                                   |> Zoi.optional(),
-                                 name: Zoi.atom(description: "Step name"),
-                                 instruction: Zoi.any(description: "Instruction struct"),
-                                 depends_on:
-                                   Zoi.list(Zoi.atom(), description: "List of step dependencies")
-                                   |> Zoi.default([]),
-                                 opts:
-                                   Zoi.list(Zoi.any(), description: "Additional options")
-                                   |> Zoi.default([])
-                               },
-                               coerce: true
-                             )
+    @schema Zoi.struct(
+              __MODULE__,
+              %{
+                id:
+                  Zoi.string(description: "Unique plan instruction identifier")
+                  |> Zoi.optional(),
+                name: Zoi.atom(description: "Step name"),
+                instruction: Zoi.any(description: "Instruction struct"),
+                depends_on:
+                  Zoi.list(Zoi.atom(), description: "List of step dependencies")
+                  |> Zoi.default([]),
+                opts:
+                  Zoi.list(Zoi.any(), description: "Additional options")
+                  |> Zoi.default([])
+              },
+              coerce: true
+            )
 
-    @type t :: unquote(Zoi.type_spec(@plan_instruction_schema))
+    @type t :: unquote(Zoi.type_spec(@schema))
 
-    @enforce_keys [:name, :instruction]
-    defstruct id: nil,
-              name: nil,
-              instruction: nil,
-              depends_on: [],
-              opts: []
+    @enforce_keys Zoi.Struct.enforce_keys(@schema)
+    defstruct Zoi.Struct.struct_fields(@schema)
   end
 
   # Define Zoi schema for Plan
-  @plan_schema Zoi.struct(
-                 __MODULE__,
-                 %{
-                   id: Zoi.string(description: "Unique plan identifier") |> Zoi.optional(),
-                   steps:
-                     Zoi.map(description: "Map of step names to PlanInstructions")
-                     |> Zoi.default(%{}),
-                   context: Zoi.map(description: "Shared execution context") |> Zoi.default(%{})
-                 },
-                 coerce: true
-               )
+  @schema Zoi.struct(
+            __MODULE__,
+            %{
+              id: Zoi.string(description: "Unique plan identifier") |> Zoi.optional(),
+              steps:
+                Zoi.map(description: "Map of step names to PlanInstructions")
+                |> Zoi.default(%{}),
+              context: Zoi.map(description: "Shared execution context") |> Zoi.default(%{})
+            },
+            coerce: true
+          )
 
-  @type t :: unquote(Zoi.type_spec(@plan_schema))
+  @type t :: unquote(Zoi.type_spec(@schema))
 
-  @enforce_keys []
-  defstruct id: nil,
-            steps: %{},
-            context: %{}
+  @enforce_keys Zoi.Struct.enforce_keys(@schema)
+  defstruct Zoi.Struct.struct_fields(@schema)
 
   @doc """
   Creates a new empty Plan struct.
@@ -122,6 +116,7 @@ defmodule Jido.Plan do
   def new(opts \\ []) do
     %__MODULE__{
       id: Uniq.UUID.uuid7(),
+      steps: %{},
       context: Keyword.get(opts, :context, %{})
     }
   end

@@ -137,32 +137,26 @@ defmodule Jido.Instruction do
   alias Jido.Instruction
 
   # Define Zoi schema for instruction
-  @instruction_schema Zoi.struct(
-                        __MODULE__,
-                        %{
-                          id:
-                            Zoi.string(description: "Unique instruction identifier")
-                            |> Zoi.optional(),
-                          action:
-                            Zoi.atom(description: "Action module to execute")
-                            |> Zoi.refine({__MODULE__, :validate_action_module, []}),
-                          params:
-                            Zoi.map(description: "Parameters for the action") |> Zoi.default(%{}),
-                          context: Zoi.map(description: "Execution context") |> Zoi.default(%{}),
-                          opts:
-                            Zoi.list(Zoi.any(), description: "Runtime options") |> Zoi.default([])
-                        },
-                        coerce: true
-                      )
+  @schema Zoi.struct(
+            __MODULE__,
+            %{
+              id:
+                Zoi.string(description: "Unique instruction identifier")
+                |> Zoi.optional(),
+              action:
+                Zoi.atom(description: "Action module to execute")
+                |> Zoi.refine({__MODULE__, :validate_action_module, []}),
+              params: Zoi.map(description: "Parameters for the action") |> Zoi.default(%{}),
+              context: Zoi.map(description: "Execution context") |> Zoi.default(%{}),
+              opts: Zoi.list(Zoi.any(), description: "Runtime options") |> Zoi.default([])
+            },
+            coerce: true
+          )
 
-  @type t :: unquote(Zoi.type_spec(@instruction_schema))
+  @type t :: unquote(Zoi.type_spec(@schema))
 
-  @enforce_keys [:action]
-  defstruct id: nil,
-            action: nil,
-            params: %{},
-            context: %{},
-            opts: []
+  @enforce_keys Zoi.Struct.enforce_keys(@schema)
+  defstruct Zoi.Struct.struct_fields(@schema)
 
   @type action_module :: module()
   @type action_params :: map()
@@ -277,7 +271,7 @@ defmodule Jido.Instruction do
           |> Map.update(:opts, [], fn v -> if is_nil(v), do: [], else: v end)
 
         # Validate with Zoi
-        case Zoi.parse(@instruction_schema, attrs_with_defaults) do
+        case Zoi.parse(@schema, attrs_with_defaults) do
           {:ok, validated_struct} ->
             {:ok, validated_struct}
 

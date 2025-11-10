@@ -132,17 +132,20 @@ defmodule Jido.Action.Schema do
 
   ## Parameters
     * `value` - The schema value to validate
+    * `_opts` - Options (unused, for Zoi refine compatibility)
 
   ## Returns
-    * `{:ok, schema}` - Schema is valid
+    * `:ok` - Schema is valid
     * `{:error, message}` - Schema is invalid
   """
-  @spec validate_config_schema(term()) :: {:ok, t()} | {:error, String.t()}
-  def validate_config_schema(value) when is_list(value), do: {:ok, value}
+  @spec validate_config_schema(term(), keyword()) :: :ok | {:error, String.t()}
+  def validate_config_schema(value, _opts \\ [])
 
-  def validate_config_schema(value) do
+  def validate_config_schema(value, _opts) when is_list(value), do: :ok
+
+  def validate_config_schema(value, _opts) do
     if impl_for_zoi_type?(value) do
-      {:ok, value}
+      :ok
     else
       {:error, "must be NimbleOptions schema or Zoi schema"}
     end
