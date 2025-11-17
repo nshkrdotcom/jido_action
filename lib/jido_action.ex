@@ -511,7 +511,7 @@ defmodule Jido.Action do
 
           @doc "Lifecycle hook called after Action execution."
           @spec on_after_run({:ok, map()} | {:error, any()}) :: {:ok, map()} | {:error, any()}
-          def on_after_run(result), do: {:ok, result}
+          def on_after_run(result), do: result
 
           @doc "Lifecycle hook called when an error occurs."
           @spec on_error(map(), any(), map(), keyword()) :: {:ok, map()} | {:error, any()}
