@@ -35,16 +35,16 @@ defmodule Jido.PlanCoverageTest do
 
   describe "Error handling coverage" do
     test "add/4 raises error when instruction normalization fails" do
-      # This tests line 172: raise "Invalid instruction format" 
+      # This tests line 172: raise "Invalid instruction format"
       assert_raise Jido.Action.Error.InvalidInputError, "Invalid instruction format", fn ->
         Plan.new()
-        |> Plan.add(:invalid, {:not_an_atom, %{}, []})
+        |> Plan.add(:invalid, {"not_an_atom", %{}, []})
       end
     end
 
     test "build/3 error when add_step_from_def raises exception" do
       # This tests line 287: error -> {:error, error}
-      # We need to create a case where add() raises an exception 
+      # We need to create a case where add() raises an exception
       # Since atoms are valid actions, let's use a completely invalid format
       plan_def = [
         # Invalid format - not an atom, tuple, or instruction

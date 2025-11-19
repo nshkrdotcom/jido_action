@@ -186,7 +186,10 @@ defmodule Jido.Plan do
   """
   @spec add(t(), atom(), step_def(), keyword()) :: t() | no_return()
   def add(%__MODULE__{} = plan, step_name, step_def, opts \\ []) do
-    depends_on = opts |> Keyword.get(:depends_on, []) |> List.wrap()
+    {clean_step_def, step_depends_on} = extract_depends_on_from_step_def(step_def)
+    opts_depends_on = opts |> Keyword.get(:depends_on, []) |> List.wrap()
+    depends_on = (step_depends_on ++ opts_depends_on) |> Enum.uniq()
+
     plan_opts = Keyword.delete(opts, :depends_on)
 
     # Validate depends_on contains only atoms
@@ -195,7 +198,7 @@ defmodule Jido.Plan do
       raise error
     end
 
-    case Instruction.normalize_single(step_def, plan.context, []) do
+    case Instruction.normalize_single(clean_step_def, plan.context, []) do
       {:ok, instruction} ->
         plan_instruction = %PlanInstruction{
           id: Uniq.UUID.uuid7(),
@@ -374,7 +377,7 @@ defmodule Jido.Plan do
     else
       case find_cycle(graph) do
         nil ->
-          :ok
+          {:error, Error.validation_error("Plan contains circular dependencies", %{})}
 
         cycle ->
           {:error,

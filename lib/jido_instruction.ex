@@ -320,7 +320,7 @@ defmodule Jido.Instruction do
       iex> Instruction.normalize_single({MyApp.Actions.ProcessOrder, %{order_id: "123"}})
       {:ok, %Instruction{action: MyApp.Actions.ProcessOrder, params: %{order_id: "123"}}}
   """
-  @spec normalize_single(instruction(), map(), keyword()) :: {:ok, t()} | {:error, term()}
+  @spec normalize_single(instruction(), map() | nil, keyword()) :: {:ok, t()} | {:error, term()}
   def normalize_single(input, context \\ %{}, opts \\ [])
 
   # Already normalized instruction - just merge context and opts
@@ -343,6 +343,52 @@ defmodule Jido.Instruction do
     case normalize_params(params) do
       {:ok, normalized_params} ->
         {:ok, new!(%{action: action, params: normalized_params, context: context, opts: opts})}
+
+      error ->
+        error
+    end
+  end
+
+  # Action tuple with context
+  def normalize_single({action, params, item_context}, context, opts) when is_atom(action) do
+    context = context || %{}
+    item_context = item_context || %{}
+    merged_context = Map.merge(item_context, context)
+
+    case normalize_params(params) do
+      {:ok, normalized_params} ->
+        {:ok,
+         new!(%{
+           action: action,
+           params: normalized_params,
+           context: merged_context,
+           opts: opts
+         })}
+
+      error ->
+        error
+    end
+  end
+
+  # Action tuple with context and opts
+  def normalize_single({action, params, item_context, item_opts}, context, opts)
+      when is_atom(action) do
+    context = context || %{}
+    item_context = item_context || %{}
+    merged_context = Map.merge(item_context, context)
+
+    item_opts = item_opts || []
+    merged_opts = Keyword.merge(item_opts, opts)
+
+    case normalize_params(params) do
+      {:ok, normalized_params} ->
+        {:ok,
+         new!(%{
+           action: action,
+           params: normalized_params,
+           context: merged_context,
+           opts: merged_opts
+         })}
 
       error ->
         error
@@ -390,7 +436,7 @@ defmodule Jido.Instruction do
       ...> ])
       {:ok, [%Instruction{...}, %Instruction{...}, %Instruction{...}]}
   """
-  @spec normalize(instruction() | instruction_list(), map(), keyword()) ::
+  @spec normalize(instruction() | instruction_list(), map() | nil, keyword()) ::
           {:ok, [t()]} | {:error, term()}
   def normalize(input, context \\ %{}, opts \\ [])
 
@@ -448,7 +494,7 @@ defmodule Jido.Instruction do
       iex> Instruction.normalize!(MyAction)
       [%Instruction{action: MyAction, params: %{}}]
   """
-  @spec normalize(instruction() | instruction_list(), map(), keyword()) :: [t()]
+  @spec normalize!(instruction() | instruction_list(), map() | nil, keyword()) :: [t()]
   def normalize!(instruction, context \\ nil, opts \\ []) do
     case normalize(instruction, context, opts) do
       {:ok, instructions} -> instructions
