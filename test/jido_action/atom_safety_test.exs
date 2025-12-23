@@ -174,7 +174,7 @@ defmodule Jido.Action.AtomSafetyTest do
 
     test "large params map with Zoi schema" do
       # Test with Zoi schema as well
-      schema = Zoi.object(%{legit: Zoi.string()})
+      schema = Zoi.object(%{legit: Zoi.string()}, coerce: true)
 
       atom_count_before = :erlang.system_info(:atom_count)
 
