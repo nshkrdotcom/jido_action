@@ -234,7 +234,10 @@ defmodule JidoAction.MixProject do
       {:expublish, "~> 2.7", only: [:dev], runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
       {:mimic, "~> 2.0", only: :test},
-      {:stream_data, "~> 1.0", only: [:dev, :test]}
+      {:stream_data, "~> 1.0", only: [:dev, :test]},
+
+      # Code generation
+      {:igniter, "~> 0.7", optional: true}
     ]
   end
 
