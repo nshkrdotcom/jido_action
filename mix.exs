@@ -211,7 +211,7 @@ defmodule JidoAction.MixProject do
       {:typed_struct, "~> 0.3.0"},
       {:uniq, "~> 0.6.1"},
       {:zoi, "~> 0.16"},
-      {:splode, "~> 0.2.10"},
+      {:splode, "~> 0.3.0"},
 
       # Skill & Action Dependencies for examples
       {:abacus, "~> 2.1"},
