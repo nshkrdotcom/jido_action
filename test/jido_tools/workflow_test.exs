@@ -1,6 +1,8 @@
 defmodule JidoTest.Tools.WorkflowTest do
   use JidoTest.ActionCase, async: true
 
+  alias Jido.Tools.Workflow
+
   # Define a simple LogAction for testing
   defmodule LogAction do
     use Jido.Action,
@@ -111,7 +113,7 @@ defmodule JidoTest.Tools.WorkflowTest do
         {:parallel, [name: "parallel1"], []}
       ]
 
-      assert {:ok, ^valid_steps} = Jido.Tools.Workflow.validate_step(valid_steps)
+      assert {:ok, ^valid_steps} = Workflow.validate_step(valid_steps)
     end
 
     test "rejects invalid step types" do
@@ -120,7 +122,7 @@ defmodule JidoTest.Tools.WorkflowTest do
       ]
 
       assert {:error, "invalid workflow steps format"} =
-               Jido.Tools.Workflow.validate_step(invalid_steps)
+               Workflow.validate_step(invalid_steps)
     end
 
     test "rejects malformed step tuples" do
@@ -131,20 +133,20 @@ defmodule JidoTest.Tools.WorkflowTest do
       ]
 
       assert {:error, "invalid workflow steps format"} =
-               Jido.Tools.Workflow.validate_step(invalid_steps)
+               Workflow.validate_step(invalid_steps)
     end
 
     test "rejects non-list input" do
-      assert {:error, "steps must be a list of tuples"} = Jido.Tools.Workflow.validate_step(%{})
+      assert {:error, "steps must be a list of tuples"} = Workflow.validate_step(%{})
 
       assert {:error, "steps must be a list of tuples"} =
-               Jido.Tools.Workflow.validate_step("string")
+               Workflow.validate_step("string")
 
-      assert {:error, "steps must be a list of tuples"} = Jido.Tools.Workflow.validate_step(nil)
+      assert {:error, "steps must be a list of tuples"} = Workflow.validate_step(nil)
     end
 
     test "validates empty step list" do
-      assert {:ok, []} = Jido.Tools.Workflow.validate_step([])
+      assert {:ok, []} = Workflow.validate_step([])
     end
   end
 

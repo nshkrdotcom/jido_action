@@ -211,6 +211,19 @@ defmodule JidoTest.Tools.WeatherTest do
     end
   end
 
+  defp handle_forecast_request(opts, location_response, periods) do
+    case location_response.status do
+      200 ->
+        forecast_url = location_response.body["properties"]["forecast"]
+        forecast_response = mock_forecast_response(forecast_url, periods)
+        assert opts[:method] == :get
+        forecast_response
+
+      _other ->
+        raise "Forecast called when location lookup failed"
+    end
+  end
+
   defp setup_weather_mocks(location \\ @chicago_coords, periods \\ 5) do
     location_response = mock_location_to_grid_response(location)
 
@@ -218,23 +231,13 @@ defmodule JidoTest.Tools.WeatherTest do
     stub(Req, :request!, fn opts ->
       cond do
         String.contains?(opts[:url], "/points/") ->
-          # LocationToGrid call
           expected_url = "https://api.weather.gov/points/#{location}"
           assert opts[:url] == expected_url
           assert opts[:method] == :get
           location_response
 
         String.contains?(opts[:url], "/forecast") ->
-          # Forecast call
-          if location_response.status == 200 do
-            forecast_url = location_response.body["properties"]["forecast"]
-            forecast_response = mock_forecast_response(forecast_url, periods)
-            assert opts[:method] == :get
-            forecast_response
-          else
-            # Should not be called if location lookup failed
-            raise "Forecast called when location lookup failed"
-          end
+          handle_forecast_request(opts, location_response, periods)
 
         true ->
           raise "Unexpected URL: #{opts[:url]}"

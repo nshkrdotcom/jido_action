@@ -228,6 +228,46 @@ defmodule Jido.Action do
                             |> Zoi.default([])
                         })
 
+  @validate_params_doc """
+  Validates the input parameters for the Action.
+
+  ## Examples
+
+      iex> defmodule ExampleAction do
+      ...>   use Jido.Action,
+      ...>     name: "example_action",
+      ...>     schema: [
+      ...>       input: [type: :string, required: true]
+      ...>     ]
+      ...> end
+      ...> ExampleAction.validate_params(%{input: "test"})
+      {:ok, %{input: "test"}}
+
+      iex> ExampleAction.validate_params(%{})
+      {:error, "Invalid parameters for Action: Required key :input not found"}
+
+  """
+
+  @validate_output_doc """
+  Validates the output result for the Action.
+
+  ## Examples
+
+      iex> defmodule ExampleAction do
+      ...>   use Jido.Action,
+      ...>     name: "example_action",
+      ...>     output_schema: [
+      ...>       result: [type: :string, required: true]
+      ...>     ]
+      ...> end
+      ...> ExampleAction.validate_output(%{result: "test", extra: "ignored"})
+      {:ok, %{result: "test", extra: "ignored"}}
+
+      iex> ExampleAction.validate_output(%{extra: "ignored"})
+      {:error, "Invalid output for Action: Required key :result not found"}
+
+  """
+
   @doc """
   Defines a new Action module.
 
@@ -267,6 +307,8 @@ defmodule Jido.Action do
   """
   defmacro __using__(opts_ast) do
     escaped_schema = Macro.escape(@action_config_schema)
+    validate_params_doc = @validate_params_doc
+    validate_output_doc = @validate_output_doc
 
     # Extract schema ASTs from the opts if it's a literal keyword list
     # This preserves closures for Zoi schemas defined inline or in module attributes
@@ -279,10 +321,17 @@ defmodule Jido.Action do
         {nil, nil}
       end
 
+    metadata_ast = action_metadata_ast(schema_ast, output_schema_ast)
+    serialization_ast = action_serialization_ast()
+    validation_ast = action_validation_ast(validate_params_doc, validate_output_doc)
+    run_and_hooks_ast = action_run_and_hooks_ast()
+
     quote location: :keep do
       @behaviour Jido.Action
 
       alias Jido.Action
+      alias Jido.Action.Runtime
+      alias Jido.Action.Util
       alias Jido.Instruction
       alias Jido.Signal
 
@@ -290,18 +339,7 @@ defmodule Jido.Action do
       opts_map =
         if is_list(unquote(opts_ast)) and Keyword.keyword?(unquote(opts_ast)) do
           unquote(opts_ast)
-          |> Map.new(fn
-            # Convert nested keyword lists to maps (e.g., compensation)
-            {key, value} when is_list(value) and key in [:compensation] ->
-              if Keyword.keyword?(value) do
-                {key, Map.new(value)}
-              else
-                {key, value}
-              end
-
-            other ->
-              other
-          end)
+          |> Map.new(&Util.convert_nested_opt/1)
         else
           unquote(opts_ast)
         end
@@ -325,205 +363,13 @@ defmodule Jido.Action do
             @__jido_output_schema__ Map.get(validated_opts, :output_schema, [])
           end
 
-          # Store validated opts without schemas to avoid closure serialization  
+          # Store validated opts without schemas to avoid closure serialization
           @validated_opts Map.drop(validated_opts, [:schema, :output_schema])
 
-          @doc "Returns the name of the Action."
-          def name, do: @validated_opts[:name]
-
-          @doc "Returns the description of the Action."
-          def description, do: @validated_opts[:description]
-
-          @doc "Returns the category of the Action."
-          def category, do: @validated_opts[:category]
-
-          @doc "Returns the tags associated with the Action."
-          def tags, do: @validated_opts[:tags]
-
-          @doc "Returns the version of the Action."
-          def vsn, do: @validated_opts[:vsn]
-
-          @doc "Returns the input schema of the Action."
-          if unquote(schema_ast) do
-            def schema, do: unquote(schema_ast)
-          else
-            def schema, do: @__jido_schema__
-          end
-
-          @doc "Returns the output schema of the Action."
-          if unquote(output_schema_ast) do
-            def output_schema, do: unquote(output_schema_ast)
-          else
-            def output_schema, do: @__jido_output_schema__
-          end
-
-          @doc "Returns the Action metadata as a JSON-serializable map."
-          def to_json do
-            %{
-              name: @validated_opts[:name],
-              description: @validated_opts[:description],
-              category: @validated_opts[:category],
-              tags: @validated_opts[:tags],
-              vsn: @validated_opts[:vsn],
-              compensation: @validated_opts[:compensation],
-              schema: schema(),
-              output_schema: output_schema()
-            }
-          end
-
-          @doc "Converts the Action to an LLM-compatible tool format."
-          def to_tool do
-            Tool.to_tool(__MODULE__)
-          end
-
-          @doc "Returns the Action metadata. Alias for to_json/0."
-          def __action_metadata__ do
-            to_json()
-          end
-
-          @doc """
-          Validates the input parameters for the Action.
-
-          ## Examples
-
-              iex> defmodule ExampleAction do
-              ...>   use Jido.Action,
-              ...>     name: "example_action",
-              ...>     schema: [
-              ...>       input: [type: :string, required: true]
-              ...>     ]
-              ...> end
-              ...> ExampleAction.validate_params(%{input: "test"})
-              {:ok, %{input: "test"}}
-
-              iex> ExampleAction.validate_params(%{})
-              {:error, "Invalid parameters for Action: Required key :input not found"}
-
-          """
-          @spec validate_params(map()) :: {:ok, map()} | {:error, String.t()}
-          def validate_params(params) do
-            with {:ok, params} <- on_before_validate_params(params),
-                 {:ok, validated_params} <- do_validate_params(params) do
-              on_after_validate_params(validated_params)
-            end
-          end
-
-          @doc """
-          Validates the output result for the Action.
-
-          ## Examples
-
-              iex> defmodule ExampleAction do
-              ...>   use Jido.Action,
-              ...>     name: "example_action",
-              ...>     output_schema: [
-              ...>       result: [type: :string, required: true]
-              ...>     ]
-              ...> end
-              ...> ExampleAction.validate_output(%{result: "test", extra: "ignored"})
-              {:ok, %{result: "test", extra: "ignored"}}
-
-              iex> ExampleAction.validate_output(%{extra: "ignored"})
-              {:error, "Invalid output for Action: Required key :result not found"}
-
-          """
-          @spec validate_output(map()) :: {:ok, map()} | {:error, String.t()}
-          def validate_output(output) do
-            with {:ok, output} <- on_before_validate_output(output),
-                 {:ok, validated_output} <- do_validate_output(output) do
-              on_after_validate_output(validated_output)
-            end
-          end
-
-          defp do_validate_params(params) do
-            param_schema = schema()
-            known_keys = Jido.Action.Schema.known_keys(param_schema)
-            {known_params, unknown_params} = Map.split(params, known_keys)
-
-            case Jido.Action.Schema.validate(param_schema, known_params) do
-              {:ok, validated_params} ->
-                # Convert Zoi structs to maps for consistency
-                validated_map =
-                  if is_struct(validated_params),
-                    do: Map.from_struct(validated_params),
-                    else: validated_params
-
-                merged_params = Map.merge(unknown_params, validated_map)
-                {:ok, merged_params}
-
-              {:error, error} ->
-                error
-                |> Jido.Action.Schema.format_error("Action", __MODULE__)
-                |> then(&{:error, &1})
-            end
-          end
-
-          defp do_validate_output(output) do
-            out_schema = output_schema()
-            known_keys = Jido.Action.Schema.known_keys(out_schema)
-            {known_output, unknown_output} = Map.split(output, known_keys)
-
-            case Jido.Action.Schema.validate(out_schema, known_output) do
-              {:ok, validated_output} ->
-                # Convert Zoi structs to maps for consistency
-                validated_map =
-                  if is_struct(validated_output),
-                    do: Map.from_struct(validated_output),
-                    else: validated_output
-
-                merged_output = Map.merge(unknown_output, validated_map)
-                {:ok, merged_output}
-
-              {:error, error} ->
-                error
-                |> Jido.Action.Schema.format_error("Action output", __MODULE__)
-                |> then(&{:error, &1})
-            end
-          end
-
-          @doc """
-          Executes the Action with the given parameters and context.
-
-          The `run/2` function must be implemented in the module using Jido.Action.
-          """
-          @spec run(map(), map()) :: {:ok, map()} | {:ok, map(), any()} | {:error, any()}
-          def run(params, context) do
-            "run/2 must be implemented in in your Action"
-            |> Error.config_error()
-            |> then(&{:error, &1})
-          end
-
-          @doc "Lifecycle hook called before parameter validation."
-          @spec on_before_validate_params(map()) :: {:ok, map()} | {:error, any()}
-          def on_before_validate_params(params), do: {:ok, params}
-
-          @doc "Lifecycle hook called after parameter validation."
-          @spec on_after_validate_params(map()) :: {:ok, map()} | {:error, any()}
-          def on_after_validate_params(params), do: {:ok, params}
-
-          @doc "Lifecycle hook called before output validation."
-          @spec on_before_validate_output(map()) :: {:ok, map()} | {:error, any()}
-          def on_before_validate_output(output), do: {:ok, output}
-
-          @doc "Lifecycle hook called after output validation."
-          @spec on_after_validate_output(map()) :: {:ok, map()} | {:error, any()}
-          def on_after_validate_output(output), do: {:ok, output}
-
-          @doc "Lifecycle hook called after Action execution."
-          @spec on_after_run({:ok, map()} | {:error, any()}) :: {:ok, map()} | {:error, any()}
-          def on_after_run(result), do: result
-
-          @doc "Lifecycle hook called when an error occurs."
-          @spec on_error(map(), any(), map(), keyword()) :: {:ok, map()} | {:error, any()}
-          def on_error(failed_params, _error, _context, _opts), do: {:ok, failed_params}
-
-          defoverridable on_before_validate_params: 1,
-                         on_after_validate_params: 1,
-                         on_before_validate_output: 1,
-                         on_after_validate_output: 1,
-                         run: 2,
-                         on_after_run: 1,
-                         on_error: 4
+          unquote(metadata_ast)
+          unquote(serialization_ast)
+          unquote(validation_ast)
+          unquote(run_and_hooks_ast)
 
         {:error, errors} ->
           message =
@@ -535,6 +381,143 @@ defmodule Jido.Action do
 
           raise CompileError, description: message, file: __ENV__.file, line: __ENV__.line
       end
+    end
+  end
+
+  defp action_metadata_ast(schema_ast, output_schema_ast) do
+    quote location: :keep do
+      unquote(basic_metadata_functions_ast())
+      unquote(schema_function_ast(schema_ast))
+      unquote(output_schema_function_ast(output_schema_ast))
+    end
+  end
+
+  defp basic_metadata_functions_ast do
+    quote location: :keep do
+      @doc "Returns the name of the Action."
+      def name, do: @validated_opts[:name]
+
+      @doc "Returns the description of the Action."
+      def description, do: @validated_opts[:description]
+
+      @doc "Returns the category of the Action."
+      def category, do: @validated_opts[:category]
+
+      @doc "Returns the tags associated with the Action."
+      def tags, do: @validated_opts[:tags]
+
+      @doc "Returns the version of the Action."
+      def vsn, do: @validated_opts[:vsn]
+    end
+  end
+
+  defp schema_function_ast(schema_ast) do
+    quote location: :keep do
+      @doc "Returns the input schema of the Action."
+      if unquote(schema_ast) do
+        def schema, do: unquote(schema_ast)
+      else
+        def schema, do: @__jido_schema__
+      end
+    end
+  end
+
+  defp output_schema_function_ast(output_schema_ast) do
+    quote location: :keep do
+      @doc "Returns the output schema of the Action."
+      if unquote(output_schema_ast) do
+        def output_schema, do: unquote(output_schema_ast)
+      else
+        def output_schema, do: @__jido_output_schema__
+      end
+    end
+  end
+
+  defp action_serialization_ast do
+    quote location: :keep do
+      @doc "Returns the Action metadata as a JSON-serializable map."
+      def to_json do
+        %{
+          name: @validated_opts[:name],
+          description: @validated_opts[:description],
+          category: @validated_opts[:category],
+          tags: @validated_opts[:tags],
+          vsn: @validated_opts[:vsn],
+          compensation: @validated_opts[:compensation],
+          schema: schema(),
+          output_schema: output_schema()
+        }
+      end
+
+      @doc "Converts the Action to an LLM-compatible tool format."
+      def to_tool do
+        Tool.to_tool(__MODULE__)
+      end
+
+      @doc "Returns the Action metadata. Alias for to_json/0."
+      def __action_metadata__ do
+        to_json()
+      end
+    end
+  end
+
+  defp action_validation_ast(validate_params_doc, validate_output_doc) do
+    quote location: :keep do
+      @doc unquote(validate_params_doc)
+      @spec validate_params(map()) :: {:ok, map()} | {:error, String.t()}
+      def validate_params(params), do: Runtime.validate_params(params, __MODULE__)
+
+      @doc unquote(validate_output_doc)
+      @spec validate_output(map()) :: {:ok, map()} | {:error, String.t()}
+      def validate_output(output), do: Runtime.validate_output(output, __MODULE__)
+    end
+  end
+
+  defp action_run_and_hooks_ast do
+    quote location: :keep do
+      @doc """
+      Executes the Action with the given parameters and context.
+
+      The `run/2` function must be implemented in the module using Jido.Action.
+      """
+      @spec run(map(), map()) :: {:ok, map()} | {:ok, map(), any()} | {:error, any()}
+      def run(params, context) do
+        "run/2 must be implemented in in your Action"
+        |> Error.config_error()
+        |> then(&{:error, &1})
+      end
+
+      @doc "Lifecycle hook called before parameter validation."
+      @spec on_before_validate_params(map()) :: {:ok, map()} | {:error, any()}
+      def on_before_validate_params(params), do: {:ok, params}
+
+      @doc "Lifecycle hook called after parameter validation."
+      @spec on_after_validate_params(map()) :: {:ok, map()} | {:error, any()}
+      def on_after_validate_params(params), do: {:ok, params}
+
+      @doc "Lifecycle hook called before output validation."
+      @spec on_before_validate_output(map()) :: {:ok, map()} | {:error, any()}
+      def on_before_validate_output(output), do: {:ok, output}
+
+      @doc "Lifecycle hook called after output validation."
+      @spec on_after_validate_output(map()) :: {:ok, map()} | {:error, any()}
+      def on_after_validate_output(output), do: {:ok, output}
+
+      @doc "Lifecycle hook called after Action execution."
+      @spec on_after_run({:ok, map()} | {:error, any()}) :: {:ok, map()} | {:error, any()}
+      def on_after_run(result), do: result
+
+      @doc "Lifecycle hook called when an error occurs."
+      @spec on_error(map(), any(), map(), keyword()) :: {:ok, map()} | {:error, any()}
+      def on_error(failed_params, _error, _context, _opts), do: {:ok, failed_params}
+
+      defoverridable on_before_validate_params: 1,
+                     on_after_validate_params: 1,
+                     on_before_validate_output: 1,
+                     on_after_validate_output: 1,
+                     run: 2,
+                     on_after_run: 1,
+                     on_error: 4
     end
   end
 

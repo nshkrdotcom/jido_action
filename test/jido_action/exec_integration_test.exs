@@ -220,7 +220,7 @@ defmodule JidoTest.ExecIntegrationTest do
     end
 
     test "async action retries and succeeds", %{attempts_table: attempts_table} do
-      # Reset attempts counter  
+      # Reset attempts counter
       :ets.insert(attempts_table, {:attempts, 0})
 
       capture_log(fn ->
@@ -337,7 +337,7 @@ defmodule JidoTest.ExecIntegrationTest do
         assert {:error, error} = Exec.run(ErrorAction, %{error_type: :runtime})
         assert is_exception(error)
 
-        # Argument error - gets wrapped in ExecutionFailureError  
+        # Argument error - gets wrapped in ExecutionFailureError
         assert {:error, error} = Exec.run(ErrorAction, %{error_type: :argument})
         assert is_exception(error)
 

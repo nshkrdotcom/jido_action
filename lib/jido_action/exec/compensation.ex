@@ -93,7 +93,7 @@ defmodule Jido.Exec.Compensation do
     if enabled?(action) do
       execute_compensation(action, params, context, error, directive, opts)
     else
-      if directive, do: {:error, error, directive}, else: {:error, error}
+      wrap_error_with_directive(error, directive)
     end
   end
 
@@ -104,91 +104,121 @@ defmodule Jido.Exec.Compensation do
     defp execute_compensation(action, params, context, error, directive, opts) do
       metadata = action.__action_metadata__()
       compensation_opts = metadata[:compensation] || []
+      timeout = get_compensation_timeout(opts, compensation_opts)
 
-      timeout =
-        Keyword.get(opts, :timeout) ||
-          case compensation_opts do
-            opts when is_list(opts) -> Keyword.get(opts, :timeout, 5_000)
-            %{timeout: timeout} -> timeout
-            _ -> 5_000
-          end
+      task = Task.async(fn -> action.on_error(params, error, context, []) end)
 
-      task =
-        Task.async(fn ->
-          action.on_error(params, error, context, [])
-        end)
+      task
+      |> Task.yield(timeout)
+      |> handle_task_result(task, error, directive, timeout)
+    end
 
-      case Task.yield(task, timeout) || Task.shutdown(task) do
-        {:ok, result} ->
-          handle_compensation_result(result, error, directive)
+    @spec get_compensation_timeout(run_opts(), keyword() | map()) :: non_neg_integer()
+    defp get_compensation_timeout(opts, compensation_opts) do
+      Keyword.get(opts, :timeout) || extract_timeout_from_compensation_opts(compensation_opts)
+    end
 
-        nil ->
-          error_result =
-            Error.execution_error(
-              "Compensation timed out after #{timeout}ms for: #{inspect(error)}",
-              %{
-                compensated: false,
-                compensation_error: "Compensation timed out after #{timeout}ms",
-                original_error: error
-              }
-            )
+    @spec extract_timeout_from_compensation_opts(keyword() | map() | any()) :: non_neg_integer()
+    defp extract_timeout_from_compensation_opts(opts) when is_list(opts),
+      do: Keyword.get(opts, :timeout, 5_000)
 
-          if directive, do: {:error, error_result, directive}, else: {:error, error_result}
-      end
+    defp extract_timeout_from_compensation_opts(%{timeout: timeout}), do: timeout
+    defp extract_timeout_from_compensation_opts(_), do: 5_000
+
+    @spec handle_task_result(
+            {:ok, any()} | {:exit, any()} | nil,
+            Task.t(),
+            Exception.t(),
+            any(),
+            non_neg_integer()
+          ) :: exec_result
+    defp handle_task_result({:ok, result}, _task, error, directive, _timeout) do
+      handle_compensation_result(result, error, directive)
+    end
+
+    defp handle_task_result(nil, task, error, directive, timeout) do
+      Task.shutdown(task)
+      build_timeout_error(error, directive, timeout)
+    end
+
+    defp handle_task_result({:exit, _reason}, _task, error, directive, timeout) do
+      build_timeout_error(error, directive, timeout)
+    end
+
+    @spec build_timeout_error(Exception.t(), any(), non_neg_integer()) :: exec_result
+    defp build_timeout_error(error, directive, timeout) do
+      error_result =
+        Error.execution_error(
+          "Compensation timed out after #{timeout}ms for: #{inspect(error)}",
+          %{
+            compensated: false,
+            compensation_error: "Compensation timed out after #{timeout}ms",
+            original_error: error
+          }
+        )
+
+      wrap_error_with_directive(error_result, directive)
     end
 
     @spec handle_compensation_result(any(), Exception.t(), any()) :: exec_result
     defp handle_compensation_result(result, original_error, directive) do
-      error_result =
-        case result do
-          {:ok, comp_result} ->
-            # Extract fields that should be at the top level of the details
-            {top_level_fields, remaining_fields} =
-              Map.split(comp_result, [:test_value, :compensation_context])
-
-            # Create the details map with the compensation result
-            details =
-              Map.merge(
-                %{
-                  compensated: true,
-                  compensation_result: remaining_fields
-                },
-                top_level_fields
-              )
-
-            # Extract message from error struct properly using safe helper
-            error_message = Telemetry.extract_safe_error_message(original_error)
-
-            Error.execution_error(
-              "Compensation completed for: #{error_message}",
-              Map.put(details, :original_error, original_error)
-            )
-
-          {:error, comp_error} ->
-            # Extract message from error struct properly using safe helper
-            error_message = Telemetry.extract_safe_error_message(original_error)
-
-            Error.execution_error(
-              "Compensation failed for: #{error_message}",
-              %{
-                compensated: false,
-                compensation_error: comp_error,
-                original_error: original_error
-              }
-            )
-
-          _ ->
-            Error.execution_error(
-              "Invalid compensation result for: #{inspect(original_error)}",
-              %{
-                compensated: false,
-                compensation_error: "Invalid compensation result",
-                original_error: original_error
-              }
-            )
-        end
-
-      if directive, do: {:error, error_result, directive}, else: {:error, error_result}
+      result
+      |> build_compensation_error(original_error)
+      |> wrap_error_with_directive(directive)
     end
+
+    @spec build_compensation_error(any(), Exception.t()) :: Exception.t()
+    defp build_compensation_error({:ok, comp_result}, original_error) do
+      # Extract fields that should be at the top level of the details
+      {top_level_fields, remaining_fields} =
+        Map.split(comp_result, [:test_value, :compensation_context])
+
+      # Create the details map with the compensation result
+      details =
+        Map.merge(
+          %{
+            compensated: true,
+            compensation_result: remaining_fields
+          },
+          top_level_fields
+        )
+
+      # Extract message from error struct properly using safe helper
+      error_message = Telemetry.extract_safe_error_message(original_error)
+
+      Error.execution_error(
+        "Compensation completed for: #{error_message}",
+        Map.put(details, :original_error, original_error)
+      )
+    end
+
+    defp build_compensation_error({:error, comp_error}, original_error) do
+      # Extract message from error struct properly using safe helper
+      error_message = Telemetry.extract_safe_error_message(original_error)
+
+      Error.execution_error(
+        "Compensation failed for: #{error_message}",
+        %{
+          compensated: false,
+          compensation_error: comp_error,
+          original_error: original_error
+        }
+      )
+    end
+
+    defp build_compensation_error(_invalid_result, original_error) do
+      Error.execution_error(
+        "Invalid compensation result for: #{inspect(original_error)}",
+        %{
+          compensated: false,
+          compensation_error: "Invalid compensation result",
+          original_error: original_error
+        }
+      )
+    end
+
+    @spec wrap_error_with_directive(Exception.t(), any()) :: exec_result
+    defp wrap_error_with_directive(error, nil), do: {:error, error}
+    defp wrap_error_with_directive(error, directive), do: {:error, error, directive}
   end
 end

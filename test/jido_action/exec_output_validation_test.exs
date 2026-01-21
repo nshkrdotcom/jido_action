@@ -151,12 +151,14 @@ defmodule JidoTest.Exec.OutputValidationTest do
             value: [type: :string, required: true]
           ]
 
+        alias Jido.Action.Error
+
         def run(_params, _context) do
           {:ok, %{value: "test"}}
         end
 
         def on_before_validate_output(_output) do
-          {:error, Jido.Action.Error.validation_error("Callback failed")}
+          {:error, Error.validation_error("Callback failed")}
         end
       end
 

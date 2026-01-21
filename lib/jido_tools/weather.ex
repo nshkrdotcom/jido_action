@@ -39,31 +39,42 @@ defmodule Jido.Tools.Weather do
 
   @impl Jido.Action
   def run(params, context) do
-    location = params[:location] || "41.8781,-87.6298"
+    params
+    |> build_by_location_params()
+    |> execute_weather_request(context)
+    |> format_result(params[:format] || :text)
+  end
 
-    by_location_params = %{
-      location: location,
+  defp build_by_location_params(params) do
+    %{
+      location: params[:location] || "41.8781,-87.6298",
       periods: params[:periods] || 5,
       format: params[:format] || :text,
       include_location_info: false
     }
+  end
 
-    case Jido.Exec.run(Jido.Tools.Weather.ByLocation, by_location_params, context) do
-      {:ok, weather_data} ->
-        result =
-          case params[:format] || :text do
-            :text -> %{forecast: weather_data[:forecast]}
-            _ -> weather_data
-          end
+  defp execute_weather_request(by_location_params, context) do
+    Jido.Exec.run(Jido.Tools.Weather.ByLocation, by_location_params, context)
+  end
 
-        {:ok, result}
+  defp format_result({:ok, weather_data}, :text) do
+    {:ok, %{forecast: weather_data[:forecast]}}
+  end
 
-      {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} ->
-        {:error, "Failed to fetch weather: #{message}"}
+  defp format_result({:ok, weather_data}, _format) do
+    {:ok, weather_data}
+  end
 
-      {:error, reason} ->
-        {:error, "Failed to fetch weather: #{inspect(reason)}"}
-    end
+  defp format_result(
+         {:error, %Jido.Action.Error.ExecutionFailureError{message: message}},
+         _format
+       ) do
+    {:error, "Failed to fetch weather: #{message}"}
+  end
+
+  defp format_result({:error, reason}, _format) do
+    {:error, "Failed to fetch weather: #{inspect(reason)}"}
   end
 
   @doc """

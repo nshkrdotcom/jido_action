@@ -13,6 +13,7 @@ defmodule Jido.Action.AtomSafetyTest do
 
   alias Jido.Action.Tool
   alias Jido.Exec
+  alias JidoTest.TestActions.SchemaAction
 
   @moduletag :atom_safety
 
@@ -217,9 +218,9 @@ defmodule Jido.Action.AtomSafetyTest do
       atom_count_before = :erlang.system_info(:atom_count)
 
       # Calling this multiple times with unique strings WILL create atoms
-      {:ok, _atom1} = JidoTest.TestActions.SchemaAction.validate_custom("unique_atom_test_1")
-      {:ok, _atom2} = JidoTest.TestActions.SchemaAction.validate_custom("unique_atom_test_2")
-      {:ok, _atom3} = JidoTest.TestActions.SchemaAction.validate_custom("unique_atom_test_3")
+      {:ok, _atom1} = SchemaAction.validate_custom("unique_atom_test_1")
+      {:ok, _atom2} = SchemaAction.validate_custom("unique_atom_test_2")
+      {:ok, _atom3} = SchemaAction.validate_custom("unique_atom_test_3")
 
       atom_count_after = :erlang.system_info(:atom_count)
 
