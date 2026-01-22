@@ -50,10 +50,14 @@ defmodule Jido.Exec do
   require Logger
 
   @default_timeout 30000
+  @default_task_supervisor Jido.Action.TaskSupervisor
 
   # Helper functions to get configuration values with fallbacks
   defp get_default_timeout,
     do: Application.get_env(:jido_action, :default_timeout, @default_timeout)
+
+  defp get_task_supervisor(opts),
+    do: Keyword.get(opts, :task_supervisor, @default_task_supervisor)
 
   @type action :: module()
   @type params :: map()
@@ -86,6 +90,7 @@ defmodule Jido.Exec do
     - `:max_retries` - Maximum number of retry attempts (configurable via `:jido_action, :default_max_retries`).
     - `:backoff` - Initial backoff time in milliseconds, doubles with each retry (configurable via `:jido_action, :default_backoff`).
     - `:log_level` - Override the global Logger level for this specific action. Accepts #{inspect(Logger.levels())}.
+    - `:task_supervisor` - The Task.Supervisor to use for spawning async tasks (default: `Jido.Action.TaskSupervisor`). Useful for OTP instance isolation.
 
   ## Action Metadata in Context
 
@@ -188,7 +193,8 @@ defmodule Jido.Exec do
   or cancel the action.
 
   **Note**: This approach integrates with OTP by spawning tasks under a `Task.Supervisor`.
-  Make sure `{Task.Supervisor, name: Jido.Action.TaskSupervisor}` is part of your supervision tree.
+  Make sure `{Task.Supervisor, name: Jido.Action.TaskSupervisor}` is part of your supervision tree,
+  or pass a custom supervisor via the `:task_supervisor` option for OTP instance isolation.
 
   ## Parameters
 
@@ -454,10 +460,11 @@ defmodule Jido.Exec do
          when is_integer(timeout) and timeout > 0 do
       # Get the current process's group leader for IO routing
       current_gl = Process.group_leader()
+      task_supervisor = get_task_supervisor(opts)
 
       # Spawn task under supervisor using async_nolink
       task =
-        Task.Supervisor.async_nolink(Jido.Action.TaskSupervisor, fn ->
+        Task.Supervisor.async_nolink(task_supervisor, fn ->
           # Use the parent's group leader to ensure IO is properly captured
           Process.group_leader(self(), current_gl)
 

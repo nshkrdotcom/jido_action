@@ -12,10 +12,14 @@ defmodule Jido.Exec.Async do
   require Logger
 
   @default_timeout 5000
+  @default_task_supervisor Jido.Action.TaskSupervisor
 
   # Helper functions to get configuration values with fallbacks
   defp get_default_timeout,
     do: Application.get_env(:jido_action, :default_timeout, @default_timeout)
+
+  defp get_task_supervisor(opts),
+    do: Keyword.get(opts, :task_supervisor, @default_task_supervisor)
 
   @type action :: module()
   @type params :: map()
@@ -47,6 +51,7 @@ defmodule Jido.Exec.Async do
   - `params`: A map of input parameters for the Action.
   - `context`: A map providing additional context for the Action execution.
   - `opts`: Options controlling the execution (same as Jido.Exec.run/4).
+    - `:task_supervisor` - The Task.Supervisor to use (default: `Jido.Action.TaskSupervisor`).
 
   ## Returns
 
@@ -58,11 +63,12 @@ defmodule Jido.Exec.Async do
   def start(action, params \\ %{}, context \\ %{}, opts \\ []) do
     ref = make_ref()
     parent = self()
+    task_supervisor = get_task_supervisor(opts)
 
     # Start the task under the TaskSupervisor.
     # If the supervisor is not running, this will raise an error.
     {:ok, pid} =
-      Task.Supervisor.start_child(Jido.Action.TaskSupervisor, fn ->
+      Task.Supervisor.start_child(task_supervisor, fn ->
         result = Jido.Exec.run(action, params, context, opts)
         send(parent, {:action_async_result, ref, result})
         result
