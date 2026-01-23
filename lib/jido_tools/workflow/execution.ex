@@ -17,10 +17,14 @@ defmodule Jido.Tools.Workflow.Execution do
 
   defp reduce_step(step, {_status, current_params, results}, context, module) do
     case module.execute_step(step, current_params, context) do
-      {:ok, step_result} ->
+      {:ok, step_result} when is_map(step_result) ->
         updated_results = Map.merge(results, step_result)
         updated_params = Map.merge(current_params, step_result)
         {:cont, {:ok, updated_params, updated_results}}
+
+      {:ok, step_result} ->
+        {:halt,
+         {:error, %{type: :invalid_step_result, message: "Expected map, got: #{inspect(step_result)}"}}}
 
       {:error, reason} ->
         {:halt, {:error, reason}}
@@ -49,16 +53,17 @@ defmodule Jido.Tools.Workflow.Execution do
   end
 
   defp execute_instruction(instruction, params, context) do
-    {:ok, normalized} = Instruction.normalize_single(instruction)
+    case Instruction.normalize_single(instruction) do
+      {:ok, %Jido.Instruction{} = normalized} ->
+        run_normalized_instruction(normalized, params, context)
 
-    if is_struct(normalized, Jido.Instruction) do
-      run_normalized_instruction(normalized, params, context)
-    else
-      {:error,
-       %{
-         type: :invalid_instruction,
-         message: "Failed to normalize instruction: #{inspect(instruction)}"
-       }}
+      {:ok, other} ->
+        {:error,
+         %{type: :invalid_instruction, message: "Normalized to unexpected: #{inspect(other)}"}}
+
+      {:error, reason} ->
+        {:error,
+         %{type: :invalid_instruction, message: "Failed to normalize instruction: #{inspect(reason)}"}}
     end
   end
 
