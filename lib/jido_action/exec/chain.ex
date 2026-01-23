@@ -58,14 +58,8 @@ defmodule Jido.Exec.Chain do
     opts = Keyword.drop(opts, [:async, :context, :interrupt_check])
 
     chain_fun = fn ->
-      Enum.reduce_while(actions, {:ok, initial_params}, fn
-        action, {:ok, params} = _acc ->
-          if should_interrupt?(interrupt_check) do
-            Logger.info("Chain interrupted before action: #{inspect(action)}")
-            {:halt, {:interrupted, params}}
-          else
-            process_action(action, params, context, opts)
-          end
+      Enum.reduce_while(actions, {:ok, initial_params}, fn action, {:ok, params} = _acc ->
+        maybe_execute_action(action, params, context, opts, interrupt_check)
       end)
     end
 
@@ -75,6 +69,20 @@ defmodule Jido.Exec.Chain do
   @spec should_interrupt?(interrupt_check | nil) :: boolean()
   defp should_interrupt?(nil), do: false
   defp should_interrupt?(check) when is_function(check, 0), do: check.()
+
+  @spec maybe_execute_action(chain_action(), map(), map(), keyword(), interrupt_check | nil) ::
+          {:cont, ok_t()} | {:halt, chain_result()}
+  defp maybe_execute_action(action, params, context, opts, interrupt_check) do
+    case should_interrupt?(interrupt_check) do
+      true -> handle_interruption(action, params)
+      false -> process_action(action, params, context, opts)
+    end
+  end
+
+  defp handle_interruption(action, params) do
+    Logger.info("Chain interrupted before action: #{inspect(action)}")
+    {:halt, {:interrupted, params}}
+  end
 
   @spec process_action(chain_action(), map(), map(), keyword()) ::
           {:cont, ok_t()} | {:halt, chain_result()}

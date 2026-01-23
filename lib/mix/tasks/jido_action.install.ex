@@ -25,6 +25,8 @@ if Code.ensure_loaded?(Igniter.Mix.Task) do
 
     use Igniter.Mix.Task
 
+    alias Igniter.Project.Config
+
     @impl Igniter.Mix.Task
     def info(_argv, _composing_task) do
       %Igniter.Mix.Task.Info{
@@ -59,19 +61,19 @@ if Code.ensure_loaded?(Igniter.Mix.Task) do
 
     defp add_default_config(igniter) do
       igniter
-      |> Igniter.Project.Config.configure_new(
+      |> Config.configure_new(
         "config.exs",
         :jido_action,
         [:default_timeout],
         30_000
       )
-      |> Igniter.Project.Config.configure_new(
+      |> Config.configure_new(
         "config.exs",
         :jido_action,
         [:default_max_retries],
         1
       )
-      |> Igniter.Project.Config.configure_new(
+      |> Config.configure_new(
         "config.exs",
         :jido_action,
         [:default_backoff],

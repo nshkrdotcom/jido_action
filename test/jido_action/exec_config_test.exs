@@ -38,8 +38,10 @@ defmodule JidoTest.ExecConfigTest do
         defmodule ConfigTestAction do
           use Jido.Action, name: "config_test", description: "Config test action"
 
+          alias Jido.Action.Error
+
           def run(%{should_fail: true}, _context) do
-            {:error, Jido.Action.Error.execution_error("config test error")}
+            {:error, Error.execution_error("config test error")}
           end
 
           def run(params, _context), do: {:ok, params}
@@ -85,8 +87,10 @@ defmodule JidoTest.ExecConfigTest do
         defmodule AllConfigPathsAction do
           use Jido.Action, name: "all_config_paths", description: "Triggers all config paths"
 
+          alias Jido.Action.Error
+
           def run(%{attempt: attempt}, _context) when attempt < 2 do
-            {:error, Jido.Action.Error.execution_error("retry error")}
+            {:error, Error.execution_error("retry error")}
           end
 
           def run(params, _context), do: {:ok, params}

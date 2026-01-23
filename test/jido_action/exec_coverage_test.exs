@@ -11,6 +11,7 @@ defmodule JidoTest.ExecCoverageTest do
 
   alias Jido.Action.Error
   alias Jido.Exec
+  alias Jido.Exec.Validator
   alias JidoTest.TestActions.BasicAction
   alias JidoTest.TestActions.DelayAction
 
@@ -229,7 +230,7 @@ defmodule JidoTest.ExecCoverageTest do
       # Test with atom
       assert {:error, %Error.InvalidInputError{}} = Exec.normalize_context(:invalid_atom)
 
-      # Test with integer  
+      # Test with integer
       assert {:error, %Error.InvalidInputError{}} = Exec.normalize_context(123)
 
       # Test with binary
@@ -239,7 +240,7 @@ defmodule JidoTest.ExecCoverageTest do
     test "validate_action with module compilation failure" do
       # Test with non-existent module
       assert {:error, %Error.InvalidInputError{}} =
-               Jido.Exec.Validator.validate_action(NonExistentModule)
+               Validator.validate_action(NonExistentModule)
     end
 
     test "validate_action with module missing run/2" do
@@ -249,7 +250,7 @@ defmodule JidoTest.ExecCoverageTest do
       end
 
       assert {:error, %Error.InvalidInputError{}} =
-               Jido.Exec.Validator.validate_action(NoRunModule)
+               Validator.validate_action(NoRunModule)
     end
 
     test "validate_params with action missing validate_params/1" do
@@ -259,7 +260,7 @@ defmodule JidoTest.ExecCoverageTest do
       end
 
       assert {:error, %Error.InvalidInputError{}} =
-               Jido.Exec.Validator.validate_params(NoValidateParamsModule, %{})
+               Validator.validate_params(NoValidateParamsModule, %{})
     end
 
     test "validate_params with invalid return from validate_params/1" do
@@ -270,7 +271,7 @@ defmodule JidoTest.ExecCoverageTest do
       end
 
       assert {:error, %Error.InvalidInputError{}} =
-               Jido.Exec.Validator.validate_params(InvalidValidateReturnModule, %{})
+               Validator.validate_params(InvalidValidateReturnModule, %{})
     end
   end
 

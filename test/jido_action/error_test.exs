@@ -2,6 +2,7 @@ defmodule Jido.Action.ErrorTest do
   use ExUnit.Case, async: true
 
   alias Jido.Action.Error
+  alias Jido.Action.Error.Internal.UnknownError
 
   describe "error creation functions" do
     test "validation_error/2 creates InvalidInputError with details" do
@@ -204,20 +205,20 @@ defmodule Jido.Action.ErrorTest do
 
     test "Internal.UnknownError.exception/1 with all options" do
       error =
-        Error.Internal.UnknownError.exception(
+        UnknownError.exception(
           message: "unknown error",
           details: %{context: "test"}
         )
 
-      assert %Error.Internal.UnknownError{} = error
+      assert %UnknownError{} = error
       assert error.message == "unknown error"
       assert error.details == %{context: "test"}
     end
 
     test "Internal.UnknownError.exception/1 with defaults" do
-      error = Error.Internal.UnknownError.exception([])
+      error = UnknownError.exception([])
 
-      assert %Error.Internal.UnknownError{} = error
+      assert %UnknownError{} = error
       assert error.message == "Unknown error"
       assert error.details == %{}
     end

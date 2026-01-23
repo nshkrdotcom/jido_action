@@ -63,7 +63,6 @@ defmodule Jido.Tools.Workflow do
   """
 
   alias Jido.Action.Error
-  alias Jido.Instruction
 
   # Valid step types
   @valid_step_types [:step, :branch, :converge, :parallel]
@@ -139,6 +138,8 @@ defmodule Jido.Tools.Workflow do
 
           use Jido.Action, action_opts
 
+          alias Jido.Tools.Workflow.Execution
+
           # Store validated workflow options for later use - steps will be stored as module attribute
           @workflow_steps validated_workflow_opts[:workflow]
 
@@ -153,7 +154,7 @@ defmodule Jido.Tools.Workflow do
           @impl Jido.Action
           def run(params, context) do
             # Execute the workflow steps sequentially
-            execute_workflow(@workflow_steps, params, context)
+            Execution.execute_workflow(@workflow_steps, params, context, __MODULE__)
           end
 
           # Add workflow-specific functionality
@@ -197,31 +198,6 @@ defmodule Jido.Tools.Workflow do
             |> Map.put("parameters", Map.get(tool, "parameters_schema", %{}))
           end
 
-          # Helper function to execute the workflow steps
-          defp execute_workflow(steps, params, context) do
-            # This will hold the accumulated results and updated params as we go
-            initial_acc = {:ok, params, %{}}
-
-            # Fold over the steps, executing each one and accumulating results
-            Enum.reduce_while(steps, initial_acc, fn step, {_status, current_params, results} ->
-              case execute_step(step, current_params, context) do
-                {:ok, step_result} ->
-                  # Merge the step result into results and update params for next step
-                  updated_results = Map.merge(results, step_result)
-                  updated_params = Map.merge(current_params, step_result)
-                  {:cont, {:ok, updated_params, updated_results}}
-
-                {:error, reason} ->
-                  # Stop execution on error
-                  {:halt, {:error, reason}}
-              end
-            end)
-            |> case do
-              {:ok, _final_params, final_results} -> {:ok, final_results}
-              {:error, reason} -> {:error, reason}
-            end
-          end
-
           @doc """
           Default implementation for executing a workflow step.
 
@@ -229,106 +205,7 @@ defmodule Jido.Tools.Workflow do
           """
           @spec execute_step(tuple(), map(), map()) :: {:ok, any()} | {:error, any()}
           def execute_step(step, params, context) do
-            case step do
-              {:step, _metadata, [instruction]} ->
-                # Execute a single instruction
-                execute_instruction(instruction, params, context)
-
-              {:branch, metadata, [condition, true_branch, false_branch]} ->
-                # Evaluate the condition and take the appropriate branch
-                execute_branch(condition, true_branch, false_branch, params, context, metadata)
-
-              {:converge, _metadata, [instruction]} ->
-                # Execute a convergence point
-                execute_instruction(instruction, params, context)
-
-              {:parallel, _metadata, instructions} ->
-                # Execute instructions in parallel
-                execute_parallel(instructions, params, context)
-
-              _ ->
-                {:error, %{type: :invalid_step, message: "Unknown step type: #{inspect(step)}"}}
-            end
-          end
-
-          # Helper function to execute a single instruction
-          defp execute_instruction(instruction, params, context) do
-            # Normalize the instruction to a Jido.Instruction struct
-            {:ok, normalized} = Instruction.normalize_single(instruction)
-
-            if is_struct(normalized, Jido.Instruction) do
-              # Extract the action module
-              action = normalized.action
-
-              # Merge instruction params with current params
-              merged_params = Map.merge(params, normalized.params)
-
-              # Execute the action
-              case action.run(merged_params, context) do
-                {:ok, result} ->
-                  {:ok, result}
-
-                {:error, reason} ->
-                  {:error, reason}
-
-                other ->
-                  # Handle unexpected return values
-                  {:error,
-                   %{
-                     type: :invalid_result,
-                     message: "Action returned unexpected value: #{inspect(other)}"
-                   }}
-
-                  # Handle unexpected return from normalize
-              end
-            else
-              {:error,
-               %{
-                 type: :invalid_instruction,
-                 message: "Failed to normalize instruction: #{inspect(instruction)}"
-               }}
-            end
-          end
-
-          # Helper function to execute a branch - simpler version that works with static conditions
-          defp execute_branch(condition, true_branch, false_branch, params, context, metadata)
-               when is_boolean(condition) do
-            if condition do
-              execute_step(true_branch, params, context)
-            else
-              execute_step(false_branch, params, context)
-            end
-          end
-
-          # Default branch implementation for conditions we don't specifically handle
-          defp execute_branch(
-                 _condition,
-                 _true_branch,
-                 _false_branch,
-                 _params,
-                 _context,
-                 metadata
-               ) do
-            {:error,
-             %{
-               type: :invalid_condition,
-               message: "Invalid or unhandled condition in branch #{inspect(metadata)}"
-             }}
-          end
-
-          # Helper function to execute steps in parallel
-          defp execute_parallel(instructions, params, context) do
-            # Placeholder implementation - in a real implementation,
-            # this would execute the instructions concurrently
-            results =
-              Enum.map(instructions, fn instruction ->
-                case execute_step(instruction, params, context) do
-                  {:ok, result} -> result
-                  {:error, reason} -> %{error: reason}
-                end
-              end)
-
-            {:ok, %{parallel_results: results}}
+            Execution.execute_step(step, params, context, __MODULE__)
           end
 
           # Allow execute_step to be overridden

@@ -256,39 +256,11 @@ defmodule Jido.Instruction do
   end
 
   def new(%{} = attrs) do
-    # Preserve backwards compatibility for missing action
-    if Map.has_key?(attrs, :action) do
-      # Check for invalid action early for backwards compatibility
-      action = Map.get(attrs, :action)
-
-      if is_atom(action) do
-        # Apply defaults - coerce nil values before Zoi.parse
-        attrs_with_defaults =
-          attrs
-          |> Map.put_new_lazy(:id, &Uniq.UUID.uuid7/0)
-          |> Map.update(:params, %{}, fn v -> if is_nil(v), do: %{}, else: v end)
-          |> Map.update(:context, %{}, fn v -> if is_nil(v), do: %{}, else: v end)
-          |> Map.update(:opts, [], fn v -> if is_nil(v), do: [], else: v end)
-
-        # Validate with Zoi
-        case Zoi.parse(@schema, attrs_with_defaults) do
-          {:ok, validated_struct} ->
-            {:ok, validated_struct}
-
-          {:error, zoi_errors} ->
-            error =
-              Error.validation_error(
-                "Invalid instruction configuration",
-                %{errors: format_zoi_errors(zoi_errors)}
-              )
-
-            {:error, error}
-        end
-      else
-        {:error, :invalid_action}
-      end
-    else
-      {:error, :missing_action}
+    with :ok <- validate_action_present(attrs),
+         :ok <- validate_action_is_atom(attrs) do
+      attrs
+      |> apply_defaults()
+      |> parse_with_zoi()
     end
   end
 
@@ -442,26 +414,8 @@ defmodule Jido.Instruction do
 
   # Handle lists by recursively normalizing each element
   def normalize(instructions, context, opts) when is_list(instructions) do
-    # Check for nested lists first
-    if Enum.any?(instructions, &is_list/1) do
-      {:error,
-       Error.execution_error("Invalid instruction format: nested lists are not allowed", %{
-         instructions: instructions
-       })}
-    else
-      context = context || %{}
-
-      instructions
-      |> Enum.reduce_while({:ok, []}, fn instruction, {:ok, acc} ->
-        case normalize_single(instruction, context, opts) do
-          {:ok, normalized} -> {:cont, {:ok, [normalized | acc]}}
-          error -> {:halt, error}
-        end
-      end)
-      |> case do
-        {:ok, list} -> {:ok, Enum.reverse(list)}
-        error -> error
-      end
+    with :ok <- validate_no_nested_lists(instructions) do
+      normalize_instruction_list(instructions, context || %{}, opts)
     end
   end
 
@@ -547,6 +501,65 @@ defmodule Jido.Instruction do
   end
 
   # Private helpers
+
+  # Helpers for new/1
+  defp validate_action_present(attrs) do
+    if Map.has_key?(attrs, :action), do: :ok, else: {:error, :missing_action}
+  end
+
+  defp validate_action_is_atom(attrs) do
+    if is_atom(Map.get(attrs, :action)), do: :ok, else: {:error, :invalid_action}
+  end
+
+  defp apply_defaults(attrs) do
+    attrs
+    |> Map.put_new_lazy(:id, &Uniq.UUID.uuid7/0)
+    |> Map.update(:params, %{}, fn v -> if is_nil(v), do: %{}, else: v end)
+    |> Map.update(:context, %{}, fn v -> if is_nil(v), do: %{}, else: v end)
+    |> Map.update(:opts, [], fn v -> if is_nil(v), do: [], else: v end)
+  end
+
+  defp parse_with_zoi(attrs_with_defaults) do
+    case Zoi.parse(@schema, attrs_with_defaults) do
+      {:ok, validated_struct} ->
+        {:ok, validated_struct}
+
+      {:error, zoi_errors} ->
+        error =
+          Error.validation_error(
+            "Invalid instruction configuration",
+            %{errors: format_zoi_errors(zoi_errors)}
+          )
+
+        {:error, error}
+    end
+  end
+
+  # Helpers for normalize/3
+  defp validate_no_nested_lists(instructions) do
+    if Enum.any?(instructions, &is_list/1) do
+      {:error,
+       Error.execution_error("Invalid instruction format: nested lists are not allowed", %{
+         instructions: instructions
+       })}
+    else
+      :ok
+    end
+  end
+
+  defp normalize_instruction_list(instructions, context, opts) do
+    instructions
+    |> Enum.reduce_while({:ok, []}, fn instruction, {:ok, acc} ->
+      case normalize_single(instruction, context, opts) do
+        {:ok, normalized} -> {:cont, {:ok, [normalized | acc]}}
+        error -> {:halt, error}
+      end
+    end)
+    |> then(fn
+      {:ok, list} -> {:ok, Enum.reverse(list)}
+      error -> error
+    end)
+  end
 
   defp format_zoi_errors(errors) when is_list(errors) do
     Enum.map(errors, fn

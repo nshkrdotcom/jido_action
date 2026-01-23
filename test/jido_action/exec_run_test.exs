@@ -7,6 +7,7 @@ defmodule JidoTest.ExecRunTest do
 
   alias Jido.Action.Error
   alias Jido.Exec
+  alias Jido.Exec.Validator
   alias JidoTest.TestActions.BasicAction
   alias JidoTest.TestActions.DelayAction
   alias JidoTest.TestActions.ErrorAction
@@ -261,7 +262,7 @@ defmodule JidoTest.ExecRunTest do
     end
 
     test "returns :ok for valid action" do
-      assert :ok = Jido.Exec.Validator.validate_action(BasicAction)
+      assert :ok = Validator.validate_action(BasicAction)
     end
 
     test "returns error for action without run/2" do
@@ -269,13 +270,13 @@ defmodule JidoTest.ExecRunTest do
               %Jido.Action.Error.InvalidInputError{
                 message:
                   "Module JidoTest.ExecRunTest.NotAAction is not a valid action: missing run/2 function"
-              }} = Jido.Exec.Validator.validate_action(NotAAction)
+              }} = Validator.validate_action(NotAAction)
     end
   end
 
   describe "validate_params/2" do
     test "returns validated params for valid params" do
-      assert {:ok, %{value: 5}} = Jido.Exec.Validator.validate_params(BasicAction, %{value: 5})
+      assert {:ok, %{value: 5}} = Validator.validate_params(BasicAction, %{value: 5})
     end
 
     test "returns error for invalid params" do
@@ -283,7 +284,7 @@ defmodule JidoTest.ExecRunTest do
       # The error will be an invalid_action error because we're using function_exported? in Exec
       # But this test is just verifying that invalid params return an error
       {:error, %_{} = error} =
-        Jido.Exec.Validator.validate_params(BasicAction, %{invalid: "params"})
+        Validator.validate_params(BasicAction, %{invalid: "params"})
 
       assert is_exception(error)
     end
