@@ -1,6 +1,7 @@
 defmodule JidoTest.Tools.WorkflowTest do
   use JidoTest.ActionCase, async: true
 
+  alias Jido.Action.Error
   alias Jido.Tools.Workflow
 
   # Define a simple LogAction for testing
@@ -246,7 +247,7 @@ defmodule JidoTest.Tools.WorkflowTest do
       context = %{}
 
       assert {:error, error} = ErrorWorkflow.run(params, context)
-      assert error == "intentional failure"
+      assert %Error.ExecutionFailureError{message: "intentional failure"} = error
     end
 
     test "handles invalid step types" do

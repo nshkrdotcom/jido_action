@@ -1,6 +1,8 @@
 defmodule Jido.Tools.Workflow.Execution do
   @moduledoc false
 
+  alias Jido.Action.Error
+  alias Jido.Exec
   alias Jido.Instruction
 
   @spec execute_workflow(list(), map(), map(), module()) :: {:ok, map()} | {:error, any()}
@@ -24,7 +26,8 @@ defmodule Jido.Tools.Workflow.Execution do
 
       {:ok, step_result} ->
         {:halt,
-         {:error, %{type: :invalid_step_result, message: "Expected map, got: #{inspect(step_result)}"}}}
+         {:error,
+          %{type: :invalid_step_result, message: "Expected map, got: #{inspect(step_result)}"}}}
 
       {:error, reason} ->
         {:halt, {:error, reason}}
@@ -44,8 +47,8 @@ defmodule Jido.Tools.Workflow.Execution do
       {:converge, _metadata, [instruction]} ->
         execute_instruction(instruction, params, context)
 
-      {:parallel, _metadata, instructions} ->
-        execute_parallel(instructions, params, context, module)
+      {:parallel, metadata, instructions} ->
+        execute_parallel(instructions, params, context, metadata, module)
 
       _ ->
         {:error, %{type: :invalid_step, message: "Unknown step type: #{inspect(step)}"}}
@@ -54,36 +57,36 @@ defmodule Jido.Tools.Workflow.Execution do
 
   defp execute_instruction(instruction, params, context) do
     case Instruction.normalize_single(instruction) do
-      {:ok, %Jido.Instruction{} = normalized} ->
+      {:ok, %Instruction{} = normalized} ->
         run_normalized_instruction(normalized, params, context)
-
-      {:ok, other} ->
-        {:error,
-         %{type: :invalid_instruction, message: "Normalized to unexpected: #{inspect(other)}"}}
 
       {:error, reason} ->
         {:error,
-         %{type: :invalid_instruction, message: "Failed to normalize instruction: #{inspect(reason)}"}}
+         %{
+           type: :invalid_instruction,
+           message: "Failed to normalize instruction: #{inspect(reason)}"
+         }}
     end
   end
 
-  defp run_normalized_instruction(normalized, params, context) do
-    action = normalized.action
+  defp run_normalized_instruction(%Instruction{} = normalized, params, context) do
     merged_params = Map.merge(params, normalized.params)
+    merged_context = Map.merge(normalized.context, context)
 
-    case action.run(merged_params, context) do
+    instruction = %{normalized | params: merged_params, context: merged_context}
+
+    case Exec.run(instruction) do
       {:ok, result} ->
+        {:ok, result}
+
+      {:ok, result, _other} ->
         {:ok, result}
 
       {:error, reason} ->
         {:error, reason}
 
-      other ->
-        {:error,
-         %{
-           type: :invalid_result,
-           message: "Action returned unexpected value: #{inspect(other)}"
-         }}
+      {:error, reason, _other} ->
+        {:error, reason}
     end
   end
 
@@ -112,11 +115,34 @@ defmodule Jido.Tools.Workflow.Execution do
      }}
   end
 
-  defp execute_parallel(instructions, params, context, module) do
+  defp execute_parallel(instructions, params, context, metadata, module) do
+    max_concurrency = Keyword.get(metadata, :max_concurrency, System.schedulers_online())
+
+    stream_opts = [
+      ordered: true,
+      max_concurrency: max_concurrency,
+      timeout: :infinity,
+      on_timeout: :kill_task
+    ]
+
     results =
-      Enum.map(instructions, &execute_parallel_instruction(&1, params, context, module))
+      Task.Supervisor.async_stream_nolink(
+        Jido.Action.TaskSupervisor,
+        instructions,
+        fn instruction ->
+          execute_parallel_instruction(instruction, params, context, module)
+        end,
+        stream_opts
+      )
+      |> Enum.map(&handle_parallel_result/1)
 
     {:ok, %{parallel_results: results}}
+  end
+
+  defp handle_parallel_result({:ok, value}), do: value
+
+  defp handle_parallel_result({:exit, reason}) do
+    %{error: Error.execution_error("Parallel task exited", %{reason: reason})}
   end
 
   defp execute_parallel_instruction(instruction, params, context, module) do
@@ -124,5 +150,11 @@ defmodule Jido.Tools.Workflow.Execution do
       {:ok, result} -> result
       {:error, reason} -> %{error: reason}
     end
+  rescue
+    e ->
+      %{error: Error.execution_error("Parallel step raised", %{exception: e})}
+  catch
+    kind, reason ->
+      %{error: Error.execution_error("Parallel step caught", %{kind: kind, reason: reason})}
   end
 end
