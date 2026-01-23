@@ -133,7 +133,7 @@ defmodule Jido.Tools.Workflow.Execution do
     ]
 
     results =
-      Task.Supervisor.async_stream_nolink(
+      Task.Supervisor.async_stream(
         task_sup,
         instructions,
         fn instruction ->
@@ -141,14 +141,14 @@ defmodule Jido.Tools.Workflow.Execution do
         end,
         stream_opts
       )
-      |> Enum.map(&handle_parallel_result/1)
+      |> Enum.map(&handle_stream_result/1)
 
     {:ok, %{parallel_results: results}}
   end
 
-  defp handle_parallel_result({:ok, value}), do: value
+  defp handle_stream_result({:ok, value}), do: value
 
-  defp handle_parallel_result({:exit, reason}) do
+  defp handle_stream_result({:exit, reason}) do
     %{error: Error.execution_error("Parallel task exited", %{reason: reason})}
   end
 
