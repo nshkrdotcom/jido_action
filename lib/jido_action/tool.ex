@@ -16,6 +16,8 @@ defmodule Jido.Action.Tool do
   - `execute_action/3` - Executes an action with schema-based param conversion
   """
 
+  alias Jido.Action.Schema
+
   @type tool :: %{
           name: String.t(),
           description: String.t(),
@@ -83,46 +85,59 @@ defmodule Jido.Action.Tool do
   Converts string keys to atom keys and handles type conversion based on schema.
   """
   def convert_params_using_schema(params, schema) do
-    schema_keys = Jido.Action.Schema.known_keys(schema)
+    schema_keys = Schema.known_keys(schema)
 
     Enum.reduce(schema_keys, %{}, fn key, acc ->
-      string_key = to_string(key)
-
-      if Map.has_key?(params, string_key) do
-        value = params[string_key]
-
-        # For NimbleOptions schemas, handle type conversion
-        converted_value =
-          if is_list(schema) do
-            schema_entry = Keyword.get(schema, key, [])
-            type = Keyword.get(schema_entry, :type)
-
-            case {type, value} do
-              {:float, val} when is_binary(val) ->
-                case Float.parse(val) do
-                  {num, _} -> num
-                  :error -> val
-                end
-
-              {:integer, val} when is_binary(val) ->
-                case Integer.parse(val) do
-                  {num, _} -> num
-                  :error -> val
-                end
-
-              _ ->
-                value
-            end
-          else
-            # For Zoi schemas, let the validation handle conversion
-            value
-          end
-
-        Map.put(acc, key, converted_value)
-      else
-        acc
-      end
+      convert_param_for_key(params, schema, key, acc)
     end)
+  end
+
+  defp convert_param_for_key(params, schema, key, acc) do
+    string_key = to_string(key)
+
+    case Map.fetch(params, string_key) do
+      {:ok, value} ->
+        converted_value = convert_value_with_schema(schema, key, value)
+        Map.put(acc, key, converted_value)
+
+      :error ->
+        acc
+    end
+  end
+
+  defp convert_value_with_schema(schema, key, value) when is_list(schema) do
+    schema_entry = Keyword.get(schema, key, [])
+    type = Keyword.get(schema_entry, :type)
+    coerce_value(type, value)
+  end
+
+  defp convert_value_with_schema(_schema, _key, value) do
+    # For Zoi schemas, let the validation handle conversion
+    value
+  end
+
+  defp coerce_value(:float, value) when is_binary(value) do
+    parse_float(value)
+  end
+
+  defp coerce_value(:integer, value) when is_binary(value) do
+    parse_integer(value)
+  end
+
+  defp coerce_value(_type, value), do: value
+
+  defp parse_float(value) do
+    case Float.parse(value) do
+      {num, _} -> num
+      :error -> value
+    end
+  end
+
+  defp parse_integer(value) do
+    case Integer.parse(value) do
+      {num, _} -> num
+      :error -> value
+    end
   end
 
   @doc """
@@ -136,8 +151,8 @@ defmodule Jido.Action.Tool do
 
     A map representing the parameters schema in a format compatible with LangChain.
   """
-  @spec build_parameters_schema(Jido.Action.Schema.t()) :: map()
+  @spec build_parameters_schema(Schema.t()) :: map()
   def build_parameters_schema(schema) do
-    Jido.Action.Schema.to_json_schema(schema)
+    Schema.to_json_schema(schema)
   end
 end

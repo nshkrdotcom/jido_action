@@ -144,17 +144,22 @@ defmodule Jido.Plan do
   @spec build(keyword(), map()) :: {:ok, t()} | {:error, term()}
   def build(plan_def, context \\ %{}) when is_list(plan_def) do
     if Keyword.keyword?(plan_def) do
-      plan = new(context: context)
-
-      plan_def
-      |> Enum.reduce_while({:ok, plan}, fn {step_name, step_def}, {:ok, acc_plan} ->
-        case add_step_from_def(acc_plan, step_name, step_def) do
-          {:ok, updated_plan} -> {:cont, {:ok, updated_plan}}
-          {:error, _} = error -> {:halt, error}
-        end
-      end)
+      do_build_plan(plan_def, context)
     else
       {:error, Error.validation_error("Plan must be a keyword list", %{got: plan_def})}
+    end
+  end
+
+  defp do_build_plan(plan_def, context) do
+    plan = new(context: context)
+
+    Enum.reduce_while(plan_def, {:ok, plan}, &reduce_step/2)
+  end
+
+  defp reduce_step({step_name, step_def}, {:ok, acc_plan}) do
+    case add_step_from_def(acc_plan, step_name, step_def) do
+      {:ok, updated_plan} -> {:cont, {:ok, updated_plan}}
+      {:error, _} = error -> {:halt, error}
     end
   end
 
