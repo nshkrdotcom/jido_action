@@ -84,7 +84,7 @@ defmodule Jido.Action.AtomSafetyTest do
   end
 
   describe "Tool.convert_params_using_schema atom safety" do
-    test "only converts to known schema atoms" do
+    test "only converts to known schema atoms and preserves unknown keys as strings" do
       schema = [
         known_param: [type: :string],
         another_param: [type: :integer]
@@ -96,9 +96,9 @@ defmodule Jido.Action.AtomSafetyTest do
       params = %{
         "known_param" => "value1",
         "another_param" => 42,
-        "unknown_param_1" => "ignored",
-        "unknown_param_2" => "ignored",
-        "unknown_param_3" => "ignored"
+        "unknown_param_1" => "preserved",
+        "unknown_param_2" => "preserved",
+        "unknown_param_3" => "preserved"
       }
 
       result = Tool.convert_params_using_schema(params, schema)
@@ -111,8 +111,12 @@ defmodule Jido.Action.AtomSafetyTest do
       assert atom_count_after - atom_count_before < 100,
              "Created #{atom_count_after - atom_count_before} atoms (expected < 100)"
 
-      # Only known keys should be converted
-      assert Map.keys(result) |> Enum.sort() == [:another_param, :known_param]
+      # Known keys are converted to atoms, unknown keys remain as strings (open validation)
+      atom_keys = result |> Map.keys() |> Enum.filter(&is_atom/1) |> Enum.sort()
+      string_keys = result |> Map.keys() |> Enum.filter(&is_binary/1) |> Enum.sort()
+
+      assert atom_keys == [:another_param, :known_param]
+      assert string_keys == ["unknown_param_1", "unknown_param_2", "unknown_param_3"]
     end
 
     test "does not create atoms from arbitrary string keys" do
@@ -123,7 +127,7 @@ defmodule Jido.Action.AtomSafetyTest do
       # Create params with one valid key and many invalid keys (50 unique keys)
       params =
         Map.new(1..50, fn i ->
-          {"malicious_key_#{i}_#{:rand.uniform(1_000_000)}", "ignored"}
+          {"malicious_key_#{i}_#{:rand.uniform(1_000_000)}", "preserved"}
         end)
         |> Map.put("param", "valid")
 
@@ -134,8 +138,12 @@ defmodule Jido.Action.AtomSafetyTest do
       # Should not grow proportionally to number of extra keys
       assert atom_count_after - atom_count_before < 20
 
-      # Only schema key should be converted
-      assert Map.keys(result) == [:param]
+      # Schema key should be converted to atom, unknown keys preserved as strings
+      atom_keys = result |> Map.keys() |> Enum.filter(&is_atom/1)
+      string_keys = result |> Map.keys() |> Enum.filter(&is_binary/1)
+
+      assert atom_keys == [:param]
+      assert length(string_keys) == 50
     end
   end
 
@@ -184,8 +192,12 @@ defmodule Jido.Action.AtomSafetyTest do
       assert atom_count_after - atom_count_before < 500,
              "Potential atom leak: #{atom_count_after - atom_count_before} atoms created from 5,000 malicious keys"
 
-      # Only schema keys should be present
-      assert Map.keys(result) == [:legit_param]
+      # Schema key should be atom, unknown keys preserved as strings (still atom-safe)
+      atom_keys = result |> Map.keys() |> Enum.filter(&is_atom/1)
+      string_keys = result |> Map.keys() |> Enum.filter(&is_binary/1)
+
+      assert atom_keys == [:legit_param]
+      assert length(string_keys) == 5_000
     end
 
     test "large params map with Zoi schema" do
@@ -207,7 +219,12 @@ defmodule Jido.Action.AtomSafetyTest do
       assert atom_count_after - atom_count_before < 50,
              "Zoi schema created #{atom_count_after - atom_count_before} atoms"
 
-      assert Map.keys(result) == [:legit]
+      # Schema key should be atom, unknown keys preserved as strings
+      atom_keys = result |> Map.keys() |> Enum.filter(&is_atom/1)
+      string_keys = result |> Map.keys() |> Enum.filter(&is_binary/1)
+
+      assert atom_keys == [:legit]
+      assert length(string_keys) == 1_000
     end
   end
 

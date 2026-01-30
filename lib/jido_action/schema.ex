@@ -221,10 +221,50 @@ defmodule Jido.Action.Schema do
 
   defp nimble_type_to_json(:string), do: %{"type" => "string"}
   defp nimble_type_to_json(:integer), do: %{"type" => "integer"}
-  defp nimble_type_to_json(:number), do: %{"type" => "integer"}
+  defp nimble_type_to_json(:number), do: %{"type" => "number"}
   defp nimble_type_to_json(:boolean), do: %{"type" => "boolean"}
   defp nimble_type_to_json(:float), do: %{"type" => "number"}
-  defp nimble_type_to_json({:list, _}), do: %{"type" => "array"}
+  defp nimble_type_to_json(:non_neg_integer), do: %{"type" => "integer", "minimum" => 0}
+  defp nimble_type_to_json(:pos_integer), do: %{"type" => "integer", "minimum" => 1}
+
+  defp nimble_type_to_json(:timeout) do
+    %{
+      "oneOf" => [
+        %{"type" => "integer", "minimum" => 0},
+        %{"type" => "string", "enum" => ["infinity"]}
+      ]
+    }
+  end
+
+  defp nimble_type_to_json({:list, subtype}) do
+    %{"type" => "array", "items" => nimble_type_to_json(subtype)}
+  end
+
+  defp nimble_type_to_json({:in, choices}) when is_list(choices) do
+    inferred_type =
+      cond do
+        Enum.all?(choices, &is_integer/1) -> "integer"
+        Enum.all?(choices, &is_float/1) -> "number"
+        Enum.all?(choices, &is_number/1) -> "number"
+        Enum.all?(choices, &is_boolean/1) -> "boolean"
+        Enum.all?(choices, &(is_binary(&1) or is_atom(&1))) -> "string"
+        true -> nil
+      end
+
+    enum_values =
+      if inferred_type == "string" do
+        Enum.map(choices, fn
+          v when is_atom(v) -> Atom.to_string(v)
+          v -> v
+        end)
+      else
+        choices
+      end
+
+    base = %{"enum" => enum_values}
+    if inferred_type, do: Map.put(base, "type", inferred_type), else: base
+  end
+
   defp nimble_type_to_json(:keyword_list), do: %{"type" => "object"}
   defp nimble_type_to_json(:map), do: %{"type" => "object"}
   defp nimble_type_to_json({:map, _}), do: %{"type" => "object"}
