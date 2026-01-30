@@ -48,6 +48,7 @@ defmodule Jido.Exec.Async do
   - `params`: A map of input parameters for the Action.
   - `context`: A map providing additional context for the Action execution.
   - `opts`: Options controlling the execution (same as Jido.Exec.run/4).
+    - `:jido` - Optional instance name for isolation. Routes execution through instance-scoped supervisors.
 
   ## Returns
 

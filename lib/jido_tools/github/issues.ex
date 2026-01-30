@@ -14,18 +14,20 @@ defmodule Jido.Tools.Github.Issues do
       tags: ["github", "issues", "api"],
       vsn: "1.0.0",
       schema: [
-        client: [type: :any, description: "The Github client"],
-        owner: [type: :string, description: "The owner of the repository"],
-        repo: [type: :string, description: "The name of the repository"],
-        title: [type: :string, description: "The title of the issue"],
-        body: [type: :string, description: "The body of the issue"],
-        assignee: [type: :string, description: "The assignee of the issue"],
-        milestone: [type: :string, description: "The milestone of the issue"],
-        labels: [type: :array, description: "The labels of the issue"]
+        client: [type: :any, doc: "The Github client"],
+        owner: [type: :string, doc: "The owner of the repository"],
+        repo: [type: :string, doc: "The name of the repository"],
+        title: [type: :string, doc: "The title of the issue"],
+        body: [type: :string, doc: "The body of the issue"],
+        assignee: [type: :string, doc: "The assignee of the issue"],
+        milestone: [type: :string, doc: "The milestone of the issue"],
+        labels: [type: {:list, :string}, doc: "The labels of the issue"]
       ]
 
     @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
-    def run(params, _context) do
+    def run(params, context) do
+      client = get_client(params, context)
+
       body = %{
         title: params.title,
         body: params.body,
@@ -34,7 +36,7 @@ defmodule Jido.Tools.Github.Issues do
         labels: params.labels
       }
 
-      result = Tentacat.Issues.create(params.client, params.owner, params.repo, body)
+      result = Tentacat.Issues.create(client, params.owner, params.repo, body)
 
       {:ok,
        %{
@@ -42,6 +44,10 @@ defmodule Jido.Tools.Github.Issues do
          data: result,
          raw: result
        }}
+    end
+
+    defp get_client(params, context) do
+      params[:client] || context[:client] || get_in(context, [:tool_context, :client])
     end
   end
 
@@ -55,31 +61,33 @@ defmodule Jido.Tools.Github.Issues do
       tags: ["github", "issues", "api"],
       vsn: "1.0.0",
       schema: [
-        client: [type: :any, description: "The Github client"],
-        owner: [type: :string, description: "The owner of the repository"],
-        repo: [type: :string, description: "The name of the repository"],
-        state: [type: :string, description: "The state of the issues (open, closed, all)"],
-        assignee: [type: :string, description: "Filter by assignee"],
-        creator: [type: :string, description: "Filter by creator"],
-        labels: [type: :string, description: "Filter by labels (comma-separated)"],
-        sort: [type: :string, description: "Sort by (created, updated, comments)"],
-        direction: [type: :string, description: "Sort direction (asc, desc)"],
-        since: [type: :string, description: "Only show issues updated after this time"]
+        client: [type: :any, doc: "The Github client"],
+        owner: [type: :string, doc: "The owner of the repository"],
+        repo: [type: :string, doc: "The name of the repository"],
+        state: [type: :string, doc: "The state of the issues (open, closed, all)"],
+        assignee: [type: :string, doc: "Filter by assignee"],
+        creator: [type: :string, doc: "Filter by creator"],
+        labels: [type: :string, doc: "Filter by labels (comma-separated)"],
+        sort: [type: :string, doc: "Sort by (created, updated, comments)"],
+        direction: [type: :string, doc: "Sort direction (asc, desc)"],
+        since: [type: :string, doc: "Only show issues updated after this time"]
       ]
 
     @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
-    def run(params, _context) do
+    def run(params, context) do
+      client = get_client(params, context)
+
       filters = %{
-        state: params.state,
-        assignee: params.assignee,
-        creator: params.creator,
-        labels: params.labels,
-        sort: params.sort,
-        direction: params.direction,
-        since: params.since
+        state: params[:state],
+        assignee: params[:assignee],
+        creator: params[:creator],
+        labels: params[:labels],
+        sort: params[:sort],
+        direction: params[:direction],
+        since: params[:since]
       }
 
-      result = Tentacat.Issues.filter(params.client, params.owner, params.repo, filters)
+      result = Tentacat.Issues.filter(client, params.owner, params.repo, filters)
 
       {:ok,
        %{
@@ -87,6 +95,10 @@ defmodule Jido.Tools.Github.Issues do
          data: result,
          raw: result
        }}
+    end
+
+    defp get_client(params, context) do
+      params[:client] || context[:client] || get_in(context, [:tool_context, :client])
     end
   end
 
@@ -100,15 +112,16 @@ defmodule Jido.Tools.Github.Issues do
       tags: ["github", "issues", "api"],
       vsn: "1.0.0",
       schema: [
-        client: [type: :any, description: "The Github client"],
-        owner: [type: :string, description: "The owner of the repository"],
-        repo: [type: :string, description: "The name of the repository"],
-        number: [type: :integer, description: "The issue number"]
+        client: [type: :any, doc: "The Github client"],
+        owner: [type: :string, doc: "The owner of the repository"],
+        repo: [type: :string, doc: "The name of the repository"],
+        number: [type: :integer, doc: "The issue number"]
       ]
 
     @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
-    def run(params, _context) do
-      result = Tentacat.Issues.find(params.client, params.owner, params.repo, params.number)
+    def run(params, context) do
+      client = get_client(params, context)
+      result = Tentacat.Issues.find(client, params.owner, params.repo, params.number)
 
       {:ok,
        %{
@@ -116,6 +129,10 @@ defmodule Jido.Tools.Github.Issues do
          data: result,
          raw: result
        }}
+    end
+
+    defp get_client(params, context) do
+      params[:client] || context[:client] || get_in(context, [:tool_context, :client])
     end
   end
 
@@ -129,14 +146,15 @@ defmodule Jido.Tools.Github.Issues do
       tags: ["github", "issues", "api"],
       vsn: "1.0.0",
       schema: [
-        client: [type: :any, description: "The Github client"],
-        owner: [type: :string, description: "The owner of the repository"],
-        repo: [type: :string, description: "The name of the repository"]
+        client: [type: :any, doc: "The Github client"],
+        owner: [type: :string, doc: "The owner of the repository"],
+        repo: [type: :string, doc: "The name of the repository"]
       ]
 
     @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
-    def run(params, _context) do
-      result = Tentacat.Issues.list(params.client, params.owner, params.repo)
+    def run(params, context) do
+      client = get_client(params, context)
+      result = Tentacat.Issues.list(client, params.owner, params.repo)
 
       {:ok,
        %{
@@ -144,6 +162,10 @@ defmodule Jido.Tools.Github.Issues do
          data: result,
          raw: result
        }}
+    end
+
+    defp get_client(params, context) do
+      params[:client] || context[:client] || get_in(context, [:tool_context, :client])
     end
   end
 
@@ -157,31 +179,33 @@ defmodule Jido.Tools.Github.Issues do
       tags: ["github", "issues", "api"],
       vsn: "1.0.0",
       schema: [
-        client: [type: :any, description: "The Github client"],
-        owner: [type: :string, description: "The owner of the repository"],
-        repo: [type: :string, description: "The name of the repository"],
-        number: [type: :integer, description: "The issue number"],
-        title: [type: :string, description: "The new title of the issue"],
-        body: [type: :string, description: "The new body of the issue"],
-        assignee: [type: :string, description: "The new assignee of the issue"],
-        state: [type: :string, description: "The new state of the issue (open, closed)"],
-        milestone: [type: :string, description: "The new milestone of the issue"],
-        labels: [type: :array, description: "The new labels of the issue"]
+        client: [type: :any, doc: "The Github client"],
+        owner: [type: :string, doc: "The owner of the repository"],
+        repo: [type: :string, doc: "The name of the repository"],
+        number: [type: :integer, doc: "The issue number"],
+        title: [type: :string, doc: "The new title of the issue"],
+        body: [type: :string, doc: "The new body of the issue"],
+        assignee: [type: :string, doc: "The new assignee of the issue"],
+        state: [type: :string, doc: "The new state of the issue (open, closed)"],
+        milestone: [type: :string, doc: "The new milestone of the issue"],
+        labels: [type: {:list, :string}, doc: "The new labels of the issue"]
       ]
 
     @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
-    def run(params, _context) do
+    def run(params, context) do
+      client = get_client(params, context)
+
       body = %{
-        title: params.title,
-        body: params.body,
-        assignee: params.assignee,
-        state: params.state,
-        milestone: params.milestone,
-        labels: params.labels
+        title: params[:title],
+        body: params[:body],
+        assignee: params[:assignee],
+        state: params[:state],
+        milestone: params[:milestone],
+        labels: params[:labels]
       }
 
       result =
-        Tentacat.Issues.update(params.client, params.owner, params.repo, params.number, body)
+        Tentacat.Issues.update(client, params.owner, params.repo, params.number, body)
 
       {:ok,
        %{
@@ -189,6 +213,10 @@ defmodule Jido.Tools.Github.Issues do
          data: result,
          raw: result
        }}
+    end
+
+    defp get_client(params, context) do
+      params[:client] || context[:client] || get_in(context, [:tool_context, :client])
     end
   end
 end
