@@ -3,6 +3,14 @@ defmodule Jido.Action.SchemaJsonTest do
 
   alias Jido.Action.Schema
 
+  describe "to_json_schema/1 - empty schema" do
+    test "empty schema returns valid JSON Schema object" do
+      result = Schema.to_json_schema([])
+
+      assert result == %{"type" => "object", "properties" => %{}, "required" => []}
+    end
+  end
+
   describe "to_json_schema/1 - list types with items" do
     test "list of strings includes items typing" do
       schema = [tags: [type: {:list, :string}]]

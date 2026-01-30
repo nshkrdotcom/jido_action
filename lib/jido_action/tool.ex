@@ -131,6 +131,10 @@ defmodule Jido.Action.Tool do
     parse_float(value)
   end
 
+  defp coerce_value(:float, value) when is_integer(value) do
+    value * 1.0
+  end
+
   defp coerce_value(:integer, value) when is_binary(value) do
     parse_integer(value)
   end

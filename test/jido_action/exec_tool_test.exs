@@ -129,6 +129,32 @@ defmodule Jido.Action.ToolTest do
 
       assert Tool.convert_params_using_schema(params, schema) == %{in_schema: 1, extra: "x"}
     end
+
+    test "coerces integer to float when schema expects float" do
+      params = %{"temperature" => 20}
+      schema = [temperature: [type: :float]]
+
+      result = Tool.convert_params_using_schema(params, schema)
+      assert result == %{temperature: 20.0}
+      assert is_float(result.temperature)
+    end
+
+    test "preserves float values when schema expects float" do
+      params = %{"temperature" => 20.5}
+      schema = [temperature: [type: :float]]
+
+      result = Tool.convert_params_using_schema(params, schema)
+      assert result == %{temperature: 20.5}
+    end
+
+    test "parses string to float and does not double-coerce" do
+      params = %{"temperature" => "20"}
+      schema = [temperature: [type: :float]]
+
+      result = Tool.convert_params_using_schema(params, schema)
+      assert result == %{temperature: 20.0}
+      assert is_float(result.temperature)
+    end
   end
 
   describe "build_parameters_schema/1" do

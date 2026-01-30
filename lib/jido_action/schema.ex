@@ -81,7 +81,7 @@ defmodule Jido.Action.Schema do
     * Map representing the JSON Schema
   """
   @spec to_json_schema(t()) :: map()
-  def to_json_schema([]), do: %{}
+  def to_json_schema([]), do: %{"type" => "object", "properties" => %{}, "required" => []}
   def to_json_schema(schema) when is_list(schema), do: nimble_to_json_schema(schema)
   def to_json_schema(schema), do: Zoi.to_json_schema(schema)
 
