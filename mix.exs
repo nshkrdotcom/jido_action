@@ -209,7 +209,6 @@ defmodule JidoAction.MixProject do
       {:private, "~> 0.1.2"},
       {:telemetry, "~> 1.3"},
       {:telemetry_metrics, "~> 1.1"},
-      {:typed_struct, "~> 0.3.0"},
       {:uniq, "~> 0.6.1"},
       {:zoi, "~> 0.16"},
       {:splode, "~> 0.3.0"},
