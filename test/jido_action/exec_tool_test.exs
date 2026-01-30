@@ -68,6 +68,7 @@ defmodule Jido.Action.ToolTest do
       result = Tool.convert_params_using_schema(params, schema)
 
       assert result == %{
+               "unspecified" => "value",
                integer: 42,
                float: 3.14,
                string: "hello"
@@ -93,7 +94,7 @@ defmodule Jido.Action.ToolTest do
              }
     end
 
-    test "ignores parameters not in schema" do
+    test "preserves parameters not in schema (open validation semantics)" do
       params = %{
         "in_schema" => "42",
         "not_in_schema" => "value"
@@ -105,9 +106,28 @@ defmodule Jido.Action.ToolTest do
 
       result = Tool.convert_params_using_schema(params, schema)
 
-      assert result == %{
-               in_schema: 42
-             }
+      assert result == %{"not_in_schema" => "value", in_schema: 42}
+    end
+
+    test "accepts atom keys in input params" do
+      params = %{integer: "42"}
+      schema = [integer: [type: :integer]]
+
+      assert Tool.convert_params_using_schema(params, schema) == %{integer: 42}
+    end
+
+    test "prefers atom keys over string keys when both provided" do
+      params = %{"integer" => "42", integer: "41"}
+      schema = [integer: [type: :integer]]
+
+      assert Tool.convert_params_using_schema(params, schema) == %{integer: 41}
+    end
+
+    test "preserves unknown atom keys" do
+      params = %{in_schema: "1", extra: "x"}
+      schema = [in_schema: [type: :integer]]
+
+      assert Tool.convert_params_using_schema(params, schema) == %{in_schema: 1, extra: "x"}
     end
   end
 
@@ -123,7 +143,11 @@ defmodule Jido.Action.ToolTest do
                  "integer" => %{"type" => "integer", "description" => "No description provided."},
                  "atom" => %{"type" => "string", "description" => "No description provided."},
                  "boolean" => %{"type" => "boolean", "description" => "No description provided."},
-                 "list" => %{"type" => "array", "description" => "No description provided."},
+                 "list" => %{
+                   "type" => "array",
+                   "items" => %{"type" => "string"},
+                   "description" => "No description provided."
+                 },
                  "keyword_list" => %{
                    "type" => "object",
                    "description" => "No description provided."

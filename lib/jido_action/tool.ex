@@ -83,26 +83,37 @@ defmodule Jido.Action.Tool do
   Helper function to convert params using schema information.
 
   Converts string keys to atom keys and handles type conversion based on schema.
+  Supports both atom and string input keys, and preserves unknown keys (open validation).
   """
-  def convert_params_using_schema(params, schema) do
+  def convert_params_using_schema(params, schema) when is_map(params) do
     schema_keys = Schema.known_keys(schema)
 
-    Enum.reduce(schema_keys, %{}, fn key, acc ->
-      convert_param_for_key(params, schema, key, acc)
-    end)
-  end
+    {known_converted, unknown_params} =
+      Enum.reduce(schema_keys, {%{}, params}, fn key, {known_acc, rest} ->
+        string_key = to_string(key)
+        {val_atom, rest} = Map.pop(rest, key, :__missing__)
 
-  defp convert_param_for_key(params, schema, key, acc) do
-    string_key = to_string(key)
+        {value, rest} =
+          case val_atom do
+            :__missing__ ->
+              Map.pop(rest, string_key, :__missing__)
 
-    case Map.fetch(params, string_key) do
-      {:ok, value} ->
-        converted_value = convert_value_with_schema(schema, key, value)
-        Map.put(acc, key, converted_value)
+            _ ->
+              {_val_string, rest2} = Map.pop(rest, string_key, :__missing__)
+              {val_atom, rest2}
+          end
 
-      :error ->
-        acc
-    end
+        case value do
+          :__missing__ ->
+            {known_acc, rest}
+
+          _ ->
+            converted_value = convert_value_with_schema(schema, key, value)
+            {Map.put(known_acc, key, converted_value), rest}
+        end
+      end)
+
+    Map.merge(unknown_params, known_converted)
   end
 
   defp convert_value_with_schema(schema, key, value) when is_list(schema) do
