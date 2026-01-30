@@ -222,6 +222,67 @@ defmodule JidoTest.TestActions do
     end
   end
 
+  defmodule CrashingCompensateAction do
+    @moduledoc false
+    use Action,
+      name: "crashing_compensate_action",
+      description: "Action that crashes during compensation",
+      compensation: [enabled: true, timeout: 100],
+      schema: [
+        should_fail: [type: :boolean, required: true],
+        crash_type: [type: :atom, default: :raise]
+      ]
+
+    def run(%{should_fail: true}, _context) do
+      {:error, Error.execution_error("Intentional failure")}
+    end
+
+    def run(_params, _context) do
+      {:ok, %{result: "Completed"}}
+    end
+
+    def on_error(%{crash_type: :raise}, _error, _context, _opts) do
+      raise "Compensation crashed"
+    end
+
+    def on_error(%{crash_type: :badarith}, _error, _context, _opts) do
+      _ = 1 / 0
+    end
+
+    def on_error(%{crash_type: :exit}, _error, _context, _opts) do
+      exit(:compensation_exit)
+    end
+
+    def on_error(_params, _error, _context, _opts) do
+      {:ok, %{compensated: true}}
+    end
+  end
+
+  defmodule OptsCapturingCompensateAction do
+    @moduledoc false
+    use Action,
+      name: "opts_capturing_compensate_action",
+      description: "Action that captures opts passed to on_error",
+      compensation: [enabled: true, timeout: 100],
+      schema: [
+        should_fail: [type: :boolean, required: true],
+        capture_pid: [type: :any, required: true]
+      ]
+
+    def run(%{should_fail: true}, _context) do
+      {:error, Error.execution_error("Intentional failure")}
+    end
+
+    def run(_params, _context) do
+      {:ok, %{result: "Completed"}}
+    end
+
+    def on_error(%{capture_pid: pid}, _error, _context, opts) do
+      send(pid, {:compensation_opts, opts})
+      {:ok, %{compensated: true, captured_opts: opts}}
+    end
+  end
+
   defmodule ErrorAction do
     @moduledoc false
     use Action, name: "error_action"

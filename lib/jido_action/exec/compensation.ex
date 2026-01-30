@@ -9,6 +9,7 @@ defmodule Jido.Exec.Compensation do
   use Private
 
   alias Jido.Action.Error
+  alias Jido.Exec.Supervisors
   alias Jido.Exec.Telemetry
 
   require Logger
@@ -106,7 +107,19 @@ defmodule Jido.Exec.Compensation do
       compensation_opts = metadata[:compensation] || []
       timeout = get_compensation_timeout(opts, compensation_opts)
 
-      task = Task.async(fn -> action.on_error(params, error, context, []) end)
+      current_gl = Process.group_leader()
+      task_sup = Supervisors.task_supervisor(opts)
+
+      compensation_run_opts =
+        opts
+        |> Keyword.take([:timeout, :backoff, :telemetry, :jido])
+        |> Keyword.put(:compensation_timeout, timeout)
+
+      task =
+        Task.Supervisor.async_nolink(task_sup, fn ->
+          Process.group_leader(self(), current_gl)
+          action.on_error(params, error, context, compensation_run_opts)
+        end)
 
       task
       |> Task.yield(timeout)
@@ -141,8 +154,8 @@ defmodule Jido.Exec.Compensation do
       build_timeout_error(error, directive, timeout)
     end
 
-    defp handle_task_result({:exit, _reason}, _task, error, directive, timeout) do
-      build_timeout_error(error, directive, timeout)
+    defp handle_task_result({:exit, reason}, _task, error, directive, _timeout) do
+      build_exit_error(error, directive, reason)
     end
 
     @spec build_timeout_error(Exception.t(), any(), non_neg_integer()) :: exec_result
@@ -153,6 +166,24 @@ defmodule Jido.Exec.Compensation do
           %{
             compensated: false,
             compensation_error: "Compensation timed out after #{timeout}ms",
+            original_error: error
+          }
+        )
+
+      wrap_error_with_directive(error_result, directive)
+    end
+
+    @spec build_exit_error(Exception.t(), any(), any()) :: exec_result
+    defp build_exit_error(error, directive, reason) do
+      error_message = Telemetry.extract_safe_error_message(error)
+
+      error_result =
+        Error.execution_error(
+          "Compensation crashed for: #{error_message}",
+          %{
+            compensated: false,
+            compensation_error: "Compensation exited: #{inspect(reason)}",
+            exit_reason: reason,
             original_error: error
           }
         )

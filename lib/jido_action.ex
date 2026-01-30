@@ -283,8 +283,8 @@ defmodule Jido.Action do
   - `vsn` (optional) - The version of the Action.
   - `compensation` (optional, default: %{enabled: false, max_retries: 1, timeout: 5000}) - Compensation configuration with keys:
     - `enabled` (default: false) - Whether compensation is enabled
-    - `max_retries` (default: 1) - Maximum number of retry attempts
-    - `timeout` (default: 5000) - Timeout in milliseconds
+    - `max_retries` (default: 1) - Reserved for future use (compensation retries not yet implemented)
+    - `timeout` (default: 5000) - Timeout in milliseconds for compensation execution
   - `schema` (optional, default: []) - A NimbleOptions or Zoi schema for validating the Action's input parameters.
   - `output_schema` (optional, default: []) - A NimbleOptions or Zoi schema for validating the Action's output. Only specified fields are validated.
 

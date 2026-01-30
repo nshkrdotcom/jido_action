@@ -4,6 +4,8 @@ defmodule JidoTest.ExecCompensateTest do
 
   alias Jido.Exec
   alias JidoTest.TestActions.CompensateAction
+  alias JidoTest.TestActions.CrashingCompensateAction
+  alias JidoTest.TestActions.OptsCapturingCompensateAction
 
   @moduletag :capture_log
 
@@ -130,6 +132,81 @@ defmodule JidoTest.ExecCompensateTest do
 
       assert {:ok, %{result: "CompensateAction completed"}} =
                Exec.run(CompensateAction, params, %{}, max_retries: 2, backoff: 10, timeout: 100)
+    end
+  end
+
+  describe "supervised compensation execution" do
+    test "compensation uses Task.Supervisor.async_nolink (crash doesn't affect caller)" do
+      params = %{should_fail: true, crash_type: :raise}
+
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
+               Exec.run(CrashingCompensateAction, params, %{}, timeout: 200)
+
+      assert Exception.message(error) =~ "Compensation crashed for:"
+      assert error.details.compensated == false
+      assert error.details.compensation_error =~ "Compensation exited:"
+      assert error.details.exit_reason != nil
+    end
+
+    test "handles badarith crash in compensation separately from timeout" do
+      params = %{should_fail: true, crash_type: :badarith}
+
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
+               Exec.run(CrashingCompensateAction, params, %{}, timeout: 200)
+
+      assert Exception.message(error) =~ "Compensation crashed for:"
+      refute Exception.message(error) =~ "timed out"
+      assert error.details.compensated == false
+    end
+
+    test "handles explicit exit in compensation" do
+      params = %{should_fail: true, crash_type: :exit}
+
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
+               Exec.run(CrashingCompensateAction, params, %{}, timeout: 200)
+
+      assert Exception.message(error) =~ "Compensation crashed for:"
+      assert error.details.exit_reason == :compensation_exit
+    end
+  end
+
+  describe "opts passed to on_error/4" do
+    test "passes execution options to on_error callback" do
+      params = %{should_fail: true, capture_pid: self()}
+
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{}} =
+               Exec.run(OptsCapturingCompensateAction, params, %{},
+                 timeout: 150,
+                 backoff: 25,
+                 telemetry: :full
+               )
+
+      assert_receive {:compensation_opts, opts}
+      assert is_list(opts)
+      assert Keyword.has_key?(opts, :timeout)
+      assert Keyword.has_key?(opts, :compensation_timeout)
+      assert opts[:timeout] == 150
+      assert opts[:telemetry] == :full
+    end
+
+    test "uses execution timeout when provided" do
+      params = %{should_fail: true, capture_pid: self()}
+
+      assert {:error, _} =
+               Exec.run(OptsCapturingCompensateAction, params, %{}, timeout: 200)
+
+      assert_receive {:compensation_opts, opts}
+      assert opts[:compensation_timeout] == 200
+    end
+
+    test "falls back to action compensation timeout when no execution timeout provided" do
+      params = %{should_fail: true, capture_pid: self()}
+
+      assert {:error, _} =
+               Exec.run(OptsCapturingCompensateAction, params, %{}, [])
+
+      assert_receive {:compensation_opts, opts}
+      assert opts[:compensation_timeout] == 100
     end
   end
 end
