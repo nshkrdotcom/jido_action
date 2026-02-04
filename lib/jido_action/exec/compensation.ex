@@ -109,21 +109,48 @@ defmodule Jido.Exec.Compensation do
 
       current_gl = Process.group_leader()
       task_sup = Supervisors.task_supervisor(opts)
+      parent = self()
+      ref = make_ref()
 
       compensation_run_opts =
         opts
         |> Keyword.take([:timeout, :backoff, :telemetry, :jido])
         |> Keyword.put(:compensation_timeout, timeout)
 
-      task =
-        Task.Supervisor.async_nolink(task_sup, fn ->
+      {:ok, pid} =
+        Task.Supervisor.start_child(task_sup, fn ->
           Process.group_leader(self(), current_gl)
-          action.on_error(params, error, context, compensation_run_opts)
+          result = action.on_error(params, error, context, compensation_run_opts)
+          send(parent, {:compensation_result, ref, result})
         end)
 
-      task
-      |> Task.yield(timeout)
-      |> handle_task_result(task, error, directive, timeout)
+      monitor_ref = Process.monitor(pid)
+
+      result =
+        receive do
+          {:compensation_result, ^ref, result} ->
+            Process.demonitor(monitor_ref, [:flush])
+            {:ok, result}
+
+          {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
+            case reason do
+              :normal ->
+                receive do
+                  {:compensation_result, ^ref, result} -> {:ok, result}
+                after
+                  0 -> {:exit, reason}
+                end
+
+              _ ->
+                {:exit, reason}
+            end
+        after
+          timeout ->
+            _ = Task.Supervisor.terminate_child(task_sup, pid)
+            :timeout
+        end
+
+      handle_task_result(result, error, directive, timeout)
     end
 
     @spec get_compensation_timeout(run_opts(), keyword() | map()) :: non_neg_integer()
@@ -139,22 +166,20 @@ defmodule Jido.Exec.Compensation do
     defp extract_timeout_from_compensation_opts(_), do: 5_000
 
     @spec handle_task_result(
-            {:ok, any()} | {:exit, any()} | nil,
-            Task.t(),
+            {:ok, any()} | {:exit, any()} | :timeout,
             Exception.t(),
             any(),
             non_neg_integer()
           ) :: exec_result
-    defp handle_task_result({:ok, result}, _task, error, directive, _timeout) do
+    defp handle_task_result({:ok, result}, error, directive, _timeout) do
       handle_compensation_result(result, error, directive)
     end
 
-    defp handle_task_result(nil, task, error, directive, timeout) do
-      Task.shutdown(task)
+    defp handle_task_result(:timeout, error, directive, timeout) do
       build_timeout_error(error, directive, timeout)
     end
 
-    defp handle_task_result({:exit, reason}, _task, error, directive, _timeout) do
+    defp handle_task_result({:exit, reason}, error, directive, _timeout) do
       build_exit_error(error, directive, reason)
     end
 
