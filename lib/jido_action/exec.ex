@@ -460,17 +460,66 @@ defmodule Jido.Exec do
       # Resolve supervisor based on jido: option (defaults to global)
       task_sup = Supervisors.task_supervisor(opts)
 
-      # Spawn task under supervisor using async_nolink
-      task =
-        Task.Supervisor.async_nolink(task_sup, fn ->
+      parent = self()
+      ref = make_ref()
+
+      # Spawn process under the supervisor and send the result back explicitly.
+      # This avoids relying on Task.yield/2 behavior/typing (Elixir 1.18+).
+      {:ok, pid} =
+        Task.Supervisor.start_child(task_sup, fn ->
           # Use the parent's group leader to ensure IO is properly captured
           Process.group_leader(self(), current_gl)
 
-          execute_action(action, params, context, opts)
+          result = execute_action(action, params, context, opts)
+          send(parent, {:execute_action_result, ref, result})
         end)
 
-      # Wait for task completion or timeout
-      case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
+      monitor_ref = Process.monitor(pid)
+
+      # Wait for completion, crash, or timeout.
+      result =
+        receive do
+          {:execute_action_result, ^ref, result} ->
+            Process.demonitor(monitor_ref, [:flush])
+            {:ok, result}
+
+          {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
+            # If the process exited normally, a result message may still be in flight.
+            case reason do
+              :normal ->
+                receive do
+                  {:execute_action_result, ^ref, result} -> {:ok, result}
+                after
+                  0 -> {:exit, reason}
+                end
+
+              _ ->
+                {:exit, reason}
+            end
+        after
+          timeout ->
+            _ = Task.Supervisor.terminate_child(task_sup, pid)
+
+            # Best-effort wait for termination to avoid leaking processes in slow CI runners.
+            receive do
+              {:DOWN, ^monitor_ref, :process, ^pid, _reason} -> :ok
+            after
+              100 -> :ok
+            end
+
+            Process.demonitor(monitor_ref, [:flush])
+
+            # Flush any late result message (race with timeout).
+            receive do
+              {:execute_action_result, ^ref, _result} -> :ok
+            after
+              0 -> :ok
+            end
+
+            :timeout
+        end
+
+      case result do
         {:ok, result} ->
           result
 
@@ -481,7 +530,7 @@ defmodule Jido.Exec do
              action: action
            })}
 
-        nil ->
+        :timeout ->
           {:error,
            Error.timeout_error(
              "Action #{inspect(action)} timed out after #{timeout}ms",
