@@ -1,5 +1,5 @@
 defmodule JidoTest.ExecCompensateTest do
-  use JidoTest.ActionCase, async: true
+  use JidoTest.ActionCase, async: false
   use Mimic
 
   alias Jido.Exec
