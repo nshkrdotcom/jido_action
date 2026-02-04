@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-rc.3] - 2025-02-04
+
+### Added
+- **Geocode**: Add geocode tool for weather location lookup (#58)
+
+### Fixed
+- **Compensation**: Handle normal exit race condition for in-flight result message (#64)
+- **Exec**: Avoid `Task.yield` in `execute_action_with_timeout` - replace with explicit messaging
+- **Schema**: Return valid JSON Schema for empty schemas
+
+### Changed
+- **Deps**: Update dependencies and fix Mimic async test
+
 ## [2.0.0-rc.2] - 2025-01-30
 
 ### Fixed
