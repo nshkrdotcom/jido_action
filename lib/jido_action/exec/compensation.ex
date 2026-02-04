@@ -133,7 +133,17 @@ defmodule Jido.Exec.Compensation do
             {:ok, result}
 
           {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
-            {:exit, reason}
+            case reason do
+              :normal ->
+                receive do
+                  {:compensation_result, ^ref, result} -> {:ok, result}
+                after
+                  0 -> {:exit, reason}
+                end
+
+              _ ->
+                {:exit, reason}
+            end
         after
           timeout ->
             _ = Task.Supervisor.terminate_child(task_sup, pid)
