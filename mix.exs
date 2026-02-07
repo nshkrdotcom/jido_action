@@ -228,7 +228,6 @@ defmodule JidoAction.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:mix_audit, "~> 2.0", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
-      {:quokka, "~> 2.10", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:excoveralls, "~> 0.18.3", only: [:dev, :test]},
       {:expublish, "~> 2.7", only: [:dev], runtime: false},
