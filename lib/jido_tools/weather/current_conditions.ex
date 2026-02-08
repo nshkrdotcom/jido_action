@@ -20,6 +20,9 @@ defmodule Jido.Tools.Weather.CurrentConditions do
       ]
     ]
 
+  alias Jido.Tools.Weather.HTTP
+  alias Jido.Action.Error
+
   @impl Jido.Action
   def run(params, _context) do
     with {:ok, stations} <- get_observation_stations(params[:observation_stations_url]) do
@@ -28,18 +31,11 @@ defmodule Jido.Tools.Weather.CurrentConditions do
   end
 
   defp get_observation_stations(stations_url) do
-    req_options = [
-      method: :get,
-      url: stations_url,
-      headers: %{
-        "User-Agent" => "jido_action/1.0 (weather tool)",
-        "Accept" => "application/geo+json"
-      }
-    ]
-
-    try do
-      response = Req.request!(req_options)
-
+    with {:ok, response} <-
+           HTTP.get(stations_url,
+             headers: HTTP.geojson_headers(),
+             error_prefix: "HTTP error getting stations"
+           ) do
       case response do
         %{status: 200, body: body} ->
           stations =
@@ -55,28 +51,19 @@ defmodule Jido.Tools.Weather.CurrentConditions do
           {:ok, stations}
 
         %{status: status, body: body} ->
-          {:error, "Failed to get observation stations (#{status}): #{inspect(body)}"}
+          HTTP.status_error("Failed to get observation stations", status, body)
       end
-    rescue
-      e -> {:error, "HTTP error getting stations: #{Exception.message(e)}"}
     end
   end
 
   defp get_current_conditions(%{url: station_url}) do
     observations_url = "#{station_url}/observations/latest"
 
-    req_options = [
-      method: :get,
-      url: observations_url,
-      headers: %{
-        "User-Agent" => "jido_action/1.0 (weather tool)",
-        "Accept" => "application/geo+json"
-      }
-    ]
-
-    try do
-      response = Req.request!(req_options)
-
+    with {:ok, response} <-
+           HTTP.get(observations_url,
+             headers: HTTP.geojson_headers(),
+             error_prefix: "HTTP error getting conditions"
+           ) do
       case response do
         %{status: 200, body: body} ->
           props = body["properties"]
@@ -107,15 +94,13 @@ defmodule Jido.Tools.Weather.CurrentConditions do
           {:ok, conditions}
 
         %{status: status, body: body} ->
-          {:error, "Failed to get current conditions (#{status}): #{inspect(body)}"}
+          HTTP.status_error("Failed to get current conditions", status, body)
       end
-    rescue
-      e -> {:error, "HTTP error getting conditions: #{Exception.message(e)}"}
     end
   end
 
   defp get_current_conditions(nil) do
-    {:error, "No observation stations available"}
+    {:error, Error.execution_error("No observation stations available")}
   end
 
   defp format_measurement(%{"value" => nil}), do: nil

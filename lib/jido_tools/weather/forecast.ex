@@ -30,26 +30,17 @@ defmodule Jido.Tools.Weather.Forecast do
       ]
     ]
 
+  alias Jido.Tools.Weather.HTTP
+  alias Jido.Action.Error
+
   @impl Jido.Action
   def run(%{forecast_url: forecast_url} = params, _context) do
-    req_options = [
-      method: :get,
-      url: forecast_url,
-      headers: %{
-        "User-Agent" => "jido_action/1.0 (weather tool)",
-        "Accept" => "application/geo+json"
-      }
-    ]
-
-    try do
-      response = Req.request!(req_options)
-
+    with {:ok, response} <-
+           HTTP.get(forecast_url, headers: HTTP.geojson_headers(), error_prefix: "HTTP error") do
       transform_result(%{
         request: %{url: forecast_url, method: :get, params: params},
         response: %{status: response.status, body: response.body, headers: response.headers}
       })
-    rescue
-      e -> {:error, "HTTP error: #{Exception.message(e)}"}
     end
   end
 
@@ -75,11 +66,11 @@ defmodule Jido.Tools.Weather.Forecast do
   end
 
   defp transform_result(%{response: %{status: status, body: body}}) when status != 200 do
-    {:error, "NWS forecast API error (#{status}): #{inspect(body)}"}
+    HTTP.status_error("NWS forecast API error", status, body)
   end
 
   defp transform_result(_payload) do
-    {:error, "Unexpected forecast response format"}
+    {:error, Error.execution_error("Unexpected forecast response format")}
   end
 
   defp format_summary_periods(periods) do

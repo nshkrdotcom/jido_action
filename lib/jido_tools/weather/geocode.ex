@@ -20,29 +20,24 @@ defmodule Jido.Tools.Weather.Geocode do
       ]
     ]
 
+  alias Jido.Tools.Weather.HTTP
+  alias Jido.Action.Error
+
   @impl Jido.Action
   def run(%{location: location}, _context) do
     url = "https://nominatim.openstreetmap.org/search"
 
-    req_options = [
-      method: :get,
-      url: url,
-      params: %{
-        q: location,
-        format: "json",
-        limit: 1
-      },
-      headers: %{
-        "User-Agent" => "jido_action/1.0 (weather tool)",
-        "Accept" => "application/json"
-      }
-    ]
-
-    try do
-      response = Req.request!(req_options)
+    with {:ok, response} <-
+           HTTP.get(url,
+             params: %{
+               q: location,
+               format: "json",
+               limit: 1
+             },
+             headers: HTTP.json_headers(),
+             error_prefix: "Geocoding HTTP error"
+           ) do
       transform_result(response.status, response.body, location)
-    rescue
-      e -> {:error, "Geocoding HTTP error: #{Exception.message(e)}"}
     end
   end
 
@@ -60,11 +55,16 @@ defmodule Jido.Tools.Weather.Geocode do
   end
 
   defp transform_result(200, [], location) do
-    {:error, "No results found for location: #{location}"}
+    {:error,
+     Error.execution_error("No results found for location: #{location}", %{location: location})}
   end
 
   defp transform_result(status, body, _location) do
-    {:error, "Geocoding API error (#{status}): #{inspect(body)}"}
+    {:error,
+     Error.execution_error("Geocoding API error (#{status}): #{inspect(body)}", %{
+       status: status,
+       body: body
+     })}
   end
 
   defp parse_coordinate(value) when is_binary(value) do

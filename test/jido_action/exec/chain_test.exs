@@ -104,9 +104,13 @@ defmodule JidoTest.Exec.ChainTest do
 
     test "executes chain asynchronously" do
       capture_log(fn ->
-        task = Chain.chain([Add, Multiply], %{value: 5}, async: true)
-        assert %Task{} = task
-        assert {:ok, %{value: 12}} = Task.await(task)
+        async_ref = Chain.chain([Add, Multiply], %{value: 5}, async: true)
+        assert is_map(async_ref)
+        assert is_pid(async_ref.pid)
+        assert is_reference(async_ref.ref)
+        assert is_reference(async_ref.monitor_ref)
+        assert async_ref.owner == self()
+        assert {:ok, %{value: 12}} = Chain.await(async_ref, 1_000)
       end)
     end
 

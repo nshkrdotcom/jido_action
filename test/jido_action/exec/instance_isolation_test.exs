@@ -25,10 +25,9 @@ defmodule JidoTest.Exec.InstanceIsolationTest do
       assert Supervisors.task_supervisor(jido: MyApp.Jido) == MyApp.Jido.TaskSupervisor
     end
 
-    test "raises when instance supervisor is not running" do
-      assert_raise ArgumentError, ~r/Instance task supervisor.*is not running/, fn ->
-        Supervisors.task_supervisor(jido: Missing.Instance)
-      end
+    test "returns resolved instance supervisor even when process is not running" do
+      assert Supervisors.task_supervisor(jido: Missing.Instance) ==
+               Missing.Instance.TaskSupervisor
     end
 
     test "raises when jido option is not an atom" do

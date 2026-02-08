@@ -129,7 +129,8 @@ defmodule Jido.Action.Error do
   # Define specific error structs inline
   defmodule InvalidInputError do
     @moduledoc "Error for invalid input parameters"
-    defexception [:message, :field, :value, :details]
+    @enforce_keys [:message]
+    defexception message: nil, field: nil, value: nil, details: %{}
 
     @type t :: %__MODULE__{
             message: String.t(),
@@ -140,7 +141,7 @@ defmodule Jido.Action.Error do
 
     @impl true
     def exception(opts) do
-      message = Keyword.get(opts, :message, "Invalid input")
+      message = Keyword.fetch!(opts, :message)
 
       %__MODULE__{
         message: message,
@@ -153,7 +154,8 @@ defmodule Jido.Action.Error do
 
   defmodule ExecutionFailureError do
     @moduledoc "Error for runtime execution failures"
-    defexception [:message, :details]
+    @enforce_keys [:message]
+    defexception message: nil, details: %{}
 
     @type t :: %__MODULE__{
             message: String.t(),
@@ -163,7 +165,7 @@ defmodule Jido.Action.Error do
     @impl true
     def exception(opts) do
       %__MODULE__{
-        message: Keyword.get(opts, :message, "Execution failed"),
+        message: Keyword.fetch!(opts, :message),
         details: Keyword.get(opts, :details, %{})
       }
     end
@@ -171,7 +173,8 @@ defmodule Jido.Action.Error do
 
   defmodule TimeoutError do
     @moduledoc "Error for action timeouts"
-    defexception [:message, :timeout, :details]
+    @enforce_keys [:message]
+    defexception message: nil, timeout: nil, details: %{}
 
     @type t :: %__MODULE__{
             message: String.t(),
@@ -182,7 +185,7 @@ defmodule Jido.Action.Error do
     @impl true
     def exception(opts) do
       %__MODULE__{
-        message: Keyword.get(opts, :message, "Action timed out"),
+        message: Keyword.fetch!(opts, :message),
         timeout: Keyword.get(opts, :timeout),
         details: Keyword.get(opts, :details, %{})
       }
@@ -191,7 +194,8 @@ defmodule Jido.Action.Error do
 
   defmodule ConfigurationError do
     @moduledoc "Error for configuration issues"
-    defexception [:message, :details]
+    @enforce_keys [:message]
+    defexception message: nil, details: %{}
 
     @type t :: %__MODULE__{
             message: String.t(),
@@ -201,7 +205,7 @@ defmodule Jido.Action.Error do
     @impl true
     def exception(opts) do
       %__MODULE__{
-        message: Keyword.get(opts, :message, "Configuration error"),
+        message: Keyword.fetch!(opts, :message),
         details: Keyword.get(opts, :details, %{})
       }
     end
@@ -209,7 +213,8 @@ defmodule Jido.Action.Error do
 
   defmodule InternalError do
     @moduledoc "Error for unexpected internal failures"
-    defexception [:message, :details]
+    @enforce_keys [:message]
+    defexception message: nil, details: %{}
 
     @type t :: %__MODULE__{
             message: String.t(),
@@ -219,7 +224,7 @@ defmodule Jido.Action.Error do
     @impl true
     def exception(opts) do
       %__MODULE__{
-        message: Keyword.get(opts, :message, "Internal error"),
+        message: Keyword.fetch!(opts, :message),
         details: Keyword.get(opts, :details, %{})
       }
     end

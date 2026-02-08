@@ -139,7 +139,7 @@ defmodule JidoTest.Exec.OutputValidationTest do
       assert {:error, %Jido.Action.Error.InvalidInputError{message: error_message}} =
                Exec.run(TypeErrorOutputAction, %{}, %{})
 
-      assert error_message =~ "Action output"
+      assert error_message =~ "schema"
       assert error_message =~ "count"
     end
 

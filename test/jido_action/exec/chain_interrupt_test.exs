@@ -88,7 +88,7 @@ defmodule JidoTest.Exec.ChainInterruptTest do
       Process.sleep(50)
       Agent.update(interrupt_agent, fn _ -> true end)
 
-      result = Task.await(task)
+      result = Chain.await(task, 2_000)
       Agent.stop(interrupt_agent)
 
       assert {:interrupted, partial_result} = result

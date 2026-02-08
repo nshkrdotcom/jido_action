@@ -191,17 +191,8 @@ defmodule Jido.Plan do
   """
   @spec add(t(), atom(), step_def(), keyword()) :: t() | no_return()
   def add(%__MODULE__{} = plan, step_name, step_def, opts \\ []) do
-    {clean_step_def, step_depends_on} = extract_depends_on_from_step_def(step_def)
-    opts_depends_on = opts |> Keyword.get(:depends_on, []) |> List.wrap()
-    depends_on = (step_depends_on ++ opts_depends_on) |> Enum.uniq()
-
-    plan_opts = Keyword.delete(opts, :depends_on)
-
-    # Validate depends_on contains only atoms
-    if !Enum.all?(depends_on, &is_atom/1) do
-      error = Error.validation_error("All dependencies must be atoms", %{depends_on: depends_on})
-      raise error
-    end
+    {clean_step_def, depends_on, plan_opts} = prepare_step_definition(step_def, opts)
+    validate_dependencies!(depends_on)
 
     case Instruction.normalize_single(clean_step_def, plan.context, []) do
       {:ok, instruction} ->
@@ -326,12 +317,28 @@ defmodule Jido.Plan do
   # Private helper functions
 
   defp add_step_from_def(plan, step_name, step_def) do
-    case extract_depends_on_from_step_def(step_def) do
-      {clean_step_def, depends_on} ->
-        {:ok, add(plan, step_name, clean_step_def, depends_on: depends_on)}
-    end
+    {clean_step_def, depends_on, _plan_opts} = prepare_step_definition(step_def, [])
+    {:ok, add(plan, step_name, clean_step_def, depends_on: depends_on)}
   rescue
     error -> {:error, error}
+  end
+
+  defp prepare_step_definition(step_def, opts) do
+    {clean_step_def, step_depends_on} = extract_depends_on_from_step_def(step_def)
+    step_depends_on = List.wrap(step_depends_on)
+    opts_depends_on = opts |> Keyword.get(:depends_on, []) |> List.wrap()
+    depends_on = Enum.uniq(step_depends_on ++ opts_depends_on)
+    plan_opts = Keyword.delete(opts, :depends_on)
+    {clean_step_def, depends_on, plan_opts}
+  end
+
+  defp validate_dependencies!(depends_on) do
+    if Enum.all?(depends_on, &is_atom/1) do
+      :ok
+    else
+      error = Error.validation_error("All dependencies must be atoms", %{depends_on: depends_on})
+      raise error
+    end
   end
 
   defp extract_depends_on_from_step_def(step_def) do

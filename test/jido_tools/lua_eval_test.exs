@@ -66,21 +66,21 @@ defmodule Jido.Tools.LuaEvalTest do
 
   describe "error handling" do
     test "handles compile errors" do
-      assert {:error, %{type: :compile_error, message: message}} =
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
                LuaEval.run(%{code: "return 2 +"}, @context)
 
       assert is_binary(message)
     end
 
     test "handles runtime errors" do
-      assert {:error, %{type: :lua_error, message: message}} =
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
                LuaEval.run(%{code: "error('boom')"}, @context)
 
       assert message =~ "boom"
     end
 
     test "handles invalid operations" do
-      assert {:error, %{type: :lua_error, message: _}} =
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: _}} =
                LuaEval.run(%{code: "return nil + 5"}, @context)
     end
   end
@@ -88,7 +88,9 @@ defmodule Jido.Tools.LuaEvalTest do
   describe "timeout enforcement" do
     test "enforces timeout on infinite loop" do
       params = %{code: "while true do end", timeout_ms: 50}
-      assert {:error, %{type: :timeout, timeout_ms: 50}} = LuaEval.run(params, @context)
+
+      assert {:error, %Jido.Action.Error.TimeoutError{timeout: 50}} =
+               LuaEval.run(params, @context)
     end
 
     test "allows execution within timeout" do
@@ -100,12 +102,12 @@ defmodule Jido.Tools.LuaEvalTest do
   describe "sandbox security" do
     test "blocks os.getenv by default" do
       params = %{code: "return os.getenv('HOME')"}
-      assert {:error, %{type: :lua_error}} = LuaEval.run(params, @context)
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{}} = LuaEval.run(params, @context)
     end
 
     test "blocks require by default" do
       params = %{code: "require('os')"}
-      assert {:error, %{type: :lua_error}} = LuaEval.run(params, @context)
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{}} = LuaEval.run(params, @context)
     end
 
     test "allows safe math operations" do

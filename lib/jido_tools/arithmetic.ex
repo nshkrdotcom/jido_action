@@ -14,6 +14,7 @@ defmodule Jido.Tools.Arithmetic do
   """
 
   alias Jido.Action
+  alias Jido.Action.Error
 
   defmodule Add do
     @moduledoc false
@@ -73,9 +74,9 @@ defmodule Jido.Tools.Arithmetic do
         amount: [type: :float, required: true, doc: "The number to divide by (divisor)"]
       ]
 
-    @spec run(map(), map()) :: {:ok, map()} | {:error, String.t()}
+    @spec run(map(), map()) :: {:ok, map()} | {:error, Exception.t()}
     def run(%{value: _value, amount: amount}, _context) when amount == 0 or amount == 0.0 do
-      {:error, "Cannot divide by zero"}
+      {:error, Error.validation_error("Cannot divide by zero")}
     end
 
     def run(%{value: value, amount: amount}, _context) do

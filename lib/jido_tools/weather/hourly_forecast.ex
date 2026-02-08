@@ -24,26 +24,20 @@ defmodule Jido.Tools.Weather.HourlyForecast do
       ]
     ]
 
+  alias Jido.Tools.Weather.HTTP
+  alias Jido.Action.Error
+
   @impl Jido.Action
   def run(%{hourly_forecast_url: hourly_forecast_url} = params, _context) do
-    req_options = [
-      method: :get,
-      url: hourly_forecast_url,
-      headers: %{
-        "User-Agent" => "jido_action/1.0 (weather tool)",
-        "Accept" => "application/geo+json"
-      }
-    ]
-
-    try do
-      response = Req.request!(req_options)
-
+    with {:ok, response} <-
+           HTTP.get(hourly_forecast_url,
+             headers: HTTP.geojson_headers(),
+             error_prefix: "HTTP error"
+           ) do
       transform_result(%{
         request: %{url: hourly_forecast_url, method: :get, params: params},
         response: %{status: response.status, body: response.body, headers: response.headers}
       })
-    rescue
-      e -> {:error, "HTTP error: #{Exception.message(e)}"}
     end
   end
 
@@ -78,10 +72,10 @@ defmodule Jido.Tools.Weather.HourlyForecast do
   end
 
   defp transform_result(%{response: %{status: status, body: body}}) when status != 200 do
-    {:error, "NWS hourly forecast API error (#{status}): #{inspect(body)}"}
+    HTTP.status_error("NWS hourly forecast API error", status, body)
   end
 
   defp transform_result(_payload) do
-    {:error, "Unexpected hourly forecast response format"}
+    {:error, Error.execution_error("Unexpected hourly forecast response format")}
   end
 end

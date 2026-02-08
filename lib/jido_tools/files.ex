@@ -17,6 +17,7 @@ defmodule Jido.Tools.Files do
   """
 
   alias Jido.Action
+  alias Jido.Action.Error
 
   defmodule ReadFile do
     @moduledoc false
@@ -28,11 +29,18 @@ defmodule Jido.Tools.Files do
       ]
 
     @impl true
-    @spec run(map(), map()) :: {:ok, map()} | {:error, String.t()}
+    @spec run(map(), map()) :: {:ok, map()} | {:error, Exception.t()}
     def run(%{path: path}, _context) do
       case File.read(path) do
-        {:ok, content} -> {:ok, %{path: path, content: content}}
-        {:error, reason} -> {:error, "Failed to read file: #{inspect(reason)}"}
+        {:ok, content} ->
+          {:ok, %{path: path, content: content}}
+
+        {:error, reason} ->
+          {:error,
+           Error.execution_error("Failed to read file: #{inspect(reason)}", %{
+             path: path,
+             reason: reason
+           })}
       end
     end
   end
@@ -62,8 +70,16 @@ defmodule Jido.Tools.Files do
       if create_dirs, do: File.mkdir_p(Path.dirname(path))
 
       case write_with_mode(path, content, mode) do
-        :ok -> {:ok, %{path: path, bytes_written: byte_size(content)}}
-        {:error, reason} -> {:error, "Failed to write file: #{inspect(reason)}"}
+        :ok ->
+          {:ok, %{path: path, bytes_written: byte_size(content)}}
+
+        {:error, reason} ->
+          {:error,
+           Error.execution_error("Failed to write file: #{inspect(reason)}", %{
+             path: path,
+             mode: mode,
+             reason: reason
+           })}
       end
     end
 
@@ -88,15 +104,29 @@ defmodule Jido.Tools.Files do
     @impl true
     def run(%{path: path, recursive: true}, _context) do
       case File.mkdir_p(path) do
-        :ok -> {:ok, %{path: path}}
-        {:error, reason} -> {:error, "Failed to create directory: #{inspect(reason)}"}
+        :ok ->
+          {:ok, %{path: path}}
+
+        {:error, reason} ->
+          {:error,
+           Error.execution_error("Failed to create directory: #{inspect(reason)}", %{
+             path: path,
+             reason: reason
+           })}
       end
     end
 
     def run(%{path: path, recursive: false}, _context) do
       case File.mkdir(path) do
-        :ok -> {:ok, %{path: path}}
-        {:error, reason} -> {:error, "Failed to create directory: #{inspect(reason)}"}
+        :ok ->
+          {:ok, %{path: path}}
+
+        {:error, reason} ->
+          {:error,
+           Error.execution_error("Failed to create directory: #{inspect(reason)}", %{
+             path: path,
+             reason: reason
+           })}
       end
     end
   end
@@ -136,8 +166,16 @@ defmodule Jido.Tools.Files do
       case recursive do
         true ->
           case File.ls(path) do
-            {:ok, entries} -> {:ok, %{entries: entries}}
-            {:error, reason} -> {:error, "Failed to list directory: #{inspect(reason)}"}
+            {:ok, entries} ->
+              {:ok, %{entries: entries}}
+
+            {:error, reason} ->
+              {:error,
+               Error.execution_error("Failed to list directory: #{inspect(reason)}", %{
+                 path: path,
+                 recursive: recursive,
+                 reason: reason
+               })}
           end
 
         false ->
@@ -147,7 +185,12 @@ defmodule Jido.Tools.Files do
               {:ok, %{entries: files}}
 
             {:error, reason} ->
-              {:error, "Failed to list directory: #{inspect(reason)}"}
+              {:error,
+               Error.execution_error("Failed to list directory: #{inspect(reason)}", %{
+                 path: path,
+                 recursive: recursive,
+                 reason: reason
+               })}
           end
       end
     end
@@ -179,7 +222,16 @@ defmodule Jido.Tools.Files do
           {:ok, %{deleted: paths}}
 
         {:error, reason, paths} ->
-          {:error, "Failed to delete some paths: #{inspect(reason)}, deleted: #{inspect(paths)}"}
+          {:error,
+           Error.execution_error(
+             "Failed to delete some paths: #{inspect(reason)}, deleted: #{inspect(paths)}",
+             %{
+               path: path,
+               recursive: true,
+               reason: reason,
+               deleted_paths: paths
+             }
+           )}
       end
     end
 
@@ -195,8 +247,17 @@ defmodule Jido.Tools.Files do
         end
 
       case result do
-        :ok -> {:ok, %{path: path}}
-        {:error, reason} -> {:error, "Failed to delete: #{inspect(reason)}"}
+        :ok ->
+          {:ok, %{path: path}}
+
+        {:error, reason} ->
+          {:error,
+           Error.execution_error("Failed to delete: #{inspect(reason)}", %{
+             path: path,
+             recursive: false,
+             force: force,
+             reason: reason
+           })}
       end
     end
   end
@@ -212,14 +273,19 @@ defmodule Jido.Tools.Files do
       ]
 
     @impl true
-    @spec run(map(), map()) :: {:ok, map()} | {:error, String.t()}
+    @spec run(map(), map()) :: {:ok, map()} | {:error, Exception.t()}
     def run(%{source: source, destination: destination}, _context) do
       case File.copy(source, destination) do
         {:ok, bytes_copied} ->
           {:ok, %{source: source, destination: destination, bytes_copied: bytes_copied}}
 
         {:error, reason} ->
-          {:error, "Failed to copy file: #{inspect(reason)}"}
+          {:error,
+           Error.execution_error("Failed to copy file: #{inspect(reason)}", %{
+             source: source,
+             destination: destination,
+             reason: reason
+           })}
       end
     end
   end
@@ -235,11 +301,19 @@ defmodule Jido.Tools.Files do
       ]
 
     @impl true
-    @spec run(map(), map()) :: {:ok, map()} | {:error, String.t()}
+    @spec run(map(), map()) :: {:ok, map()} | {:error, Exception.t()}
     def run(%{source: source, destination: destination}, _context) do
       case File.rename(source, destination) do
-        :ok -> {:ok, %{source: source, destination: destination}}
-        {:error, reason} -> {:error, "Failed to move file: #{inspect(reason)}"}
+        :ok ->
+          {:ok, %{source: source, destination: destination}}
+
+        {:error, reason} ->
+          {:error,
+           Error.execution_error("Failed to move file: #{inspect(reason)}", %{
+             source: source,
+             destination: destination,
+             reason: reason
+           })}
       end
     end
   end

@@ -110,14 +110,10 @@ defmodule Jido.Action.ErrorTest do
       assert error.details == %{extra: "info"}
     end
 
-    test "InvalidInputError.exception/1 with defaults" do
-      error = Error.InvalidInputError.exception([])
-
-      assert %Error.InvalidInputError{} = error
-      assert error.message == "Invalid input"
-      assert error.field == nil
-      assert error.value == nil
-      assert error.details == %{}
+    test "InvalidInputError.exception/1 requires message" do
+      assert_raise KeyError, fn ->
+        Error.InvalidInputError.exception([])
+      end
     end
 
     test "ExecutionFailureError.exception/1 with all options" do
@@ -132,12 +128,10 @@ defmodule Jido.Action.ErrorTest do
       assert error.details == %{step: "validation"}
     end
 
-    test "ExecutionFailureError.exception/1 with defaults" do
-      error = Error.ExecutionFailureError.exception([])
-
-      assert %Error.ExecutionFailureError{} = error
-      assert error.message == "Execution failed"
-      assert error.details == %{}
+    test "ExecutionFailureError.exception/1 requires message" do
+      assert_raise KeyError, fn ->
+        Error.ExecutionFailureError.exception([])
+      end
     end
 
     test "TimeoutError.exception/1 with all options" do
@@ -154,13 +148,10 @@ defmodule Jido.Action.ErrorTest do
       assert error.details == %{operation: "network"}
     end
 
-    test "TimeoutError.exception/1 with defaults" do
-      error = Error.TimeoutError.exception([])
-
-      assert %Error.TimeoutError{} = error
-      assert error.message == "Action timed out"
-      assert error.timeout == nil
-      assert error.details == %{}
+    test "TimeoutError.exception/1 requires message" do
+      assert_raise KeyError, fn ->
+        Error.TimeoutError.exception([])
+      end
     end
 
     test "ConfigurationError.exception/1 with all options" do
@@ -175,12 +166,10 @@ defmodule Jido.Action.ErrorTest do
       assert error.details == %{key: :api_url}
     end
 
-    test "ConfigurationError.exception/1 with defaults" do
-      error = Error.ConfigurationError.exception([])
-
-      assert %Error.ConfigurationError{} = error
-      assert error.message == "Configuration error"
-      assert error.details == %{}
+    test "ConfigurationError.exception/1 requires message" do
+      assert_raise KeyError, fn ->
+        Error.ConfigurationError.exception([])
+      end
     end
 
     test "InternalError.exception/1 with all options" do
@@ -195,12 +184,10 @@ defmodule Jido.Action.ErrorTest do
       assert error.details == %{subsystem: "cache"}
     end
 
-    test "InternalError.exception/1 with defaults" do
-      error = Error.InternalError.exception([])
-
-      assert %Error.InternalError{} = error
-      assert error.message == "Internal error"
-      assert error.details == %{}
+    test "InternalError.exception/1 requires message" do
+      assert_raise KeyError, fn ->
+        Error.InternalError.exception([])
+      end
     end
 
     test "Internal.UnknownError.exception/1 with all options" do

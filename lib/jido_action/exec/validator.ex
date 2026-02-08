@@ -43,22 +43,32 @@ defmodule Jido.Exec.Validator do
   """
   @spec validate_params(module(), map()) :: {:ok, map()} | {:error, Exception.t()}
   def validate_params(action, params) do
-    if function_exported?(action, :validate_params, 1) do
-      case action.validate_params(params) do
-        {:ok, params} ->
-          {:ok, params}
+    case Code.ensure_compiled(action) do
+      {:module, _} ->
+        if function_exported?(action, :validate_params, 1) do
+          case action.validate_params(params) do
+            {:ok, params} ->
+              {:ok, params}
 
-        {:error, reason} ->
-          {:error, reason}
+            {:error, %_{} = reason} when is_exception(reason) ->
+              {:error, reason}
 
-        _ ->
-          {:error, Error.validation_error("Invalid return from action.validate_params/1")}
-      end
-    else
-      {:error,
-       Error.validation_error(
-         "Module #{inspect(action)} is not a valid action: missing validate_params/1 function"
-       )}
+            {:error, reason} ->
+              {:error, Error.validation_error(inspect(reason))}
+
+            _ ->
+              {:error, Error.validation_error("Invalid return from action.validate_params/1")}
+          end
+        else
+          {:error,
+           Error.validation_error(
+             "Module #{inspect(action)} is not a valid action: missing validate_params/1 function"
+           )}
+        end
+
+      {:error, reason} ->
+        {:error,
+         Error.validation_error("Failed to compile module #{inspect(action)}: #{inspect(reason)}")}
     end
   end
 
@@ -71,11 +81,31 @@ defmodule Jido.Exec.Validator do
   def validate_output(action, output, opts) do
     log_level = Keyword.get(opts, :log_level, :info)
 
+    case Code.ensure_compiled(action) do
+      {:module, _} ->
+        validate_output_for_compiled_module(action, output, log_level)
+
+      {:error, reason} ->
+        {:error,
+         Error.validation_error("Failed to compile module #{inspect(action)}: #{inspect(reason)}")}
+    end
+  end
+
+  defp validate_output_for_compiled_module(action, output, log_level) do
     if function_exported?(action, :validate_output, 1) do
       case action.validate_output(output) do
         {:ok, validated_output} ->
           cond_log(log_level, :debug, "Output validation succeeded for #{inspect(action)}")
           {:ok, validated_output}
+
+        {:error, %_{} = reason} when is_exception(reason) ->
+          cond_log(
+            log_level,
+            :debug,
+            "Output validation failed for #{inspect(action)}: #{inspect(reason)}"
+          )
+
+          {:error, reason}
 
         {:error, reason} ->
           cond_log(
@@ -84,7 +114,7 @@ defmodule Jido.Exec.Validator do
             "Output validation failed for #{inspect(action)}: #{inspect(reason)}"
           )
 
-          {:error, reason}
+          {:error, Error.validation_error(inspect(reason))}
 
         _ ->
           cond_log(log_level, :debug, "Invalid return from action.validate_output/1")

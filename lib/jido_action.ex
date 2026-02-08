@@ -168,7 +168,10 @@ defmodule Jido.Action do
               description: Zoi.string(description: "Description") |> Zoi.optional(),
               category: Zoi.string(description: "Category") |> Zoi.optional(),
               tags: Zoi.list(Zoi.string(), description: "Tags") |> Zoi.default([]),
-              vsn: Zoi.string(description: "Version") |> Zoi.optional(),
+              vsn:
+                Zoi.string(description: "Version")
+                |> Zoi.refine({Jido.Action.Util, :validate_vsn, []})
+                |> Zoi.default("0.1.0"),
               schema:
                 Zoi.any(description: "NimbleOptions or Zoi schema for validating Action input")
                 |> Zoi.default([]),
@@ -204,7 +207,8 @@ defmodule Jido.Action do
                             |> Zoi.default([]),
                           vsn:
                             Zoi.string(description: "The version of the Action.")
-                            |> Zoi.optional(),
+                            |> Zoi.refine({Jido.Action.Util, :validate_vsn, []})
+                            |> Zoi.default("0.1.0"),
                           compensation:
                             Zoi.object(%{
                               enabled: Zoi.boolean() |> Zoi.default(false),
@@ -280,7 +284,7 @@ defmodule Jido.Action do
   - `description` (optional) - A description of what the Action does.
   - `category` (optional) - The category of the Action.
   - `tags` (optional, default: []) - A list of tags associated with the Action.
-  - `vsn` (optional) - The version of the Action.
+  - `vsn` (optional, default: `"0.1.0"`) - Semantic version of the Action (for example, `"1.2.3"`).
   - `compensation` (optional, default: %{enabled: false, max_retries: 1, timeout: 5000}) - Compensation configuration with keys:
     - `enabled` (default: false) - Whether compensation is enabled
     - `max_retries` (default: 1) - Reserved for future use (compensation retries not yet implemented)

@@ -36,6 +36,7 @@ defmodule Jido.Tools.ActionPlan do
   """
 
   alias Jido.Exec
+  alias Jido.Action.Error
   alias Jido.Plan
 
   @doc """
@@ -79,9 +80,10 @@ defmodule Jido.Tools.ActionPlan do
           {:ok, result} ->
             # Transform the result using the optional callback
             transform_result(result)
+            |> normalize_transform_result()
 
           {:error, reason} ->
-            {:error, reason}
+            {:error, ensure_error(reason, "Plan execution failed")}
         end
       end
 
@@ -94,6 +96,20 @@ defmodule Jido.Tools.ActionPlan do
       # Allow transform_result to be overridden
       defoverridable transform_result: 1
 
+      defp normalize_transform_result(result) do
+        cond do
+          match?({:ok, _}, result) ->
+            {:ok, elem(result, 1)}
+
+          match?({:error, _}, result) ->
+            {:error, ensure_error(elem(result, 1), "Result transformation failed")}
+
+          true ->
+            {:error,
+             Error.execution_error("Invalid transform_result return value", %{result: result})}
+        end
+      end
+
       # Private helper function to execute the plan
       defp execute_plan(plan, params, context) do
         # Normalize the plan to get execution phases
@@ -103,7 +119,7 @@ defmodule Jido.Tools.ActionPlan do
             execute_phases(phases, plan, params, context, %{})
 
           {:error, reason} ->
-            {:error, reason}
+            {:error, ensure_error(reason, "Failed to derive plan execution phases")}
         end
       end
 
@@ -127,7 +143,7 @@ defmodule Jido.Tools.ActionPlan do
             execute_phases(remaining_phases, plan, updated_params, context, updated_results)
 
           {:error, reason} ->
-            {:error, reason}
+            {:error, ensure_error(reason, "Action plan phase failed")}
         end
       end
 
@@ -139,7 +155,11 @@ defmodule Jido.Tools.ActionPlan do
           |> Enum.map(fn step_name ->
             case Map.get(plan.steps, step_name) do
               nil ->
-                {:error, %{type: :step_not_found, step_name: step_name}}
+                {:error,
+                 Error.execution_error("Step not found: #{inspect(step_name)}", %{
+                   type: :step_not_found,
+                   step_name: step_name
+                 })}
 
               plan_instruction ->
                 execute_step(plan_instruction, params, context)
@@ -164,7 +184,7 @@ defmodule Jido.Tools.ActionPlan do
             {:ok, phase_results}
 
           {:error, reason} ->
-            {:error, reason}
+            {:error, ensure_error(reason, "Action plan step failed")}
         end
       end
 
@@ -183,20 +203,30 @@ defmodule Jido.Tools.ActionPlan do
 
           {:error, reason} ->
             {:error,
-             %{
+             Error.execution_error("Step execution failed", %{
                type: :step_execution_failed,
                step_name: plan_instruction.name,
-               reason: reason
-             }}
+               reason: ensure_error(reason, "Step execution failed")
+             })}
 
           other ->
             {:error,
-             %{
+             Error.execution_error("Action returned unexpected value: #{inspect(other)}", %{
                type: :invalid_result,
                step_name: plan_instruction.name,
-               message: "Action returned unexpected value: #{inspect(other)}"
-             }}
+               result: other
+             })}
         end
+      end
+
+      defp ensure_error(%_{} = error, _message) when is_exception(error), do: error
+
+      defp ensure_error(reason, _message) when is_binary(reason) do
+        Error.execution_error(reason)
+      end
+
+      defp ensure_error(reason, message) do
+        Error.execution_error(message, %{reason: reason})
       end
     end
   end

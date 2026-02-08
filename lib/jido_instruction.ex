@@ -134,6 +134,7 @@ defmodule Jido.Instruction do
   """
 
   alias Jido.Action.Error
+  alias Jido.Action.Params
   alias Jido.Instruction
 
   # Define Zoi schema for instruction
@@ -235,8 +236,7 @@ defmodule Jido.Instruction do
 
   ## Returns
     * `{:ok, %Instruction{}}` - Successfully created instruction
-    * `{:error, :missing_action}` - If action is not provided
-    * `{:error, :invalid_action}` - If action is not a module
+    * `{:error, %Jido.Action.Error.InvalidInputError{}}` - If action is missing or invalid
 
   ## Examples
 
@@ -250,7 +250,7 @@ defmodule Jido.Instruction do
       {:error, :missing_action}
   """
   @spec new(map() | keyword()) ::
-          {:ok, t()} | {:error, :missing_action | :invalid_action | term()}
+          {:ok, t()} | {:error, Exception.t()}
   def new(attrs) when is_list(attrs) do
     new(Map.new(attrs))
   end
@@ -264,7 +264,7 @@ defmodule Jido.Instruction do
     end
   end
 
-  def new(_), do: {:error, :missing_action}
+  def new(_), do: {:error, Error.validation_error("missing action", %{reason: :missing_action})}
 
   @doc """
   Normalizes a single instruction into an instruction struct. Unlike normalize/3,
@@ -297,24 +297,33 @@ defmodule Jido.Instruction do
 
   # Already normalized instruction - just merge context and opts
   def normalize_single(%__MODULE__{} = instruction, context, opts) do
-    context = context || %{}
-    merged_opts = Keyword.merge(instruction.opts, opts)
-    {:ok, %{instruction | context: Map.merge(instruction.context, context), opts: merged_opts}}
+    normalized_context = normalize_context(context)
+    merged_opts = merge_opts(instruction.opts, opts)
+
+    {:ok,
+     %{
+       instruction
+       | context: merge_context(instruction.context, normalized_context),
+         opts: merged_opts
+     }}
   end
 
   # Single action module
   def normalize_single(action, context, opts) when is_atom(action) do
-    context = context || %{}
-    {:ok, new!(%{action: action, params: %{}, context: context, opts: opts})}
+    {:ok, new!(%{action: action, params: %{}, context: normalize_context(context), opts: opts})}
   end
 
   # Action tuple with params
   def normalize_single({action, params}, context, opts) when is_atom(action) do
-    context = context || %{}
-
     case normalize_params(params) do
       {:ok, normalized_params} ->
-        {:ok, new!(%{action: action, params: normalized_params, context: context, opts: opts})}
+        {:ok,
+         new!(%{
+           action: action,
+           params: normalized_params,
+           context: normalize_context(context),
+           opts: opts
+         })}
 
       error ->
         error
@@ -323,9 +332,7 @@ defmodule Jido.Instruction do
 
   # Action tuple with context
   def normalize_single({action, params, item_context}, context, opts) when is_atom(action) do
-    context = context || %{}
-    item_context = item_context || %{}
-    merged_context = Map.merge(item_context, context)
+    merged_context = merge_context(item_context, context)
 
     case normalize_params(params) do
       {:ok, normalized_params} ->
@@ -345,12 +352,8 @@ defmodule Jido.Instruction do
   # Action tuple with context and opts
   def normalize_single({action, params, item_context, item_opts}, context, opts)
       when is_atom(action) do
-    context = context || %{}
-    item_context = item_context || %{}
-    merged_context = Map.merge(item_context, context)
-
-    item_opts = item_opts || []
-    merged_opts = Keyword.merge(item_opts, opts)
+    merged_context = merge_context(item_context, context)
+    merged_opts = merge_opts(item_opts, opts)
 
     case normalize_params(params) do
       {:ok, normalized_params} ->
@@ -504,19 +507,30 @@ defmodule Jido.Instruction do
 
   # Helpers for new/1
   defp validate_action_present(attrs) do
-    if Map.has_key?(attrs, :action), do: :ok, else: {:error, :missing_action}
+    if Map.has_key?(attrs, :action) do
+      :ok
+    else
+      {:error, Error.validation_error("missing action", %{reason: :missing_action})}
+    end
   end
 
   defp validate_action_is_atom(attrs) do
-    if is_atom(Map.get(attrs, :action)), do: :ok, else: {:error, :invalid_action}
+    action = Map.get(attrs, :action)
+
+    if is_atom(action) do
+      :ok
+    else
+      {:error,
+       Error.validation_error("invalid action", %{reason: :invalid_action, action: action})}
+    end
   end
 
   defp apply_defaults(attrs) do
     attrs
     |> Map.put_new_lazy(:id, &Uniq.UUID.uuid7/0)
-    |> Map.update(:params, %{}, fn v -> if is_nil(v), do: %{}, else: v end)
-    |> Map.update(:context, %{}, fn v -> if is_nil(v), do: %{}, else: v end)
-    |> Map.update(:opts, [], fn v -> if is_nil(v), do: [], else: v end)
+    |> Map.update(:params, %{}, &Params.nil_to_default(&1, %{}))
+    |> Map.update(:context, %{}, &Params.nil_to_default(&1, %{}))
+    |> Map.update(:opts, [], &Params.nil_to_default(&1, []))
   end
 
   defp parse_with_zoi(attrs_with_defaults) do
@@ -561,6 +575,17 @@ defmodule Jido.Instruction do
     end)
   end
 
+  defp normalize_context(context), do: Params.nil_to_default(context, %{})
+  defp normalize_opts(opts), do: Params.nil_to_default(opts, [])
+
+  defp merge_context(item_context, shared_context) do
+    Map.merge(normalize_context(item_context), normalize_context(shared_context))
+  end
+
+  defp merge_opts(item_opts, shared_opts) do
+    Keyword.merge(normalize_opts(item_opts), normalize_opts(shared_opts))
+  end
+
   defp format_zoi_errors(errors) when is_list(errors) do
     Enum.map(errors, fn
       %{path: path, message: message} = error ->
@@ -575,32 +600,5 @@ defmodule Jido.Instruction do
     end)
   end
 
-  defp normalize_params(nil), do: {:ok, %{}}
-  defp normalize_params(params) when is_map(params), do: {:ok, params}
-
-  defp normalize_params(params) when is_list(params) do
-    if Keyword.keyword?(params) do
-      {:ok, Map.new(params)}
-    else
-      {:error,
-       Error.execution_error(
-         "Invalid params format. Params must be a map or keyword list.",
-         %{
-           params: params,
-           expected_format: "%{key: value} or [key: value]"
-         }
-       )}
-    end
-  end
-
-  defp normalize_params(invalid) do
-    {:error,
-     Error.execution_error(
-       "Invalid params format. Params must be a map or keyword list.",
-       %{
-         params: invalid,
-         expected_format: "%{key: value} or [key: value]"
-       }
-     )}
-  end
+  defp normalize_params(params), do: Params.normalize_instruction_params(params)
 end

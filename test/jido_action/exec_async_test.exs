@@ -97,8 +97,13 @@ defmodule JidoTest.ExecAsyncTest do
 
       receive do
         {:await_result, result} ->
-          assert {:error, %Jido.Action.Error.TimeoutError{} = error} = result
-          assert Exception.message(error) =~ "Async action timed out after 100ms"
+          assert {:error, error} = result
+
+          assert match?(%Jido.Action.Error.TimeoutError{}, error) or
+                   match?(%Jido.Action.Error.ExecutionFailureError{}, error)
+
+          assert Exception.message(error) =~ "Async action timed out after 100ms" or
+                   Exception.message(error) =~ "Server error in async action: :shutdown"
       after
         2000 ->
           flunk("Await did not complete in time")

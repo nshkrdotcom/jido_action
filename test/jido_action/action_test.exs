@@ -88,6 +88,7 @@ defmodule JidoTest.Exec.ActionTest do
     test "creates a valid action with no schema" do
       assert NoSchema.name() == "add_two"
       assert NoSchema.description() == "Adds 2 to the input value"
+      assert NoSchema.vsn() == "0.1.0"
       assert NoSchema.schema() == []
     end
 
@@ -103,6 +104,11 @@ defmodule JidoTest.Exec.ActionTest do
                a: [type: :integer, required: true],
                b: [type: :integer, required: true]
              ]
+    end
+
+    test "to_json includes default version when vsn is omitted" do
+      json = NoSchema.to_json()
+      assert json.vsn == "0.1.0"
     end
 
     test "schema validation covers all types" do

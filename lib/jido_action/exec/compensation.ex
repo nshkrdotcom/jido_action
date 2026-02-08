@@ -8,21 +8,22 @@ defmodule Jido.Exec.Compensation do
   """
   use Private
 
+  alias Jido.Action.Config
   alias Jido.Action.Error
-  alias Jido.Exec.Supervisors
+  alias Jido.Exec.TaskHelper
   alias Jido.Exec.Telemetry
+  alias Jido.Exec.Types
 
   require Logger
 
-  @type action :: module()
-  @type params :: map()
-  @type context :: map()
-  @type run_opts :: [timeout: non_neg_integer()]
-  @type exec_result ::
-          {:ok, map()}
-          | {:ok, map(), any()}
-          | {:error, Exception.t()}
-          | {:error, Exception.t(), any()}
+  @down_grace_period_ms 100
+  @flush_timeout_ms 0
+
+  @type action :: Types.action()
+  @type params :: Types.params()
+  @type context :: Types.context()
+  @type run_opts :: Types.run_opts()
+  @type exec_result :: Types.exec_result()
 
   @doc """
   Checks if compensation is enabled for the given action.
@@ -106,91 +107,275 @@ defmodule Jido.Exec.Compensation do
       metadata = action.__action_metadata__()
       compensation_opts = metadata[:compensation] || []
       timeout = get_compensation_timeout(opts, compensation_opts)
-
-      current_gl = Process.group_leader()
-      task_sup = Supervisors.task_supervisor(opts)
-      parent = self()
-      ref = make_ref()
+      max_attempts = get_compensation_max_attempts(opts, compensation_opts)
 
       compensation_run_opts =
         opts
-        |> Keyword.take([:timeout, :backoff, :telemetry, :jido])
+        |> Keyword.take([
+          :timeout,
+          :backoff,
+          :telemetry,
+          :jido,
+          :compensation_timeout,
+          :compensation_max_retries
+        ])
         |> Keyword.put(:compensation_timeout, timeout)
-
-      {:ok, pid} =
-        Task.Supervisor.start_child(task_sup, fn ->
-          Process.group_leader(self(), current_gl)
-          result = action.on_error(params, error, context, compensation_run_opts)
-          send(parent, {:compensation_result, ref, result})
-        end)
-
-      monitor_ref = Process.monitor(pid)
+        |> Keyword.put(:compensation_max_retries, max(max_attempts - 1, 0))
 
       result =
+        execute_compensation_with_retries(
+          action,
+          params,
+          context,
+          error,
+          opts,
+          compensation_run_opts,
+          timeout,
+          max_attempts
+        )
+
+      handle_task_result(result, error, directive, timeout, max_attempts)
+    end
+
+    @spec execute_compensation_with_retries(
+            action(),
+            params(),
+            context(),
+            Exception.t(),
+            run_opts(),
+            run_opts(),
+            non_neg_integer(),
+            pos_integer()
+          ) :: {:ok, any()} | {:exit, any()} | :timeout
+    defp execute_compensation_with_retries(
+           action,
+           params,
+           context,
+           error,
+           opts,
+           compensation_run_opts,
+           timeout,
+           max_attempts
+         ) do
+      do_execute_compensation_with_retries(
+        action,
+        params,
+        context,
+        error,
+        opts,
+        compensation_run_opts,
+        timeout,
+        1,
+        max_attempts
+      )
+    end
+
+    @spec do_execute_compensation_with_retries(
+            action(),
+            params(),
+            context(),
+            Exception.t(),
+            run_opts(),
+            run_opts(),
+            non_neg_integer(),
+            pos_integer(),
+            pos_integer()
+          ) :: {:ok, any()} | {:exit, any()} | :timeout
+    defp do_execute_compensation_with_retries(
+           action,
+           params,
+           context,
+           error,
+           opts,
+           compensation_run_opts,
+           timeout,
+           attempt,
+           max_attempts
+         ) do
+      case execute_compensation_once(
+             action,
+             params,
+             context,
+             error,
+             opts,
+             compensation_run_opts,
+             timeout
+           ) do
+        :timeout when attempt < max_attempts ->
+          Logger.debug("Compensation timed out, retrying attempt #{attempt + 1}/#{max_attempts}")
+
+          do_execute_compensation_with_retries(
+            action,
+            params,
+            context,
+            error,
+            opts,
+            compensation_run_opts,
+            timeout,
+            attempt + 1,
+            max_attempts
+          )
+
+        {:exit, reason} when attempt < max_attempts ->
+          Logger.debug(
+            "Compensation exited (#{inspect(reason)}), retrying attempt #{attempt + 1}/#{max_attempts}"
+          )
+
+          do_execute_compensation_with_retries(
+            action,
+            params,
+            context,
+            error,
+            opts,
+            compensation_run_opts,
+            timeout,
+            attempt + 1,
+            max_attempts
+          )
+
+        other ->
+          other
+      end
+    end
+
+    @spec execute_compensation_once(
+            action(),
+            params(),
+            context(),
+            Exception.t(),
+            run_opts(),
+            run_opts(),
+            non_neg_integer()
+          ) :: {:ok, any()} | {:exit, any()} | :timeout
+    defp execute_compensation_once(
+           action,
+           params,
+           context,
+           error,
+           opts,
+           compensation_run_opts,
+           timeout
+         ) do
+      with {:ok, %{ref: ref, pid: pid, monitor_ref: monitor_ref}} <-
+             TaskHelper.spawn_monitored(opts, :compensation_result, fn ->
+               action.on_error(params, error, context, compensation_run_opts)
+             end) do
         receive do
           {:compensation_result, ^ref, result} ->
-            Process.demonitor(monitor_ref, [:flush])
+            TaskHelper.demonitor_flush(monitor_ref)
             {:ok, result}
 
           {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
             case reason do
               :normal ->
                 receive do
-                  {:compensation_result, ^ref, result} -> {:ok, result}
+                  {:compensation_result, ^ref, result} ->
+                    TaskHelper.demonitor_flush(monitor_ref)
+                    {:ok, result}
                 after
-                  0 -> {:exit, reason}
+                  @down_grace_period_ms ->
+                    TaskHelper.demonitor_flush(monitor_ref)
+                    {:exit, reason}
                 end
 
               _ ->
+                TaskHelper.demonitor_flush(monitor_ref)
                 {:exit, reason}
             end
         after
           timeout ->
-            _ = Task.Supervisor.terminate_child(task_sup, pid)
+            task_sup = Jido.Exec.Supervisors.task_supervisor(opts)
+
+            TaskHelper.timeout_cleanup(
+              task_sup,
+              pid,
+              monitor_ref,
+              :compensation_result,
+              ref,
+              down_grace_period_ms: @down_grace_period_ms,
+              flush_timeout_ms: @flush_timeout_ms
+            )
+
             :timeout
         end
-
-      handle_task_result(result, error, directive, timeout)
+      else
+        {:error, spawn_error} -> {:exit, spawn_error}
+      end
     end
 
     @spec get_compensation_timeout(run_opts(), keyword() | map()) :: non_neg_integer()
     defp get_compensation_timeout(opts, compensation_opts) do
-      Keyword.get(opts, :timeout) || extract_timeout_from_compensation_opts(compensation_opts)
+      Keyword.get(opts, :compensation_timeout) ||
+        extract_timeout_from_compensation_opts(compensation_opts) ||
+        Keyword.get(opts, :timeout) ||
+        Config.compensation_timeout()
     end
 
-    @spec extract_timeout_from_compensation_opts(keyword() | map() | any()) :: non_neg_integer()
+    @spec get_compensation_max_attempts(run_opts(), keyword() | map()) :: pos_integer()
+    defp get_compensation_max_attempts(opts, compensation_opts) do
+      retries =
+        Keyword.get(opts, :compensation_max_retries) ||
+          extract_max_retries_from_compensation_opts(compensation_opts) ||
+          1
+
+      retries
+      |> normalize_retries()
+      |> max(1)
+    end
+
+    @spec extract_timeout_from_compensation_opts(keyword() | map() | any()) ::
+            non_neg_integer() | nil
     defp extract_timeout_from_compensation_opts(opts) when is_list(opts),
-      do: Keyword.get(opts, :timeout, 5_000)
+      do: Keyword.get(opts, :timeout)
 
     defp extract_timeout_from_compensation_opts(%{timeout: timeout}), do: timeout
-    defp extract_timeout_from_compensation_opts(_), do: 5_000
+    defp extract_timeout_from_compensation_opts(_), do: nil
+
+    @spec extract_max_retries_from_compensation_opts(keyword() | map() | any()) ::
+            non_neg_integer() | nil
+    defp extract_max_retries_from_compensation_opts(opts) when is_list(opts),
+      do: Keyword.get(opts, :max_retries)
+
+    defp extract_max_retries_from_compensation_opts(%{max_retries: max_retries}),
+      do: max_retries
+
+    defp extract_max_retries_from_compensation_opts(_), do: nil
+
+    defp normalize_retries(value) when is_integer(value) and value >= 0, do: value
+    defp normalize_retries(_), do: 1
 
     @spec handle_task_result(
             {:ok, any()} | {:exit, any()} | :timeout,
             Exception.t(),
             any(),
-            non_neg_integer()
+            non_neg_integer(),
+            pos_integer()
           ) :: exec_result
-    defp handle_task_result({:ok, result}, error, directive, _timeout) do
+    defp handle_task_result({:ok, result}, error, directive, _timeout, _max_attempts) do
       handle_compensation_result(result, error, directive)
     end
 
-    defp handle_task_result(:timeout, error, directive, timeout) do
-      build_timeout_error(error, directive, timeout)
+    defp handle_task_result(:timeout, error, directive, timeout, max_attempts) do
+      build_timeout_error(error, directive, timeout, max_attempts)
     end
 
-    defp handle_task_result({:exit, reason}, error, directive, _timeout) do
-      build_exit_error(error, directive, reason)
+    defp handle_task_result({:exit, reason}, error, directive, _timeout, max_attempts) do
+      build_exit_error(error, directive, reason, max_attempts)
     end
 
-    @spec build_timeout_error(Exception.t(), any(), non_neg_integer()) :: exec_result
-    defp build_timeout_error(error, directive, timeout) do
+    @spec build_timeout_error(Exception.t(), any(), non_neg_integer(), pos_integer()) ::
+            exec_result
+    defp build_timeout_error(error, directive, timeout, max_attempts) do
+      compensation_error = Error.timeout_error("Compensation timed out after #{timeout}ms")
+
       error_result =
         Error.execution_error(
           "Compensation timed out after #{timeout}ms for: #{inspect(error)}",
           %{
             compensated: false,
-            compensation_error: "Compensation timed out after #{timeout}ms",
+            compensation_result: nil,
+            compensation_error: compensation_error,
+            compensation_attempts: max_attempts,
             original_error: error
           }
         )
@@ -198,16 +383,19 @@ defmodule Jido.Exec.Compensation do
       wrap_error_with_directive(error_result, directive)
     end
 
-    @spec build_exit_error(Exception.t(), any(), any()) :: exec_result
-    defp build_exit_error(error, directive, reason) do
+    @spec build_exit_error(Exception.t(), any(), any(), pos_integer()) :: exec_result
+    defp build_exit_error(error, directive, reason, max_attempts) do
       error_message = Telemetry.extract_safe_error_message(error)
+      compensation_error = Error.execution_error("Compensation exited: #{inspect(reason)}")
 
       error_result =
         Error.execution_error(
           "Compensation crashed for: #{error_message}",
           %{
             compensated: false,
-            compensation_error: "Compensation exited: #{inspect(reason)}",
+            compensation_result: nil,
+            compensation_error: compensation_error,
+            compensation_attempts: max_attempts,
             exit_reason: reason,
             original_error: error
           }
@@ -224,27 +412,34 @@ defmodule Jido.Exec.Compensation do
     end
 
     @spec build_compensation_error(any(), Exception.t()) :: Exception.t()
-    defp build_compensation_error({:ok, comp_result}, original_error) do
-      # Extract fields that should be at the top level of the details
-      {top_level_fields, remaining_fields} =
-        Map.split(comp_result, [:test_value, :compensation_context])
-
-      # Create the details map with the compensation result
-      details =
-        Map.merge(
-          %{
-            compensated: true,
-            compensation_result: remaining_fields
-          },
-          top_level_fields
-        )
-
+    defp build_compensation_error({:ok, comp_result}, original_error) when is_map(comp_result) do
       # Extract message from error struct properly using safe helper
       error_message = Telemetry.extract_safe_error_message(original_error)
 
       Error.execution_error(
         "Compensation completed for: #{error_message}",
-        Map.put(details, :original_error, original_error)
+        %{
+          compensated: true,
+          compensation_result: comp_result,
+          compensation_error: nil,
+          original_error: original_error
+        }
+      )
+    end
+
+    defp build_compensation_error({:ok, comp_result}, original_error) do
+      Error.execution_error(
+        "Invalid compensation result for: #{inspect(original_error)}",
+        %{
+          compensated: false,
+          compensation_result: nil,
+          compensation_error:
+            Error.execution_error(
+              "Invalid compensation result",
+              %{result: comp_result}
+            ),
+          original_error: original_error
+        }
       )
     end
 
@@ -256,7 +451,8 @@ defmodule Jido.Exec.Compensation do
         "Compensation failed for: #{error_message}",
         %{
           compensated: false,
-          compensation_error: comp_error,
+          compensation_result: nil,
+          compensation_error: ensure_error_struct(comp_error),
           original_error: original_error
         }
       )
@@ -267,7 +463,8 @@ defmodule Jido.Exec.Compensation do
         "Invalid compensation result for: #{inspect(original_error)}",
         %{
           compensated: false,
-          compensation_error: "Invalid compensation result",
+          compensation_result: nil,
+          compensation_error: Error.execution_error("Invalid compensation result"),
           original_error: original_error
         }
       )
@@ -276,5 +473,12 @@ defmodule Jido.Exec.Compensation do
     @spec wrap_error_with_directive(Exception.t(), any()) :: exec_result
     defp wrap_error_with_directive(error, nil), do: {:error, error}
     defp wrap_error_with_directive(error, directive), do: {:error, error, directive}
+
+    defp ensure_error_struct(%_{} = error) when is_exception(error), do: error
+    defp ensure_error_struct(reason) when is_binary(reason), do: Error.execution_error(reason)
+
+    defp ensure_error_struct(reason) do
+      Error.execution_error("Compensation failed", %{reason: reason})
+    end
   end
 end

@@ -28,7 +28,10 @@ defmodule Jido.Tools.Workflow.Execution do
       {:ok, step_result} ->
         {:halt,
          {:error,
-          %{type: :invalid_step_result, message: "Expected map, got: #{inspect(step_result)}"}}}
+          Error.execution_error("Expected map, got: #{inspect(step_result)}", %{
+            type: :invalid_step_result,
+            step_result: step_result
+          })}}
 
       {:error, reason} ->
         {:halt, {:error, reason}}
@@ -52,7 +55,11 @@ defmodule Jido.Tools.Workflow.Execution do
         execute_parallel(instructions, params, context, metadata, module)
 
       _ ->
-        {:error, %{type: :invalid_step, message: "Unknown step type: #{inspect(step)}"}}
+        {:error,
+         Error.validation_error("Unknown step type: #{inspect(step)}", %{
+           type: :invalid_step,
+           step: step
+         })}
     end
   end
 
@@ -63,10 +70,10 @@ defmodule Jido.Tools.Workflow.Execution do
 
       {:error, reason} ->
         {:error,
-         %{
+         Error.validation_error("Failed to normalize instruction: #{inspect(reason)}", %{
            type: :invalid_instruction,
-           message: "Failed to normalize instruction: #{inspect(reason)}"
-         }}
+           reason: reason
+         })}
     end
   end
 
@@ -84,10 +91,10 @@ defmodule Jido.Tools.Workflow.Execution do
         {:ok, result}
 
       {:error, reason} ->
-        {:error, reason}
+        {:error, ensure_error(reason)}
 
       {:error, reason, _other} ->
-        {:error, reason}
+        {:error, ensure_error(reason)}
     end
   end
 
@@ -110,10 +117,10 @@ defmodule Jido.Tools.Workflow.Execution do
          _module
        ) do
     {:error,
-     %{
+     Error.validation_error("Invalid or unhandled condition in branch #{inspect(metadata)}", %{
        type: :invalid_condition,
-       message: "Invalid or unhandled condition in branch #{inspect(metadata)}"
-     }}
+       metadata: metadata
+     })}
   end
 
   defp execute_parallel(instructions, params, context, metadata, module) do
@@ -133,7 +140,7 @@ defmodule Jido.Tools.Workflow.Execution do
     ]
 
     results =
-      Task.Supervisor.async_stream(
+      Task.Supervisor.async_stream_nolink(
         task_sup,
         instructions,
         fn instruction ->
@@ -155,7 +162,7 @@ defmodule Jido.Tools.Workflow.Execution do
   defp execute_parallel_instruction(instruction, params, context, module) do
     case module.execute_step(instruction, params, context) do
       {:ok, result} -> result
-      {:error, reason} -> %{error: reason}
+      {:error, reason} -> %{error: ensure_error(reason)}
     end
   rescue
     e ->
@@ -164,4 +171,8 @@ defmodule Jido.Tools.Workflow.Execution do
     kind, reason ->
       %{error: Error.execution_error("Parallel step caught", %{kind: kind, reason: reason})}
   end
+
+  defp ensure_error(%_{} = error) when is_exception(error), do: error
+  defp ensure_error(reason) when is_binary(reason), do: Error.execution_error(reason)
+  defp ensure_error(reason), do: Error.execution_error("Workflow step failed", %{reason: reason})
 end

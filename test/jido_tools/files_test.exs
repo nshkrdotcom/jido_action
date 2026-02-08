@@ -49,7 +49,7 @@ defmodule JidoTest.Actions.FilesTest do
       path = Path.join(parent_path, "test.txt")
       File.write!(parent_path, "")
 
-      assert {:error, message} =
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
                Files.WriteFile.run(
                  %{path: path, content: "test", create_dirs: true, mode: :write},
                  %{}
@@ -63,7 +63,7 @@ defmodule JidoTest.Actions.FilesTest do
       File.write!(path, "")
       File.chmod!(path, 0o444)
 
-      assert {:error, message} =
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
                Files.WriteFile.run(
                  %{path: path, content: "test", create_dirs: false, mode: :write},
                  %{}
@@ -93,7 +93,9 @@ defmodule JidoTest.Actions.FilesTest do
     test "fails when parent doesn't exist and recursive is false", %{tmp_dir: tmp_dir} do
       path = Path.join([tmp_dir, "nonexistent", "child"])
 
-      assert {:error, message} = Files.MakeDirectory.run(%{path: path, recursive: false}, %{})
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
+               Files.MakeDirectory.run(%{path: path, recursive: false}, %{})
+
       assert message =~ "Failed to create directory"
     end
 
@@ -101,7 +103,9 @@ defmodule JidoTest.Actions.FilesTest do
       path = Path.join(tmp_dir, "existing_dir")
       File.mkdir!(path)
 
-      assert {:error, message} = Files.MakeDirectory.run(%{path: path, recursive: false}, %{})
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
+               Files.MakeDirectory.run(%{path: path, recursive: false}, %{})
+
       assert message =~ "Failed to create directory"
     end
   end
@@ -146,7 +150,9 @@ defmodule JidoTest.Actions.FilesTest do
     test "fails when directory doesn't exist", %{tmp_dir: tmp_dir} do
       path = Path.join(tmp_dir, "nonexistent")
 
-      assert {:error, message} = Files.ListDirectory.run(%{path: path, recursive: false}, %{})
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
+               Files.ListDirectory.run(%{path: path, recursive: false}, %{})
+
       assert message =~ "Failed to list directory"
     end
 
@@ -203,7 +209,7 @@ defmodule JidoTest.Actions.FilesTest do
     test "fails when deleting non-existent file", %{tmp_dir: tmp_dir} do
       path = Path.join(tmp_dir, "nonexistent.txt")
 
-      assert {:error, message} =
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
                Files.DeleteFile.run(%{path: path, recursive: false, force: false}, %{})
 
       assert message =~ "Failed to delete"
@@ -220,7 +226,9 @@ defmodule JidoTest.Actions.FilesTest do
       # Then make the directory read-only
       File.chmod!(dir_path, 0o555)
 
-      assert {:error, message} = Files.DeleteFile.run(%{path: dir_path, recursive: true}, %{})
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
+               Files.DeleteFile.run(%{path: dir_path, recursive: true}, %{})
+
       assert message =~ "Failed to delete some paths"
 
       # Cleanup: Reset permissions to allow cleanup
@@ -243,7 +251,9 @@ defmodule JidoTest.Actions.FilesTest do
     test "returns error when file doesn't exist" do
       path = "/non_existent_file.txt"
 
-      assert {:error, error_message} = Files.ReadFile.run(%{path: path}, %{})
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: error_message}} =
+               Files.ReadFile.run(%{path: path}, %{})
+
       assert error_message =~ "Failed to read file"
     end
 
@@ -252,7 +262,9 @@ defmodule JidoTest.Actions.FilesTest do
       File.write!(path, "secret")
       File.chmod!(path, 0o000)
 
-      assert {:error, message} = Files.ReadFile.run(%{path: path}, %{})
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
+               Files.ReadFile.run(%{path: path}, %{})
+
       assert message =~ "Failed to read file"
 
       # Cleanup: Reset permissions to allow cleanup
@@ -278,7 +290,7 @@ defmodule JidoTest.Actions.FilesTest do
       source = "/non_existent_source.txt"
       destination = "/some_destination.txt"
 
-      assert {:error, error_message} =
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: error_message}} =
                Files.CopyFile.run(%{source: source, destination: destination}, %{})
 
       assert error_message =~ "Failed to copy file"
@@ -292,7 +304,7 @@ defmodule JidoTest.Actions.FilesTest do
       File.mkdir_p!(Path.dirname(destination))
       File.chmod!(Path.dirname(destination), 0o444)
 
-      assert {:error, message} =
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
                Files.CopyFile.run(%{source: source, destination: destination}, %{})
 
       assert message =~ "Failed to copy file"
@@ -317,7 +329,7 @@ defmodule JidoTest.Actions.FilesTest do
       source = "/non_existent_source.txt"
       destination = "/some_destination.txt"
 
-      assert {:error, error_message} =
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: error_message}} =
                Files.MoveFile.run(%{source: source, destination: destination}, %{})
 
       assert error_message =~ "Failed to move file"
@@ -331,7 +343,7 @@ defmodule JidoTest.Actions.FilesTest do
       File.mkdir_p!(Path.dirname(destination))
       File.chmod!(Path.dirname(destination), 0o444)
 
-      assert {:error, message} =
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
                Files.MoveFile.run(%{source: source, destination: destination}, %{})
 
       assert message =~ "Failed to move file"
@@ -342,7 +354,7 @@ defmodule JidoTest.Actions.FilesTest do
       File.write!(source, "test")
       destination = "/dev/null/dest.txt"
 
-      assert {:error, message} =
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
                Files.MoveFile.run(%{source: source, destination: destination}, %{})
 
       assert message =~ "Failed to move file"

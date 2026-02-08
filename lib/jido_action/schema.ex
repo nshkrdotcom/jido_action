@@ -9,6 +9,8 @@ defmodule Jido.Action.Schema do
   - JSON Schema generation (for AI tools)
   """
 
+  alias Jido.Action.Error
+
   @type t :: NimbleOptions.schema() | struct() | []
 
   @doc """
@@ -44,13 +46,13 @@ defmodule Jido.Action.Schema do
     * `{:ok, validated_data}` - Validation succeeded
     * `{:error, error}` - Validation failed
   """
-  @spec validate(t(), map() | keyword()) :: {:ok, map()} | {:error, term()}
+  @spec validate(t(), map() | keyword()) :: {:ok, map() | keyword()} | {:error, Exception.t()}
   def validate(schema, data) do
     case schema_type(schema) do
       :empty -> {:ok, data}
       :nimble -> validate_nimble(schema, data)
       :zoi -> validate_zoi(schema, data)
-      :unknown -> {:error, "Unsupported schema type"}
+      :unknown -> {:error, Error.validation_error("Unsupported schema type")}
     end
   end
 
@@ -96,14 +98,13 @@ defmodule Jido.Action.Schema do
   ## Returns
     * `Jido.Action.Error.InvalidInputError.t()` - Formatted error struct
   """
-  @spec format_error(term(), String.t(), module()) ::
-          Jido.Action.Error.InvalidInputError.t()
+  @spec format_error(term(), String.t(), module()) :: Exception.t()
   def format_error(error, context, module) do
     case error do
       %NimbleOptions.ValidationError{} = nimble_error ->
         nimble_error
-        |> Jido.Action.Error.format_nimble_validation_error(context, module)
-        |> Jido.Action.Error.validation_error()
+        |> Error.format_nimble_validation_error(context, module)
+        |> Error.validation_error()
 
       %Zoi.Error{} = zoi_error ->
         format_zoi_error(zoi_error, context, module)
@@ -111,14 +112,17 @@ defmodule Jido.Action.Schema do
       errors when is_list(errors) ->
         message = Zoi.prettify_errors(errors)
 
-        Jido.Action.Error.validation_error(message, %{
+        Error.validation_error(message, %{
           context: context,
           module: module,
           errors: format_zoi_error_list(errors)
         })
 
+      %_{} = existing_error when is_exception(existing_error) ->
+        existing_error
+
       _ ->
-        Jido.Action.Error.validation_error("Validation failed", %{
+        Error.validation_error("Validation failed", %{
           context: context,
           module: module
         })
@@ -164,14 +168,14 @@ defmodule Jido.Action.Schema do
 
     case NimbleOptions.validate(data_kw, schema) do
       {:ok, validated_kw} -> {:ok, Map.new(validated_kw)}
-      {:error, error} -> {:error, error}
+      {:error, error} -> {:error, normalize_nimble_validation_error(error)}
     end
   end
 
   defp validate_zoi(schema, data) do
     case Zoi.parse(schema, data) do
       {:ok, validated} -> {:ok, validated}
-      {:error, errors} -> {:error, errors}
+      {:error, errors} -> {:error, normalize_zoi_validation_error(errors)}
     end
   end
 
@@ -302,5 +306,21 @@ defmodule Jido.Action.Schema do
       error ->
         %{message: inspect(error)}
     end)
+  end
+
+  defp normalize_nimble_validation_error(%NimbleOptions.ValidationError{} = error) do
+    message = Error.format_nimble_validation_error(error, "schema", __MODULE__)
+
+    Error.validation_error(message, %{
+      schema_type: :nimble,
+      error: error
+    })
+  end
+
+  defp normalize_zoi_validation_error(errors) when is_list(errors) do
+    Error.validation_error(Zoi.prettify_errors(errors), %{
+      schema_type: :zoi,
+      errors: format_zoi_error_list(errors)
+    })
   end
 end

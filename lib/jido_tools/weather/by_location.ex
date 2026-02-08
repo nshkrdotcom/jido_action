@@ -9,6 +9,8 @@ defmodule Jido.Tools.Weather.ByLocation do
   Provides a simple interface for getting weather by location in one call.
   """
 
+  alias Jido.Action.Error
+
   use Jido.Action,
     name: "weather_by_location",
     description: "Get weather forecast for any location using NWS API",
@@ -52,11 +54,15 @@ defmodule Jido.Tools.Weather.ByLocation do
       {:ok, grid_info} ->
         {:ok, grid_info}
 
-      {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} ->
-        {:error, "Failed to get grid info: #{message}"}
+      {:error, %_{} = error} when is_exception(error) ->
+        {:error,
+         Error.execution_error("Failed to get grid info: #{Exception.message(error)}", %{
+           reason: error
+         })}
 
       {:error, reason} ->
-        {:error, "Failed to get grid info: #{inspect(reason)}"}
+        {:error,
+         Error.execution_error("Failed to get grid info: #{inspect(reason)}", %{reason: reason})}
     end
   end
 
@@ -71,11 +77,15 @@ defmodule Jido.Tools.Weather.ByLocation do
       {:ok, forecast} ->
         {:ok, forecast}
 
-      {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} ->
-        {:error, "Failed to get forecast: #{message}"}
+      {:error, %_{} = error} when is_exception(error) ->
+        {:error,
+         Error.execution_error("Failed to get forecast: #{Exception.message(error)}", %{
+           reason: error
+         })}
 
       {:error, reason} ->
-        {:error, "Failed to get forecast: #{inspect(reason)}"}
+        {:error,
+         Error.execution_error("Failed to get forecast: #{inspect(reason)}", %{reason: reason})}
     end
   end
 

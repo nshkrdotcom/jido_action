@@ -6,6 +6,7 @@ defmodule Jido.Action.Util do
   require Logger
 
   @name_regex ~r/^[a-zA-Z][a-zA-Z0-9_]*$/
+  @semver_regex ~r/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
 
   @doc """
   Conditionally logs a message based on comparing threshold and message log levels.
@@ -93,6 +94,24 @@ defmodule Jido.Action.Util do
 
   def validate_name(_name, _opts) do
     {:error, "Invalid name format."}
+  end
+
+  @doc """
+  Validates an action semantic version string.
+  """
+  @spec validate_vsn(any(), keyword()) :: :ok | {:error, String.t()}
+  def validate_vsn(vsn, _opts \\ [])
+
+  def validate_vsn(vsn, _opts) when is_binary(vsn) do
+    if Regex.match?(@semver_regex, vsn) do
+      :ok
+    else
+      {:error, "Version must be a valid semantic version (e.g., 1.2.3)."}
+    end
+  end
+
+  def validate_vsn(_vsn, _opts) do
+    {:error, "Version must be a string."}
   end
 
   @doc """

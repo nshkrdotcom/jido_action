@@ -273,8 +273,8 @@ defmodule JidoTest.ExecIntegrationTest do
         assert Exception.message(error) =~ "Compensation completed for:"
         assert error.details.compensated == true
         assert is_exception(error.details.original_error)
-        assert error.details.test_value == "recovery_test"
-        assert Map.has_key?(error.details, :compensation_context)
+        assert error.details.compensation_result.test_value == "recovery_test"
+        assert Map.has_key?(error.details.compensation_result, :compensation_context)
       end)
     end
 
@@ -407,7 +407,7 @@ defmodule JidoTest.ExecIntegrationTest do
         assert {:error, %Error.ExecutionFailureError{} = error} = Exec.await(async_ref, 3_000)
         assert Exception.message(error) =~ "Compensation completed for:"
         assert error.details.compensated == true
-        assert error.details.test_value == "complex_test"
+        assert error.details.compensation_result.test_value == "complex_test"
       end)
     end
 

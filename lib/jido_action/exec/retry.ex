@@ -8,6 +8,7 @@ defmodule Jido.Exec.Retry do
   - Retry option processing and validation
   """
 
+  alias Jido.Action.Config
   alias Jido.Exec.Telemetry
 
   require Logger
@@ -41,7 +42,7 @@ defmodule Jido.Exec.Retry do
   def calculate_backoff(retry_count, initial_backoff) do
     (initial_backoff * :math.pow(2, retry_count))
     |> round()
-    |> min(30_000)
+    |> min(Config.max_backoff())
   end
 
   @doc """
@@ -111,7 +112,11 @@ defmodule Jido.Exec.Retry do
       backoff
     )
 
-    :timer.sleep(backoff)
+    receive do
+    after
+      backoff -> :ok
+    end
+
     retry_fn.()
   end
 
@@ -127,8 +132,8 @@ defmodule Jido.Exec.Retry do
   @spec default_retry_config() :: keyword()
   def default_retry_config do
     [
-      max_retries: Application.get_env(:jido_action, :default_max_retries, 1),
-      backoff: Application.get_env(:jido_action, :default_backoff, 250)
+      max_retries: Config.max_retries(),
+      backoff: Config.backoff()
     ]
   end
 

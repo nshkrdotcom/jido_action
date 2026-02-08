@@ -39,40 +39,28 @@ defmodule Jido.Exec do
   """
   use Private
 
+  alias Jido.Action.Config
   alias Jido.Action.Error
+  alias Jido.Action.Params
   alias Jido.Exec.Async
   alias Jido.Exec.Compensation
   alias Jido.Exec.Retry
   alias Jido.Exec.Supervisors
+  alias Jido.Exec.TaskHelper
   alias Jido.Exec.Telemetry
+  alias Jido.Exec.Types
   alias Jido.Exec.Validator
   alias Jido.Instruction
 
   require Logger
 
-  @default_timeout 30_000
-
-  # Helper functions to get configuration values with fallbacks
-  defp get_default_timeout,
-    do: Application.get_env(:jido_action, :default_timeout, @default_timeout)
-
-  @type action :: module()
-  @type params :: map()
-  @type context :: map()
-  @type run_opts :: [timeout: non_neg_integer(), jido: atom()]
-  @type async_ref :: %{ref: reference(), pid: pid()}
-
-  # Execution result types
-  @type exec_success :: {:ok, map()}
-  @type exec_success_dir :: {:ok, map(), any()}
-  @type exec_error :: {:error, Exception.t()}
-  @type exec_error_dir :: {:error, Exception.t(), any()}
-
-  @type exec_result ::
-          exec_success
-          | exec_success_dir
-          | exec_error
-          | exec_error_dir
+  @type action :: Types.action()
+  @type params :: Types.params()
+  @type context :: Types.context()
+  @type run_opts :: Types.run_opts()
+  @type async_ref :: Types.async_ref()
+  @type exec_error :: Types.exec_error()
+  @type exec_result :: Types.exec_result()
 
   @doc """
   Executes a Action synchronously with the given parameters and context.
@@ -287,22 +275,10 @@ defmodule Jido.Exec do
   # Private functions are exposed to the test suite
   private do
     @spec normalize_params(params()) :: {:ok, map()} | {:error, Exception.t()}
-    defp normalize_params(%_{} = error) when is_exception(error), do: {:error, error}
-    defp normalize_params(params) when is_map(params), do: {:ok, params}
-    defp normalize_params(params) when is_list(params), do: {:ok, Map.new(params)}
-    defp normalize_params({:ok, params}) when is_map(params), do: {:ok, params}
-    defp normalize_params({:ok, params}) when is_list(params), do: {:ok, Map.new(params)}
-    defp normalize_params({:error, reason}), do: {:error, Error.validation_error(reason)}
-
-    defp normalize_params(params),
-      do: {:error, Error.validation_error("Invalid params type: #{inspect(params)}")}
+    defp normalize_params(params), do: Params.normalize_exec_params(params)
 
     @spec normalize_context(context()) :: {:ok, map()} | {:error, Exception.t()}
-    defp normalize_context(context) when is_map(context), do: {:ok, context}
-    defp normalize_context(context) when is_list(context), do: {:ok, Map.new(context)}
-
-    defp normalize_context(context),
-      do: {:error, Error.validation_error("Invalid context type: #{inspect(context)}")}
+    defp normalize_context(context), do: Params.normalize_exec_context(context)
 
     @spec do_run_with_retry(action(), params(), context(), run_opts()) :: exec_result
     defp do_run_with_retry(action, params, context, opts) do
@@ -384,7 +360,7 @@ defmodule Jido.Exec do
 
     @spec do_run(action(), params(), context(), run_opts()) :: exec_result
     defp do_run(action, params, context, opts) do
-      timeout = Keyword.get(opts, :timeout, get_default_timeout())
+      timeout = Keyword.get(opts, :timeout, Config.exec_timeout())
       telemetry = Keyword.get(opts, :telemetry, :full)
 
       result =
@@ -455,95 +431,71 @@ defmodule Jido.Exec do
     defp execute_action_with_timeout(action, params, context, timeout, opts)
          when is_integer(timeout) and timeout > 0 do
       # Get the current process's group leader for IO routing
-      current_gl = Process.group_leader()
+      with {:ok, %{ref: ref, pid: pid, monitor_ref: monitor_ref}} <-
+             TaskHelper.spawn_monitored(opts, :execute_action_result, fn ->
+               execute_action(action, params, context, opts)
+             end) do
+        # Wait for completion, crash, or timeout.
+        result =
+          receive do
+            {:execute_action_result, ^ref, result} ->
+              TaskHelper.demonitor_flush(monitor_ref)
+              {:ok, result}
 
-      # Resolve supervisor based on jido: option (defaults to global)
-      task_sup = Supervisors.task_supervisor(opts)
+            {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
+              # If the process exited normally, a result message may still be in flight.
+              case reason do
+                :normal ->
+                  receive do
+                    {:execute_action_result, ^ref, result} ->
+                      TaskHelper.demonitor_flush(monitor_ref)
+                      {:ok, result}
+                  after
+                    0 ->
+                      TaskHelper.demonitor_flush(monitor_ref)
+                      {:exit, reason}
+                  end
 
-      parent = self()
-      ref = make_ref()
+                _ ->
+                  TaskHelper.demonitor_flush(monitor_ref)
+                  {:exit, reason}
+              end
+          after
+            timeout ->
+              task_sup = Supervisors.task_supervisor(opts)
+              TaskHelper.timeout_cleanup(task_sup, pid, monitor_ref, :execute_action_result, ref)
 
-      # Spawn process under the supervisor and send the result back explicitly.
-      # This avoids relying on Task.yield/2 behavior/typing (Elixir 1.18+).
-      {:ok, pid} =
-        Task.Supervisor.start_child(task_sup, fn ->
-          # Use the parent's group leader to ensure IO is properly captured
-          Process.group_leader(self(), current_gl)
+              :timeout
+          end
 
-          result = execute_action(action, params, context, opts)
-          send(parent, {:execute_action_result, ref, result})
-        end)
+        case result do
+          {:ok, result} ->
+            result
 
-      monitor_ref = Process.monitor(pid)
-
-      # Wait for completion, crash, or timeout.
-      result =
-        receive do
-          {:execute_action_result, ^ref, result} ->
-            Process.demonitor(monitor_ref, [:flush])
-            {:ok, result}
-
-          {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
-            # If the process exited normally, a result message may still be in flight.
-            case reason do
-              :normal ->
-                receive do
-                  {:execute_action_result, ^ref, result} -> {:ok, result}
-                after
-                  0 -> {:exit, reason}
-                end
-
-              _ ->
-                {:exit, reason}
-            end
-        after
-          timeout ->
-            _ = Task.Supervisor.terminate_child(task_sup, pid)
-
-            # Best-effort wait for termination to avoid leaking processes in slow CI runners.
-            receive do
-              {:DOWN, ^monitor_ref, :process, ^pid, _reason} -> :ok
-            after
-              100 -> :ok
-            end
-
-            Process.demonitor(monitor_ref, [:flush])
-
-            # Flush any late result message (race with timeout).
-            receive do
-              {:execute_action_result, ^ref, _result} -> :ok
-            after
-              0 -> :ok
-            end
-
-            :timeout
-        end
-
-      case result do
-        {:ok, result} ->
-          result
-
-        {:exit, reason} ->
-          {:error,
-           Error.execution_error("Task exited: #{inspect(reason)}", %{
-             reason: reason,
-             action: action
-           })}
-
-        :timeout ->
-          {:error,
-           Error.timeout_error(
-             "Action #{inspect(action)} timed out after #{timeout}ms",
-             %{
-               timeout: timeout,
+          {:exit, reason} ->
+            {:error,
+             Error.execution_error("Task exited: #{inspect(reason)}", %{
+               reason: reason,
                action: action
-             }
-           )}
+             })}
+
+          :timeout ->
+            {:error,
+             Error.timeout_error(
+               "Action #{inspect(action)} timed out after #{timeout}ms",
+               %{
+                 timeout: timeout,
+                 action: action
+               }
+             )}
+        end
+      else
+        {:error, error} -> {:error, error}
       end
     end
 
     defp execute_action_with_timeout(action, params, context, _timeout, opts) do
-      execute_action_with_timeout(action, params, context, get_default_timeout(), opts)
+      execute_action_with_timeout(action, params, context, Config.exec_timeout(), opts)
     end
 
     @spec execute_action(action(), params(), context(), run_opts()) :: exec_result
@@ -570,8 +522,9 @@ defmodule Jido.Exec do
 
     # Handle errors with extra data
     defp handle_action_result({:error, reason, other}, action, log_level, _opts) do
-      Telemetry.cond_log_error(log_level, action, reason)
-      {:error, reason, other}
+      error = ensure_error_struct(reason)
+      Telemetry.cond_log_error(log_level, action, error)
+      {:error, error, other}
     end
 
     # Handle exception errors
@@ -583,8 +536,9 @@ defmodule Jido.Exec do
 
     # Handle generic errors
     defp handle_action_result({:error, reason}, action, log_level, _opts) do
-      Telemetry.cond_log_error(log_level, action, reason)
-      {:error, Error.execution_error(reason)}
+      error = ensure_error_struct(reason)
+      Telemetry.cond_log_error(log_level, action, error)
+      {:error, error}
     end
 
     # Handle unexpected return shapes
@@ -623,6 +577,13 @@ defmodule Jido.Exec do
     defp log_validation_failure(action, validation_error, log_level, other) do
       Telemetry.cond_log_validation_failure(log_level, action, validation_error)
       {:error, validation_error, other}
+    end
+
+    defp ensure_error_struct(%_{} = error) when is_exception(error), do: error
+    defp ensure_error_struct(reason) when is_binary(reason), do: Error.execution_error(reason)
+
+    defp ensure_error_struct(reason) do
+      Error.execution_error("Action failed", %{reason: reason})
     end
 
     # Handle exceptions raised during action execution

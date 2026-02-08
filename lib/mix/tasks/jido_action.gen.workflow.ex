@@ -49,6 +49,8 @@ if Code.ensure_loaded?(Igniter.Mix.Task) do
 
     use Igniter.Mix.Task
 
+    @step_name_regex ~r/^[a-z][a-z0-9_]*$/
+
     @impl Igniter.Mix.Task
     def info(_argv, _composing_task) do
       %Igniter.Mix.Task.Info{
@@ -132,16 +134,24 @@ if Code.ensure_loaded?(Igniter.Mix.Task) do
       steps
       |> Enum.with_index()
       |> Enum.map_join("\n", fn {step, index} ->
+        validate_step_name!(step)
         action_module = "#{root_namespace}.Actions.#{Macro.camelize(step)}"
-        step_atom = String.to_atom(step)
 
         if index == 0 do
-          "    |> Plan.add(:#{step_atom}, #{action_module})"
+          "    |> Plan.add(:#{step}, #{action_module})"
         else
           prev_step = Enum.at(steps, index - 1)
-          "    |> Plan.add(:#{step_atom}, #{action_module}, depends_on: :#{prev_step})"
+          "    |> Plan.add(:#{step}, #{action_module}, depends_on: :#{prev_step})"
         end
       end)
+    end
+
+    defp validate_step_name!(step) do
+      if Regex.match?(@step_name_regex, step) do
+        :ok
+      else
+        Mix.raise("Invalid step name: #{step}. Step names must be lowercase snake_case.")
+      end
     end
 
     defp maybe_generate_test(igniter, _module_name, _workflow_name, true), do: igniter

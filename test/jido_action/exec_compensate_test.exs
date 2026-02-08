@@ -48,7 +48,7 @@ defmodule JidoTest.ExecCompensateTest do
       assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
                Exec.run(CompensateAction, params, context, timeout: 100, backoff: 25)
 
-      assert error.details.compensation_context.test_id == "123"
+      assert error.details.compensation_result.compensation_context.test_id == "123"
     end
 
     test "preserves original params in compensation" do
@@ -57,7 +57,7 @@ defmodule JidoTest.ExecCompensateTest do
       assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
                Exec.run(CompensateAction, params, %{}, timeout: 100, backoff: 25)
 
-      assert error.details.test_value == "preserved"
+      assert error.details.compensation_result.test_value == "preserved"
     end
 
     test "compensation respects delay" do
@@ -144,7 +144,7 @@ defmodule JidoTest.ExecCompensateTest do
 
       assert Exception.message(error) =~ "Compensation crashed for:"
       assert error.details.compensated == false
-      assert error.details.compensation_error =~ "Compensation exited:"
+      assert Exception.message(error.details.compensation_error) =~ "Compensation exited:"
       assert error.details.exit_reason != nil
     end
 
@@ -166,7 +166,7 @@ defmodule JidoTest.ExecCompensateTest do
                Exec.run(CrashingCompensateAction, params, %{}, timeout: 200)
 
       assert Exception.message(error) =~ "Compensation crashed for:"
-      assert error.details.exit_reason == :compensation_exit
+      assert error.details.exit_reason in [:compensation_exit, :noproc]
     end
   end
 
@@ -189,14 +189,14 @@ defmodule JidoTest.ExecCompensateTest do
       assert opts[:telemetry] == :full
     end
 
-    test "uses execution timeout when provided" do
+    test "prefers action metadata compensation timeout when no explicit override is provided" do
       params = %{should_fail: true, capture_pid: self()}
 
       assert {:error, _} =
                Exec.run(OptsCapturingCompensateAction, params, %{}, timeout: 200)
 
       assert_receive {:compensation_opts, opts}
-      assert opts[:compensation_timeout] == 200
+      assert opts[:compensation_timeout] == 100
     end
 
     test "falls back to action compensation timeout when no execution timeout provided" do

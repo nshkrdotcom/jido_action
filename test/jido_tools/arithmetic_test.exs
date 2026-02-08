@@ -52,7 +52,7 @@ defmodule Jido.Tools.ArithmeticTest do
     end
 
     test "returns error when dividing by zero" do
-      assert {:error, "Cannot divide by zero"} =
+      assert {:error, %Jido.Action.Error.InvalidInputError{message: "Cannot divide by zero"}} =
                Arithmetic.Divide.run(%{value: 5, amount: 0}, %{})
     end
 

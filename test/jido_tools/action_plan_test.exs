@@ -229,9 +229,11 @@ defmodule Jido.Tools.ActionPlanTest do
       context = %{}
 
       assert {:error, error} = FailingActionPlan.run(params, context)
-      assert %{type: :step_execution_failed, step_name: :failing_step} = error
-      assert is_exception(error.reason)
-      assert Exception.message(error.reason) =~ "This action always fails"
+      assert %Jido.Action.Error.ExecutionFailureError{} = error
+      assert error.details.type == :step_execution_failed
+      assert error.details.step_name == :failing_step
+      assert is_exception(error.details.reason)
+      assert Exception.message(error.details.reason) =~ "This action always fails"
     end
 
     test "workflow handles plan execution failures" do
@@ -261,7 +263,10 @@ defmodule Jido.Tools.ActionPlanTest do
       params = %{}
       context = %{}
 
-      assert {:error, "Transform failed"} = ErrorInTransformActionPlan.run(params, context)
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
+               ErrorInTransformActionPlan.run(params, context)
+
+      assert error.message =~ "Transform failed"
     end
 
     test "handles empty workflow with no steps" do
@@ -295,7 +300,8 @@ defmodule Jido.Tools.ActionPlanTest do
       context = %{}
 
       assert {:error, error} = FailingActionPlan.run(params, context)
-      assert %{type: :step_execution_failed} = error
+      assert %Jido.Action.Error.ExecutionFailureError{} = error
+      assert error.details.type == :step_execution_failed
     end
   end
 

@@ -119,10 +119,11 @@ defmodule JidoTest.ExecEdgeCasesTest do
         assert {:error, %Error.ExecutionFailureError{details: details}} =
                  Exec.run(SpecialFieldsCompensationAction, %{}, %{}, [])
 
-        # Check that special fields are extracted to top level
-        assert details.test_value == "special"
-        assert details.compensation_context == %{data: "context"}
-        assert details.compensation_result == %{other_field: "normal"}
+        assert details.compensation_result == %{
+                 test_value: "special",
+                 compensation_context: %{data: "context"},
+                 other_field: "normal"
+               }
       end)
     end
   end

@@ -23,6 +23,9 @@ defmodule Jido.Exec.Supervisors do
   When `jido: MyApp.Jido` is provided, supervisors are resolved as:
   - TaskSupervisor: `MyApp.Jido.TaskSupervisor`
 
+  `:jido` should be a compile-time known module atom from your application.
+  Avoid passing arbitrary/user-derived module names.
+
   The instance supervisors must be started as part of your application's
   supervision tree before use.
   """
@@ -34,6 +37,7 @@ defmodule Jido.Exec.Supervisors do
 
   - `:jido` - Optional instance name (atom). When provided, returns the
     instance-scoped TaskSupervisor. When absent, returns the global supervisor.
+    This should be a known module atom (for example `MyApp.Jido`).
 
   ## Returns
 
@@ -41,8 +45,7 @@ defmodule Jido.Exec.Supervisors do
 
   ## Raises
 
-  - `ArgumentError` if `:jido` option is provided but the instance supervisor
-    is not running. This prevents silent fallback to global supervisors.
+  - `ArgumentError` if `:jido` option is not an atom.
 
   ## Examples
 
@@ -50,7 +53,7 @@ defmodule Jido.Exec.Supervisors do
       Jido.Action.TaskSupervisor
 
       iex> Jido.Exec.Supervisors.task_supervisor(jido: MyApp.Jido)
-      MyApp.Jido.TaskSupervisor  # raises if not running
+      MyApp.Jido.TaskSupervisor
 
   """
   @spec task_supervisor(keyword()) :: atom()
@@ -63,9 +66,7 @@ defmodule Jido.Exec.Supervisors do
         Jido.Action.TaskSupervisor
 
       {:ok, jido} when is_atom(jido) ->
-        sup = Module.concat(jido, TaskSupervisor)
-        assert_supervisor_running!(sup, jido)
-        sup
+        Module.concat(jido, TaskSupervisor)
 
       {:ok, other} ->
         raise ArgumentError,
@@ -108,15 +109,6 @@ defmodule Jido.Exec.Supervisors do
       {:ok, other} ->
         raise ArgumentError,
               "Expected :jido option to be an atom (module), got: #{inspect(other)}"
-    end
-  end
-
-  defp assert_supervisor_running!(sup, jido) do
-    if !Process.whereis(sup) do
-      raise ArgumentError,
-            "Instance task supervisor #{inspect(sup)} is not running. " <>
-              "Ensure the supervisor is started before using jido: #{inspect(jido)}. " <>
-              "Add `{Task.Supervisor, name: #{inspect(sup)}}` to your supervision tree."
     end
   end
 end
