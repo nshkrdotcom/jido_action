@@ -354,7 +354,7 @@ defmodule JidoTest.CoverageTestActions do
 
     def run(%{cause_error: true}, _context) do
       fun = fn -> :ok end
-      fun.(:extra, :args)
+      :erlang.apply(fun, [:extra, :args])
     end
 
     def run(params, _context), do: {:ok, params}
