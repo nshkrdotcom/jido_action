@@ -30,8 +30,8 @@ defmodule Jido.Tools.Weather.Forecast do
       ]
     ]
 
-  alias Jido.Tools.Weather.HTTP
   alias Jido.Action.Error
+  alias Jido.Tools.Weather.HTTP
 
   @impl Jido.Action
   def run(%{forecast_url: forecast_url} = params, _context) do

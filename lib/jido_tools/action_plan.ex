@@ -35,8 +35,6 @@ defmodule Jido.Tools.ActionPlan do
   - `transform_result/1` (optional) - Transform the execution result
   """
 
-  alias Jido.Exec
-  alias Jido.Action.Error
   alias Jido.Plan
 
   @doc """
@@ -64,170 +62,30 @@ defmodule Jido.Tools.ActionPlan do
   defmacro __using__(opts) do
     quote location: :keep do
       @behaviour Jido.Tools.ActionPlan
-      # Pass all options to the base Action
       use Jido.Action, unquote(opts)
 
-      # Implement the behavior
+      alias Jido.Tools.ActionPlan.Runner
 
-      # Implement the run function that builds and executes the plan
       @impl Jido.Action
       def run(params, context) do
-        # Build the plan using the required callback
         plan = build(params, context)
 
-        # Execute the plan
-        case execute_plan(plan, params, context) do
+        case Runner.execute_plan(plan, params, context) do
           {:ok, result} ->
-            # Transform the result using the optional callback
             transform_result(result)
-            |> normalize_transform_result()
+            |> Runner.normalize_transform_result()
 
           {:error, reason} ->
-            {:error, ensure_error(reason, "Plan execution failed")}
+            {:error, Runner.ensure_error(reason, "Plan execution failed")}
         end
       end
 
-      # Default implementation for transform_result
       @impl Jido.Tools.ActionPlan
       def transform_result(result) do
         {:ok, result}
       end
 
-      # Allow transform_result to be overridden
       defoverridable transform_result: 1
-
-      defp normalize_transform_result(result) do
-        cond do
-          match?({:ok, _}, result) ->
-            {:ok, elem(result, 1)}
-
-          match?({:error, _}, result) ->
-            {:error, ensure_error(elem(result, 1), "Result transformation failed")}
-
-          true ->
-            {:error,
-             Error.execution_error("Invalid transform_result return value", %{result: result})}
-        end
-      end
-
-      # Private helper function to execute the plan
-      defp execute_plan(plan, params, context) do
-        # Normalize the plan to get execution phases
-        case Plan.execution_phases(plan) do
-          {:ok, phases} ->
-            # Execute each phase in order
-            execute_phases(phases, plan, params, context, %{})
-
-          {:error, reason} ->
-            {:error, ensure_error(reason, "Failed to derive plan execution phases")}
-        end
-      end
-
-      # Execute phases sequentially
-      defp execute_phases([], _plan, _params, _context, results) do
-        {:ok, results}
-      end
-
-      defp execute_phases([phase | remaining_phases], plan, params, context, results) do
-        case execute_phase(phase, plan, params, context, results) do
-          {:ok, phase_results} ->
-            # Merge phase results and continue
-            updated_results = Map.merge(results, phase_results)
-            # Flatten the phase results to pass individual step results as top-level params
-            flattened_results =
-              Enum.reduce(phase_results, %{}, fn {_step_name, step_result}, acc ->
-                Map.merge(acc, step_result)
-              end)
-
-            updated_params = Map.merge(params, flattened_results)
-            execute_phases(remaining_phases, plan, updated_params, context, updated_results)
-
-          {:error, reason} ->
-            {:error, ensure_error(reason, "Action plan phase failed")}
-        end
-      end
-
-      # Execute a single phase (can be parallel)
-      defp execute_phase(step_names, plan, params, context, _results) when is_list(step_names) do
-        # Execute all steps in this phase
-        step_results =
-          step_names
-          |> Enum.map(fn step_name ->
-            case Map.get(plan.steps, step_name) do
-              nil ->
-                {:error,
-                 Error.execution_error("Step not found: #{inspect(step_name)}", %{
-                   type: :step_not_found,
-                   step_name: step_name
-                 })}
-
-              plan_instruction ->
-                execute_step(plan_instruction, params, context)
-            end
-          end)
-
-        # Check if any step failed
-        case Enum.find(step_results, fn result -> match?({:error, _}, result) end) do
-          nil ->
-            # All steps succeeded, collect results
-            phase_results =
-              step_results
-              |> Enum.zip(step_names)
-              |> Enum.reduce(%{}, fn
-                {{:ok, result}, step_name}, acc ->
-                  Map.put(acc, step_name, result)
-
-                {{:error, _}, _step_name}, acc ->
-                  acc
-              end)
-
-            {:ok, phase_results}
-
-          {:error, reason} ->
-            {:error, ensure_error(reason, "Action plan step failed")}
-        end
-      end
-
-      # Execute a single step
-      defp execute_step(plan_instruction, params, context) do
-        instruction = plan_instruction.instruction
-        action = instruction.action
-
-        # Merge instruction params with current params (instruction params take precedence)
-        merged_params = Map.merge(params, instruction.params)
-
-        # Use Jido.Exec to run the action with proper error handling, retries, etc.
-        case Exec.run(action, merged_params, context, instruction.opts) do
-          {:ok, result} ->
-            {:ok, result}
-
-          {:error, reason} ->
-            {:error,
-             Error.execution_error("Step execution failed", %{
-               type: :step_execution_failed,
-               step_name: plan_instruction.name,
-               reason: ensure_error(reason, "Step execution failed")
-             })}
-
-          other ->
-            {:error,
-             Error.execution_error("Action returned unexpected value: #{inspect(other)}", %{
-               type: :invalid_result,
-               step_name: plan_instruction.name,
-               result: other
-             })}
-        end
-      end
-
-      defp ensure_error(%_{} = error, _message) when is_exception(error), do: error
-
-      defp ensure_error(reason, _message) when is_binary(reason) do
-        Error.execution_error(reason)
-      end
-
-      defp ensure_error(reason, message) do
-        Error.execution_error(message, %{reason: reason})
-      end
     end
   end
 end

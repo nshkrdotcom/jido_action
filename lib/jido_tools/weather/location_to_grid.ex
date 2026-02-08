@@ -20,8 +20,8 @@ defmodule Jido.Tools.Weather.LocationToGrid do
       ]
     ]
 
-  alias Jido.Tools.Weather.HTTP
   alias Jido.Action.Error
+  alias Jido.Tools.Weather.HTTP
 
   @impl Jido.Action
   def run(%{location: location} = params, _context) do

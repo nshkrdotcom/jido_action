@@ -10,6 +10,7 @@ defmodule Jido.Exec.Compensation do
 
   alias Jido.Action.Config
   alias Jido.Action.Error
+  alias Jido.Exec.Supervisors
   alias Jido.Exec.TaskHelper
   alias Jido.Exec.Telemetry
   alias Jido.Exec.Types
@@ -246,7 +247,7 @@ defmodule Jido.Exec.Compensation do
               end
           after
             timeout ->
-              task_sup = Jido.Exec.Supervisors.task_supervisor(opts)
+              task_sup = Supervisors.task_supervisor(opts)
 
               TaskHelper.timeout_cleanup(
                 task_sup,
