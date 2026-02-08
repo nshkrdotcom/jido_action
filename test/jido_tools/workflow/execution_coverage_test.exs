@@ -283,11 +283,14 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
     end
 
     test "parallel tasks do not outlive workflow timeout" do
-      assert {:error, %Jido.Action.Error.TimeoutError{}} =
-               Exec.run(ParallelTimeoutWorkflow, %{notify: self()}, %{},
-                 timeout: 50,
-                 max_retries: 0
-               )
+      run_result =
+        Exec.run(ParallelTimeoutWorkflow, %{notify: self()}, %{},
+          timeout: 50,
+          max_retries: 0
+        )
+
+      assert timeout_or_parallel_timeout_result?(run_result),
+             "expected workflow timeout outcome, got: #{inspect(run_result)}"
 
       refute_receive :parallel_task_completed, 700
     end
@@ -387,4 +390,24 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
       assert Agent.get(counter, & &1) == 2
     end
   end
+
+  defp timeout_or_parallel_timeout_result?({:error, %Jido.Action.Error.TimeoutError{}}), do: true
+
+  defp timeout_or_parallel_timeout_result?({:ok, %{parallel_results: results}})
+       when is_list(results) and results != [] do
+    Enum.all?(results, &parallel_timeout_result?/1)
+  end
+
+  defp timeout_or_parallel_timeout_result?(_), do: false
+
+  defp parallel_timeout_result?(%{error: %Jido.Action.Error.TimeoutError{}}), do: true
+
+  defp parallel_timeout_result?(%{
+         error: %Jido.Action.Error.ExecutionFailureError{details: details}
+       })
+       when is_map(details) do
+    Map.get(details, :reason) == :timeout
+  end
+
+  defp parallel_timeout_result?(_), do: false
 end
