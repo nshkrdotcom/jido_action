@@ -445,79 +445,21 @@ defmodule Jido.Exec do
             action(),
             params(),
             context(),
-            non_neg_integer(),
+            timeout(),
             run_opts()
           ) :: exec_result
     defp execute_action_with_timeout(action, params, context, timeout, opts \\ [])
 
-    defp execute_action_with_timeout(action, params, context, 0, opts) do
-      execute_action(action, params, context, opts)
-    end
-
-    defp execute_action_with_timeout(action, params, context, :infinity, opts) do
-      execute_action(action, params, context, opts)
-    end
-
     @dialyzer {:nowarn_function, execute_action_with_timeout: 5}
     defp execute_action_with_timeout(action, params, context, timeout, opts)
-         when is_integer(timeout) and timeout > 0 do
+         when timeout == :infinity or (is_integer(timeout) and timeout > 0) do
       # Get the current process's group leader for IO routing
       case TaskHelper.spawn_monitored(opts, @execute_action_result_tag, fn ->
              execute_action(action, params, context, opts)
            end) do
         {:ok, %AsyncRef{ref: ref, pid: pid, monitor_ref: monitor_ref}} ->
           # Wait for completion, crash, or timeout.
-          result =
-            receive do
-              {@execute_action_result_tag, ^ref, result} ->
-                TaskHelper.demonitor_flush(monitor_ref)
-                {:ok, result}
-
-              {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
-                # If the process exited normally, a result message may still be in flight.
-                case reason do
-                  :normal ->
-                    receive do
-                      {@execute_action_result_tag, ^ref, result} ->
-                        TaskHelper.demonitor_flush(monitor_ref)
-                        {:ok, result}
-                    after
-                      Config.exec_down_grace_period_ms() ->
-                        TaskHelper.demonitor_flush(monitor_ref)
-
-                        TaskHelper.flush_messages(
-                          @execute_action_result_tag,
-                          ref,
-                          pid,
-                          monitor_ref,
-                          flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
-                          max_flush_messages: Config.mailbox_flush_max_messages()
-                        )
-
-                        {:exit, reason}
-                    end
-
-                  _ ->
-                    TaskHelper.demonitor_flush(monitor_ref)
-                    {:exit, reason}
-                end
-            after
-              timeout ->
-                task_sup = Supervisors.task_supervisor(opts)
-
-                TaskHelper.timeout_cleanup(
-                  task_sup,
-                  pid,
-                  monitor_ref,
-                  @execute_action_result_tag,
-                  ref,
-                  down_grace_period_ms: Config.exec_down_grace_period_ms(),
-                  flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
-                  max_flush_messages: Config.mailbox_flush_max_messages()
-                )
-
-                :timeout
-            end
+          result = await_task_result(ref, pid, monitor_ref, timeout, opts)
 
           case result do
             {:ok, result} ->
@@ -548,6 +490,61 @@ defmodule Jido.Exec do
 
     defp execute_action_with_timeout(action, params, context, _timeout, opts) do
       execute_action_with_timeout(action, params, context, Config.exec_timeout(), opts)
+    end
+
+    defp await_task_result(ref, pid, monitor_ref, timeout, opts) do
+      receive do
+        {@execute_action_result_tag, ^ref, result} ->
+          TaskHelper.demonitor_flush(monitor_ref)
+          {:ok, result}
+
+        {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
+          handle_down_reason(reason, ref, pid, monitor_ref)
+      after
+        timeout ->
+          task_sup = Supervisors.task_supervisor(opts)
+
+          TaskHelper.timeout_cleanup(
+            task_sup,
+            pid,
+            monitor_ref,
+            @execute_action_result_tag,
+            ref,
+            down_grace_period_ms: Config.exec_down_grace_period_ms(),
+            flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
+            max_flush_messages: Config.mailbox_flush_max_messages()
+          )
+
+          :timeout
+      end
+    end
+
+    # If the process exited normally, a result message may still be in flight.
+    defp handle_down_reason(:normal, ref, pid, monitor_ref) do
+      receive do
+        {@execute_action_result_tag, ^ref, result} ->
+          TaskHelper.demonitor_flush(monitor_ref)
+          {:ok, result}
+      after
+        Config.exec_down_grace_period_ms() ->
+          TaskHelper.demonitor_flush(monitor_ref)
+
+          TaskHelper.flush_messages(
+            @execute_action_result_tag,
+            ref,
+            pid,
+            monitor_ref,
+            flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
+            max_flush_messages: Config.mailbox_flush_max_messages()
+          )
+
+          {:exit, :normal}
+      end
+    end
+
+    defp handle_down_reason(reason, _ref, _pid, monitor_ref) do
+      TaskHelper.demonitor_flush(monitor_ref)
+      {:exit, reason}
     end
 
     @spec execute_action(action(), params(), context(), run_opts()) :: exec_result

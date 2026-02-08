@@ -7,6 +7,8 @@ defmodule Jido.Tools.Workflow.Execution do
   alias Jido.Exec
   alias Jido.Instruction
 
+  @workflow_task_supervisor_key :__jido_workflow_task_supervisor__
+
   @type execution_result ::
           {:ok, map()}
           | {:ok, map(), any()}
@@ -96,9 +98,10 @@ defmodule Jido.Tools.Workflow.Execution do
   end
 
   defp run_normalized_instruction(%Instruction{} = normalized, params, context) do
+    {workflow_task_supervisor, sanitized_context} = extract_workflow_task_supervisor(context)
     merged_params = Map.merge(params, normalized.params)
-    merged_context = Map.merge(normalized.context, context)
-    instruction_opts = default_internal_retry_opts(normalized.opts)
+    merged_context = Map.merge(normalized.context, sanitized_context)
+    instruction_opts = default_internal_retry_opts(normalized.opts, workflow_task_supervisor)
 
     instruction = %{
       normalized
@@ -122,11 +125,12 @@ defmodule Jido.Tools.Workflow.Execution do
     end
   end
 
-  defp default_internal_retry_opts(opts) when is_list(opts) do
+  defp default_internal_retry_opts(opts, workflow_task_supervisor) when is_list(opts) do
     if Keyword.keyword?(opts) do
       opts
       |> maybe_put_default(:max_retries, 0)
-      |> maybe_put_default(:timeout, :infinity)
+      |> maybe_put_default(:timeout, Config.exec_timeout())
+      |> maybe_put_task_supervisor(workflow_task_supervisor)
     else
       opts
     end
@@ -134,6 +138,16 @@ defmodule Jido.Tools.Workflow.Execution do
 
   defp maybe_put_default(opts, key, value) when is_list(opts) and is_atom(key) do
     if Keyword.has_key?(opts, key), do: opts, else: Keyword.put(opts, key, value)
+  end
+
+  defp maybe_put_task_supervisor(opts, nil), do: opts
+
+  defp maybe_put_task_supervisor(opts, workflow_task_supervisor) do
+    if Keyword.has_key?(opts, :task_supervisor) or Keyword.has_key?(opts, :jido) do
+      opts
+    else
+      Keyword.put(opts, :task_supervisor, workflow_task_supervisor)
+    end
   end
 
   defp execute_branch(condition, true_branch, false_branch, params, context, _metadata, module)
@@ -171,6 +185,8 @@ defmodule Jido.Tools.Workflow.Execution do
     case Task.Supervisor.start_link() do
       {:ok, task_sup} ->
         try do
+          scoped_context = Map.put(context, @workflow_task_supervisor_key, task_sup)
+
           stream_opts = [
             ordered: true,
             max_concurrency: max_concurrency,
@@ -183,7 +199,7 @@ defmodule Jido.Tools.Workflow.Execution do
               task_sup,
               instructions,
               fn instruction ->
-                execute_parallel_instruction(instruction, params, context, module)
+                execute_parallel_instruction(instruction, params, scoped_context, module)
               end,
               stream_opts
             )
@@ -256,12 +272,17 @@ defmodule Jido.Tools.Workflow.Execution do
   defp normalize_timeout(_invalid), do: Config.exec_timeout()
 
   defp stop_parallel_supervisor(task_sup) do
-    if Process.alive?(task_sup) do
-      Supervisor.stop(task_sup, :normal)
-    else
-      :ok
-    end
+    Supervisor.stop(task_sup, :normal)
+  catch
+    :exit, {:noproc, _} -> :ok
   end
+
+  defp extract_workflow_task_supervisor(context) when is_map(context) do
+    {Map.get(context, @workflow_task_supervisor_key),
+     Map.delete(context, @workflow_task_supervisor_key)}
+  end
+
+  defp extract_workflow_task_supervisor(context), do: {nil, context}
 
   defp ensure_error(reason), do: Error.ensure_error(reason, "Workflow step failed")
 end

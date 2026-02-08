@@ -7,6 +7,7 @@ defmodule JidoTest.Exec.AsyncCoverageTest do
   import ExUnit.CaptureLog
 
   alias Jido.Exec.Async
+  alias Jido.Exec.AsyncRef
   alias JidoTest.TestActions.Add
   alias JidoTest.TestActions.DelayAction
 
@@ -50,6 +51,29 @@ defmodule JidoTest.Exec.AsyncCoverageTest do
       assert log =~ "Jido.Exec.Async.cancel/1 received a legacy map async_ref"
     end
 
+    test "flushes tagged result and monitor messages when cancelling as owner" do
+      pid = spawn(fn -> Process.sleep(:infinity) end)
+      monitor_ref = Process.monitor(pid)
+      ref = make_ref()
+      result_tag = :action_async_result
+
+      send(self(), {result_tag, ref, {:ok, %{stale: true}}})
+      send(self(), {:DOWN, monitor_ref, :process, pid, :normal})
+
+      async_ref = %AsyncRef{
+        ref: ref,
+        pid: pid,
+        monitor_ref: monitor_ref,
+        owner: self(),
+        result_tag: result_tag
+      }
+
+      assert :ok = Async.cancel(async_ref)
+
+      refute_receive {^result_tag, ^ref, _}, 50
+      refute_receive {:DOWN, ^monitor_ref, :process, ^pid, _}, 50
+    end
+
     test "returns error for invalid cancel argument" do
       assert {:error, %Jido.Action.Error.InvalidInputError{}} = Async.cancel("invalid")
       assert {:error, %Jido.Action.Error.InvalidInputError{}} = Async.cancel(42)
@@ -59,6 +83,8 @@ defmodule JidoTest.Exec.AsyncCoverageTest do
 
   describe "start/4" do
     test "returns error tuple when supervisor is missing" do
+      _missing_task_supervisor = Missing.Async.Supervisor.TaskSupervisor
+
       assert {:error, %ArgumentError{} = error} =
                Async.start(Add, %{value: 1}, %{}, jido: Missing.Async.Supervisor)
 
@@ -66,6 +92,8 @@ defmodule JidoTest.Exec.AsyncCoverageTest do
     end
 
     test "start!/4 raises when supervisor is missing" do
+      _missing_task_supervisor = Missing.Async.Supervisor.TaskSupervisor
+
       assert_raise ArgumentError, ~r/Instance task supervisor.*is not running/, fn ->
         Async.start!(Add, %{value: 1}, %{}, jido: Missing.Async.Supervisor)
       end

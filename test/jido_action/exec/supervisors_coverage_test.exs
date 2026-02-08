@@ -24,6 +24,18 @@ defmodule JidoTest.Exec.SupervisorsCoverageTest do
                Custom.TaskSupervisor
     end
 
+    test "returns explicitly provided task supervisor pid when configured" do
+      {:ok, task_supervisor} = Task.Supervisor.start_link()
+
+      on_exit(fn ->
+        if Process.alive?(task_supervisor) do
+          Process.exit(task_supervisor, :shutdown)
+        end
+      end)
+
+      assert Supervisors.task_supervisor(task_supervisor: task_supervisor) == task_supervisor
+    end
+
     test "raises for non-atom jido option" do
       assert_raise ArgumentError, ~r/Expected :jido option to be an atom/, fn ->
         Supervisors.task_supervisor(jido: "not_an_atom")

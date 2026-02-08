@@ -80,7 +80,7 @@ defmodule JidoTest.Exec.ChainTest do
 
       assert {:error, error} = result
       assert is_exception(error)
-      assert Exception.message(error) =~ "Failed to compile module :invalid_action: :nofile"
+      assert Exception.message(error) =~ "Module :invalid_action is not loaded: :nofile"
     end
 
     test "executes chain asynchronously" do

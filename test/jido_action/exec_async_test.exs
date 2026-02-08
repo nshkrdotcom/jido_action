@@ -19,6 +19,8 @@ defmodule JidoTest.ExecAsyncTest do
     end
 
     test "returns error tuple when async task cannot be started" do
+      _missing_task_supervisor = Missing.Async.Supervisor.TaskSupervisor
+
       assert {:error, %ArgumentError{} = error} =
                Exec.run_async(BasicAction, %{value: 5}, %{}, jido: Missing.Async.Supervisor)
 
@@ -95,6 +97,8 @@ defmodule JidoTest.ExecAsyncTest do
   end
 
   test "await and cancel pass through async startup errors" do
+    _missing_task_supervisor = Missing.Async.Supervisor.TaskSupervisor
+
     startup_result = Exec.run_async(BasicAction, %{value: 5}, %{}, jido: Missing.Async.Supervisor)
     assert {:error, %ArgumentError{} = startup_error} = startup_result
 

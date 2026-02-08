@@ -15,12 +15,12 @@ defmodule Jido.Exec.Validator do
   @doc """
   Validates that the given action module is valid and can be executed.
 
-  Checks that the module can be compiled and has the required run/2 function.
-  Uses `Code.ensure_compiled/1` which may trigger compilation if needed.
+  Checks that the module is loaded and has the required run/2 function.
+  Uses `Code.ensure_loaded/1` to avoid compile-on-demand at runtime.
   """
   @spec validate_action(module()) :: :ok | {:error, Exception.t()}
   def validate_action(action) do
-    case Code.ensure_compiled(action) do
+    case Code.ensure_loaded(action) do
       {:module, _} ->
         if function_exported?(action, :run, 2) do
           :ok
@@ -33,7 +33,7 @@ defmodule Jido.Exec.Validator do
 
       {:error, reason} ->
         {:error,
-         Error.validation_error("Failed to compile module #{inspect(action)}: #{inspect(reason)}")}
+         Error.validation_error("Module #{inspect(action)} is not loaded: #{inspect(reason)}")}
     end
   end
 

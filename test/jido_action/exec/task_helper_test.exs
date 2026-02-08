@@ -16,6 +16,7 @@ defmodule JidoTest.Exec.TaskHelperTest do
       assert is_pid(async_ref.pid)
       assert is_reference(async_ref.ref)
       assert is_reference(async_ref.monitor_ref)
+      assert async_ref.result_tag == :task_helper_test_result
       ref = async_ref.ref
       assert_receive {:task_helper_test_result, ^ref, :ok}
     end

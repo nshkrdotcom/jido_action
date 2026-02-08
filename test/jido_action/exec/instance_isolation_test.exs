@@ -76,6 +76,8 @@ defmodule JidoTest.Exec.InstanceIsolationTest do
     end
 
     test "returns error when instance supervisor not running" do
+      _missing_task_supervisor = NonExistent.Instance.TaskSupervisor
+
       # The exception is caught by Exec.run's error handling and converted to an error tuple
       capture_log(fn ->
         assert {:error, error} =
@@ -127,6 +129,8 @@ defmodule JidoTest.Exec.InstanceIsolationTest do
     end
 
     test "returns error when instance supervisor not running for async" do
+      _missing_task_supervisor = Missing.Async.Instance.TaskSupervisor
+
       assert {:error, %ArgumentError{} = error} =
                Exec.run_async(BasicAction, %{value: 42}, %{}, jido: Missing.Async.Instance)
 
@@ -135,6 +139,8 @@ defmodule JidoTest.Exec.InstanceIsolationTest do
     end
 
     test "run_async! raises when instance supervisor not running for async" do
+      _missing_task_supervisor = Missing.Async.Instance.TaskSupervisor
+
       assert_raise ArgumentError, ~r/Instance task supervisor.*is not running/, fn ->
         Exec.run_async!(BasicAction, %{value: 42}, %{}, jido: Missing.Async.Instance)
       end
@@ -184,13 +190,12 @@ defmodule JidoTest.Exec.InstanceIsolationTest do
     end
   end
 
-  describe "timeout: 0 behavior (no supervised task)" do
+  describe "timeout: 0 behavior (uses configured default timeout)" do
     test "works with instance option even with timeout: 0" do
-      # timeout: 0 runs directly without spawning a supervised task
       start_supervised!({Task.Supervisor, name: DirectRun.TaskSupervisor})
 
       capture_log(fn ->
-        # This should still work - the supervisor is validated even if not used
+        # timeout: 0 should still resolve and use the configured supervisor path
         assert {:ok, %{value: 42}} =
                  Exec.run(BasicAction, %{value: 42}, %{}, jido: DirectRun, timeout: 0)
       end)

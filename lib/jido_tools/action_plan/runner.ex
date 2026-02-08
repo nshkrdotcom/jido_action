@@ -157,8 +157,20 @@ defmodule Jido.Tools.ActionPlan.Runner do
     instruction = plan_instruction.instruction
     action = instruction.action
     merged_params = Map.merge(params, instruction.params)
-    exec_result = Exec.run(action, merged_params, context, instruction.opts)
+    exec_result = Exec.run(action, merged_params, context, merge_execution_opts(plan_instruction))
     normalize_step_execution_result(exec_result, plan_instruction)
+  end
+
+  defp merge_execution_opts(plan_instruction) do
+    plan_opts =
+      if Keyword.keyword?(plan_instruction.opts), do: plan_instruction.opts, else: []
+
+    instruction_opts =
+      if Keyword.keyword?(plan_instruction.instruction.opts),
+        do: plan_instruction.instruction.opts,
+        else: []
+
+    Keyword.merge(plan_opts, instruction_opts)
   end
 
   defp normalize_step_execution_result(exec_result, plan_instruction) do

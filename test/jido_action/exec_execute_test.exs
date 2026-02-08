@@ -163,27 +163,27 @@ defmodule JidoTest.ExecExecuteTest do
       assert log =~ "Finished execution of JidoTest.TestActions.BasicAction"
     end
 
-    test "executes without forking a Task when timeout is zero" do
-      initial_process_count = length(Process.list())
+    test "uses configured default timeout when timeout is zero" do
+      original_timeout = Application.get_env(:jido_action, :default_timeout)
+      Application.put_env(:jido_action, :default_timeout, 10)
+
+      on_exit(fn ->
+        if is_nil(original_timeout) do
+          Application.delete_env(:jido_action, :default_timeout)
+        else
+          Application.put_env(:jido_action, :default_timeout, original_timeout)
+        end
+      end)
 
       log =
         capture_log(fn ->
-          result =
-            Exec.execute_action_with_timeout(BasicAction, %{value: 5}, %{}, 0, log_level: :debug)
-
-          # Verify the result is correct
-          assert {:ok, %{value: 5}} = result
+          assert {:error, %Jido.Action.Error.TimeoutError{timeout: 10}} =
+                   Exec.execute_action_with_timeout(DelayAction, %{delay: 50}, %{}, 0,
+                     log_level: :debug
+                   )
         end)
 
-      assert log =~ "Starting execution of JidoTest.TestActions.BasicAction"
-      assert log =~ "Finished execution of JidoTest.TestActions.BasicAction"
-
-      # Give any potential tasks time to start (though there shouldn't be any)
-      Process.sleep(50)
-
-      # Verify no new processes were created
-      final_process_count = length(Process.list())
-      assert_in_delta initial_process_count, final_process_count, 1
+      assert log =~ "Starting execution of JidoTest.TestActions.DelayAction"
     end
 
     test "times out for slow action" do
@@ -297,11 +297,11 @@ defmodule JidoTest.ExecExecuteTest do
       assert log =~ "Finished execution of JidoTest.TestActions.DelayAction"
     end
 
-    test "executes without timeout when timeout is zero" do
+    test "supports :infinity timeout using supervised execution" do
       log =
         capture_log(fn ->
           assert {:ok, %{result: "Async action completed"}} ==
-                   Exec.execute_action_with_timeout(DelayAction, %{delay: 80}, %{}, 0,
+                   Exec.execute_action_with_timeout(DelayAction, %{delay: 80}, %{}, :infinity,
                      log_level: :debug
                    )
         end)

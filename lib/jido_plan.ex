@@ -317,8 +317,9 @@ defmodule Jido.Plan do
   # Private helper functions
 
   defp add_step_from_def(plan, step_name, step_def) do
-    {clean_step_def, depends_on, _plan_opts} = prepare_step_definition(step_def, [])
-    {:ok, add(plan, step_name, clean_step_def, depends_on: depends_on)}
+    {clean_step_def, depends_on, plan_opts} = prepare_step_definition(step_def, [])
+    add_opts = Keyword.put(plan_opts, :depends_on, depends_on)
+    {:ok, add(plan, step_name, clean_step_def, add_opts)}
   rescue
     error -> {:error, error}
   end
@@ -328,11 +329,11 @@ defmodule Jido.Plan do
   end
 
   defp prepare_step_definition(step_def, opts) do
-    {clean_step_def, step_depends_on} = extract_depends_on_from_step_def(step_def)
+    {clean_step_def, step_depends_on, step_plan_opts} = extract_depends_on_from_step_def(step_def)
     step_depends_on = List.wrap(step_depends_on)
     opts_depends_on = opts |> Keyword.get(:depends_on, []) |> List.wrap()
     depends_on = Enum.uniq(step_depends_on ++ opts_depends_on)
-    plan_opts = Keyword.delete(opts, :depends_on)
+    plan_opts = Keyword.merge(step_plan_opts, Keyword.delete(opts, :depends_on))
     {clean_step_def, depends_on, plan_opts}
   end
 
@@ -351,19 +352,15 @@ defmodule Jido.Plan do
         depends_on = Keyword.get(opts, :depends_on, [])
         clean_opts = Keyword.delete(opts, :depends_on)
         clean_step_def = if clean_opts == [], do: action, else: {action, clean_opts}
-        {clean_step_def, depends_on}
+        {clean_step_def, depends_on, []}
 
       {action, params, opts} when is_atom(action) and is_map(params) and is_list(opts) ->
         depends_on = Keyword.get(opts, :depends_on, [])
-        clean_opts = Keyword.delete(opts, :depends_on)
-
-        clean_step_def =
-          if clean_opts == [], do: {action, params}, else: {action, params, clean_opts}
-
-        {clean_step_def, depends_on}
+        plan_opts = Keyword.delete(opts, :depends_on)
+        {{action, params}, depends_on, plan_opts}
 
       _ ->
-        {step_def, []}
+        {step_def, [], []}
     end
   end
 

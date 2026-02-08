@@ -227,6 +227,13 @@ defmodule JidoTest.ExecRunTest do
       assert {:error, %Jido.Action.Error.InvalidInputError{message: "Invalid params type: " <> _}} =
                Exec.normalize_params(params)
     end
+
+    test "returns validation error for non-keyword lists" do
+      assert {:error, %Jido.Action.Error.InvalidInputError{message: message}} =
+               Exec.normalize_params([1, 2, 3])
+
+      assert message =~ "Invalid params format"
+    end
   end
 
   describe "normalize_context/1" do

@@ -237,6 +237,23 @@ defmodule Jido.PlanTest do
       assert validate_instruction.depends_on == [:fetch]
     end
 
+    test "keeps non-dependency options separate from instruction context" do
+      plan_def = [
+        fetch: TestActions.FetchAction,
+        validate:
+          {TestActions.ValidateAction, %{strict: true},
+           depends_on: :fetch, step_note: "metadata only"}
+      ]
+
+      {:ok, plan} = Plan.build(plan_def)
+
+      validate_instruction = plan.steps[:validate]
+      assert validate_instruction.depends_on == [:fetch]
+      assert validate_instruction.instruction.params == %{strict: true}
+      assert validate_instruction.instruction.context == %{}
+      assert validate_instruction.opts == [step_note: "metadata only"]
+    end
+
     test "creates plan with context" do
       plan_def = [fetch: TestActions.FetchAction]
       context = %{user_id: "123"}

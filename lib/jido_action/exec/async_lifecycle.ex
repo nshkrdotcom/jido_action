@@ -95,7 +95,7 @@ defmodule Jido.Exec.AsyncLifecycle do
     :ok
   end
 
-  @spec flush_messages(reference(), pid(), reference(), await_opts()) :: :ok
+  @spec flush_messages(reference(), pid(), reference() | nil, await_opts()) :: :ok
   def flush_messages(ref, pid, monitor_ref, opts) do
     flush_timeout_ms = Keyword.get(opts, :flush_timeout_ms, 0)
     max_flush_messages = Keyword.get(opts, :max_flush_messages, :infinity)

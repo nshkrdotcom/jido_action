@@ -8,9 +8,14 @@ defmodule Jido.Action.Params do
   @spec normalize_exec_params(any()) :: normalize_result()
   def normalize_exec_params(%_{} = error) when is_exception(error), do: {:error, error}
   def normalize_exec_params(params) when is_map(params), do: {:ok, params}
-  def normalize_exec_params(params) when is_list(params), do: {:ok, Map.new(params)}
+
+  def normalize_exec_params(params) when is_list(params),
+    do: normalize_exec_keyword_params(params)
+
   def normalize_exec_params({:ok, params}) when is_map(params), do: {:ok, params}
-  def normalize_exec_params({:ok, params}) when is_list(params), do: {:ok, Map.new(params)}
+
+  def normalize_exec_params({:ok, params}) when is_list(params),
+    do: normalize_exec_keyword_params(params)
 
   def normalize_exec_params({:error, reason}),
     do: {:error, Error.validation_error(normalize_message(reason))}
@@ -58,4 +63,13 @@ defmodule Jido.Action.Params do
 
   defp normalize_message(message) when is_binary(message), do: message
   defp normalize_message(message), do: inspect(message)
+
+  defp normalize_exec_keyword_params(params) do
+    if Keyword.keyword?(params) do
+      {:ok, Map.new(params)}
+    else
+      {:error,
+       Error.validation_error("Invalid params format. Params must be a map or keyword list.")}
+    end
+  end
 end

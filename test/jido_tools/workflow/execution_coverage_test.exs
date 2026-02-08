@@ -325,6 +325,24 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
   end
 
   describe "internal instruction retry defaults" do
+    test "defaults instruction timeout to configured execution timeout" do
+      original_timeout = Application.get_env(:jido_action, :default_timeout)
+      Application.put_env(:jido_action, :default_timeout, 10)
+
+      on_exit(fn ->
+        if is_nil(original_timeout) do
+          Application.delete_env(:jido_action, :default_timeout)
+        else
+          Application.put_env(:jido_action, :default_timeout, original_timeout)
+        end
+      end)
+
+      step = {:step, [name: "slow_with_default_timeout"], [{SlowAction, []}]}
+
+      assert {:error, %Jido.Action.Error.TimeoutError{timeout: 10}} =
+               Execution.execute_step(step, %{}, %{}, TestWorkflow)
+    end
+
     test "defaults max_retries to 0 when instruction does not provide it" do
       original_max_retries = Application.get_env(:jido_action, :default_max_retries)
       Application.put_env(:jido_action, :default_max_retries, 2)
