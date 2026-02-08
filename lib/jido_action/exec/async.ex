@@ -140,36 +140,36 @@ defmodule Jido.Exec.Async do
   - `{:error, reason}` if the cancellation failed or the input was invalid.
   """
   @spec cancel(async_ref() | pid()) :: :ok | exec_error
-  def cancel(%{pid: pid, owner: owner, monitor_ref: monitor_ref})
-      when is_pid(pid) and is_pid(owner) and owner == self() and is_reference(monitor_ref) do
-    shutdown_process(pid, monitor_ref)
-    :ok
-  end
-
-  def cancel(%{pid: pid}) when is_pid(pid) do
-    shutdown_process(pid, Process.monitor(pid))
+  def cancel(%{pid: pid} = async_ref) when is_pid(pid) do
+    shutdown_process(pid, Map.get(async_ref, :monitor_ref))
     :ok
   end
 
   def cancel(pid) when is_pid(pid) do
-    shutdown_process(pid, Process.monitor(pid))
+    shutdown_process(pid)
     :ok
   end
 
   def cancel(_), do: {:error, Error.validation_error("Invalid async ref for cancellation")}
 
   defp monitor_ref_for_current_process(async_ref, pid) do
+    cleanup_owner_monitor(async_ref)
+    Process.monitor(pid)
+  end
+
+  defp cleanup_owner_monitor(async_ref) do
     case {Map.get(async_ref, :owner), Map.get(async_ref, :monitor_ref)} do
       {owner, monitor_ref}
       when is_pid(owner) and owner == self() and is_reference(monitor_ref) ->
-        monitor_ref
+        demonitor(monitor_ref)
 
       _ ->
-        Process.monitor(pid)
+        :ok
     end
   end
 
-  defp shutdown_process(pid, monitor_ref) do
+  defp shutdown_process(pid, stale_monitor_ref \\ nil) when is_pid(pid) do
+    monitor_ref = Process.monitor(pid)
     Process.exit(pid, :shutdown)
 
     receive do
@@ -177,7 +177,7 @@ defmodule Jido.Exec.Async do
         :ok
     after
       @shutdown_grace_period_ms ->
-        Process.exit(pid, :kill)
+        if Process.alive?(pid), do: Process.exit(pid, :kill)
 
         receive do
           {:DOWN, ^monitor_ref, :process, ^pid, _reason} -> :ok
@@ -187,6 +187,10 @@ defmodule Jido.Exec.Async do
     end
 
     demonitor(monitor_ref)
+
+    if is_reference(stale_monitor_ref) and stale_monitor_ref != monitor_ref do
+      demonitor(stale_monitor_ref)
+    end
   end
 
   defp flush_messages(_ref, _pid, _monitor_ref, 0), do: :ok

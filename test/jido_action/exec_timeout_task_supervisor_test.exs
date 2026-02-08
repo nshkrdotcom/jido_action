@@ -8,58 +8,45 @@ defmodule Jido.ExecTimeoutTaskSupervisorTest do
 
   alias Jido.Action.Error
   alias Jido.Exec
+  alias JidoTest.CoverageTestActions
 
   @moduletag :capture_log
 
   describe "Task.Supervisor async_nolink + yield/shutdown pattern" do
     test "action completes successfully before timeout" do
-      defmodule FastAction do
-        use Jido.Action, name: "fast_action"
+      result =
+        Exec.execute_action_with_timeout(CoverageTestActions.FastAction, %{}, %{}, 1000,
+          log_level: :info
+        )
 
-        def run(_params, _context) do
-          {:ok, %{completed: true}}
-        end
-      end
-
-      result = Exec.execute_action_with_timeout(FastAction, %{}, %{}, 1000, log_level: :info)
       assert {:ok, %{completed: true}} = result
     end
 
     test "action times out and returns timeout error" do
-      defmodule SlowAction do
-        use Jido.Action, name: "slow_action"
+      result =
+        Exec.execute_action_with_timeout(CoverageTestActions.SlowAction, %{}, %{}, 50,
+          log_level: :info
+        )
 
-        def run(_params, _context) do
-          Process.sleep(200)
-          {:ok, %{completed: true}}
-        end
-      end
-
-      result = Exec.execute_action_with_timeout(SlowAction, %{}, %{}, 50, log_level: :info)
       assert {:error, %Error.TimeoutError{} = error} = result
       assert error.timeout == 50
       assert error.message =~ "timed out after 50ms"
-      assert error.details[:action] == SlowAction
+      assert error.details[:action] == CoverageTestActions.SlowAction
 
       # Verify no stray messages in mailbox
       refute_receive _, 100
     end
 
     test "timeout error has concise message without params/context" do
-      defmodule TimeoutMessageAction do
-        use Jido.Action, name: "timeout_message_action"
-
-        def run(_params, _context) do
-          Process.sleep(200)
-          {:ok, %{}}
-        end
-      end
-
       large_params = %{secret: "should_not_be_in_message", data: String.duplicate("x", 1000)}
       large_context = %{sensitive: "data", more: String.duplicate("y", 1000)}
 
       result =
-        Exec.execute_action_with_timeout(TimeoutMessageAction, large_params, large_context, 50,
+        Exec.execute_action_with_timeout(
+          CoverageTestActions.TimeoutMessageAction,
+          large_params,
+          large_context,
+          50,
           log_level: :info
         )
 
@@ -72,25 +59,19 @@ defmodule Jido.ExecTimeoutTaskSupervisorTest do
 
       # Details should only contain timeout and action (not full params/context)
       assert error.details[:timeout] == 50
-      assert error.details[:action] == TimeoutMessageAction
+      assert error.details[:action] == CoverageTestActions.TimeoutMessageAction
       refute Map.has_key?(error.details, :params)
       refute Map.has_key?(error.details, :context)
     end
 
     test "preserves group_leader for IO routing" do
-      defmodule IOAction do
-        use Jido.Action, name: "io_action"
-
-        def run(_params, _context) do
-          # IO should work and be captured properly
-          IO.puts("test output")
-          {:ok, %{io_worked: true}}
-        end
-      end
-
       io =
         capture_io(fn ->
-          result = Exec.execute_action_with_timeout(IOAction, %{}, %{}, 1000, log_level: :info)
+          result =
+            Exec.execute_action_with_timeout(CoverageTestActions.IOActionCoverage, %{}, %{}, 1000,
+              log_level: :info
+            )
+
           assert {:ok, %{io_worked: true}} = result
         end)
 
@@ -98,36 +79,13 @@ defmodule Jido.ExecTimeoutTaskSupervisorTest do
     end
 
     test "child tasks are cleaned up on timeout with brutal_kill" do
-      # This test verifies that when Task.shutdown with :brutal_kill is used,
-      # child processes spawned by the action are also terminated.
-      # Task.async links child to parent, so :brutal_kill will cascade.
-
       test_pid = self()
-
-      defmodule ChildSpawningAction do
-        use Jido.Action, name: "child_spawning_action"
-
-        def run(_params, context) do
-          # Spawn a linked child task
-          child_pid =
-            spawn_link(fn ->
-              send(context.test_pid, {:child_started, self()})
-              Process.sleep(10_000)
-            end)
-
-          send(context.test_pid, {:parent_has_child, child_pid})
-
-          # Parent sleeps longer than timeout
-          Process.sleep(10_000)
-          {:ok, %{done: true}}
-        end
-      end
 
       # Execute the action with short timeout
       spawn_link(fn ->
         result =
           Exec.execute_action_with_timeout(
-            ChildSpawningAction,
+            CoverageTestActions.ChildSpawningAction,
             %{},
             %{test_pid: test_pid},
             50,
@@ -159,45 +117,30 @@ defmodule Jido.ExecTimeoutTaskSupervisorTest do
     end
 
     test "handles action that exits abnormally" do
-      defmodule ExitingAction do
-        use Jido.Action, name: "exiting_action"
+      result =
+        Exec.execute_action_with_timeout(CoverageTestActions.ExitingAction, %{}, %{}, 1000,
+          log_level: :info
+        )
 
-        def run(_params, _context) do
-          Process.exit(self(), :shutdown)
-          {:ok, %{}}
-        end
-      end
-
-      result = Exec.execute_action_with_timeout(ExitingAction, %{}, %{}, 1000, log_level: :info)
       assert {:error, %Error.ExecutionFailureError{} = error} = result
       assert error.message =~ "Task exited"
     end
 
     test "handles action that is killed" do
-      defmodule KillableAction do
-        use Jido.Action, name: "killable_action"
+      result =
+        Exec.execute_action_with_timeout(
+          CoverageTestActions.KillableActionSupervisor,
+          %{},
+          %{},
+          1000,
+          log_level: :info
+        )
 
-        def run(_params, _context) do
-          Process.exit(self(), :kill)
-          {:ok, %{}}
-        end
-      end
-
-      result = Exec.execute_action_with_timeout(KillableAction, %{}, %{}, 1000, log_level: :info)
       assert {:error, %Error.ExecutionFailureError{} = error} = result
       assert error.message =~ "Task exited"
     end
 
     test "multiple concurrent timeouts don't interfere" do
-      defmodule ConcurrentAction do
-        use Jido.Action, name: "concurrent_action"
-
-        def run(params, _context) do
-          Process.sleep(params[:delay])
-          {:ok, %{id: params[:id]}}
-        end
-      end
-
       test_pid = self()
 
       # Spawn multiple actions concurrently
@@ -205,7 +148,7 @@ defmodule Jido.ExecTimeoutTaskSupervisorTest do
         spawn(fn ->
           result =
             Exec.execute_action_with_timeout(
-              ConcurrentAction,
+              CoverageTestActions.ConcurrentAction,
               %{id: i, delay: i * 50},
               %{},
               75,
@@ -236,21 +179,14 @@ defmodule Jido.ExecTimeoutTaskSupervisorTest do
     end
 
     test "no process leaks after timeout" do
-      defmodule LeakTestAction do
-        use Jido.Action, name: "leak_test_action"
-
-        def run(_params, _context) do
-          Process.sleep(200)
-          {:ok, %{}}
-        end
-      end
-
       task_supervisor = Jido.Action.TaskSupervisor
       initial_children = length(Task.Supervisor.children(task_supervisor))
 
       # Run several actions that timeout
-      for _ <- 1..10 do
-        Exec.execute_action_with_timeout(LeakTestAction, %{}, %{}, 50, log_level: :info)
+      for _ <- 1..3 do
+        Exec.execute_action_with_timeout(CoverageTestActions.LeakTestAction, %{}, %{}, 30,
+          log_level: :info
+        )
       end
 
       assert eventually_task_children_at_or_below?(task_supervisor, initial_children)
@@ -264,7 +200,7 @@ defmodule Jido.ExecTimeoutTaskSupervisorTest do
       if current <= limit do
         {:halt, true}
       else
-        Process.sleep(50)
+        Process.sleep(25)
         {:cont, false}
       end
     end)

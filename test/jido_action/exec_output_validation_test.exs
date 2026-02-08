@@ -2,6 +2,7 @@ defmodule JidoTest.Exec.OutputValidationTest do
   use JidoTest.ActionCase, async: true
 
   alias Jido.Exec
+  alias JidoTest.CoverageTestActions
   alias JidoTest.TestActions.InvalidOutputAction
   alias JidoTest.TestActions.NoOutputSchemaAction
   alias JidoTest.TestActions.OutputCallbackAction
@@ -70,40 +71,15 @@ defmodule JidoTest.Exec.OutputValidationTest do
     end
 
     test "output validation works with action returning tuple with directive" do
-      # We need to create a test action that returns {:ok, result, directive}
-      defmodule TupleOutputAction do
-        use Jido.Action,
-          name: "tuple_output_action",
-          output_schema: [
-            status: [type: :string, required: true]
-          ]
-
-        def run(_params, _context) do
-          {:ok, %{status: "success", extra: "data"}, :continue}
-        end
-      end
-
-      assert {:ok, result, directive} = Exec.run(TupleOutputAction, %{}, %{})
+      assert {:ok, result, directive} = Exec.run(CoverageTestActions.TupleOutputAction, %{}, %{})
       assert result.status == "success"
       assert result.extra == "data"
       assert directive == :continue
     end
 
     test "output validation fails with tuple return format" do
-      defmodule InvalidTupleOutputAction do
-        use Jido.Action,
-          name: "invalid_tuple_output_action",
-          output_schema: [
-            required_field: [type: :string, required: true]
-          ]
-
-        def run(_params, _context) do
-          {:ok, %{wrong_field: "value"}, :continue}
-        end
-      end
-
       assert {:error, %Jido.Action.Error.InvalidInputError{}, directive} =
-               Exec.run(InvalidTupleOutputAction, %{}, %{})
+               Exec.run(CoverageTestActions.InvalidTupleOutputAction, %{}, %{})
 
       assert directive == :continue
     end
@@ -124,46 +100,16 @@ defmodule JidoTest.Exec.OutputValidationTest do
 
   describe "output validation error handling" do
     test "output validation errors are properly formatted" do
-      defmodule TypeErrorOutputAction do
-        use Jido.Action,
-          name: "type_error_output_action",
-          output_schema: [
-            count: [type: :integer, required: true]
-          ]
-
-        def run(_params, _context) do
-          {:ok, %{count: "not an integer"}}
-        end
-      end
-
       assert {:error, %Jido.Action.Error.InvalidInputError{message: error_message}} =
-               Exec.run(TypeErrorOutputAction, %{}, %{})
+               Exec.run(CoverageTestActions.TypeErrorOutputAction, %{}, %{})
 
       assert error_message =~ "schema"
       assert error_message =~ "count"
     end
 
     test "output validation callback errors are handled" do
-      defmodule CallbackErrorOutputAction do
-        use Jido.Action,
-          name: "callback_error_output_action",
-          output_schema: [
-            value: [type: :string, required: true]
-          ]
-
-        alias Jido.Action.Error
-
-        def run(_params, _context) do
-          {:ok, %{value: "test"}}
-        end
-
-        def on_before_validate_output(_output) do
-          {:error, Error.validation_error("Callback failed")}
-        end
-      end
-
       assert {:error, %Jido.Action.Error.InvalidInputError{message: "Callback failed"}} =
-               Exec.run(CallbackErrorOutputAction, %{}, %{})
+               Exec.run(CoverageTestActions.CallbackErrorOutputAction, %{}, %{})
     end
   end
 end

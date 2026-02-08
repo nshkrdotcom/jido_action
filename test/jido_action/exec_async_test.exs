@@ -62,10 +62,13 @@ defmodule JidoTest.ExecAsyncTest do
 
     test "returns ok when cancelling an already completed action" do
       capture_log(fn ->
-        async_ref = Exec.run_async(BasicAction, %{value: 5})
+        async_ref = Exec.run_async(BasicAction, %{value: 5}, %{}, timeout: 200)
 
-        Exec.await(async_ref)
-        assert :ok = Exec.cancel(async_ref)
+        assert {:ok, %{value: 5}} = Exec.await(async_ref, 200)
+
+        {cancel_us, cancel_result} = :timer.tc(fn -> Exec.cancel(async_ref) end)
+        assert :ok = cancel_result
+        assert cancel_us < 200_000
       end)
     end
 
@@ -85,7 +88,7 @@ defmodule JidoTest.ExecAsyncTest do
   test "integration of run_async, await, and cancel" do
     capture_log(fn ->
       test_pid = self()
-      async_ref = Exec.run_async(DelayAction, %{delay: 2000}, %{}, timeout: 2000)
+      async_ref = Exec.run_async(DelayAction, %{delay: 500}, %{}, timeout: 500)
 
       spawn(fn ->
         result = Exec.await(async_ref, 100)

@@ -19,9 +19,9 @@ defmodule JidoTest.Actions.BasicActionsTest do
 
     test "uses default duration when not specified" do
       start_time = System.monotonic_time(:millisecond)
-      assert {:ok, %{duration_ms: 1000}} = Basic.Sleep.run(%{duration_ms: 1000}, %{})
+      assert {:ok, %{duration_ms: 100}} = Basic.Sleep.run(%{duration_ms: 100}, %{})
       end_time = System.monotonic_time(:millisecond)
-      assert end_time - start_time >= 1000
+      assert end_time - start_time >= 100
     end
   end
 

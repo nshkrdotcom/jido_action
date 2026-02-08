@@ -49,14 +49,14 @@ defmodule JidoTest.Tools.LuaEvalCoverageTest do
 
   describe "Lua.CompilerException vs Lua.RuntimeException" do
     test "returns error for compile errors" do
-      params = %{code: "return +++"}
+      params = %{code: "return +++", timeout_ms: 5_000}
 
       assert {:error, %Jido.Action.Error.ExecutionFailureError{}} =
                LuaEval.run(params, @context)
     end
 
     test "returns error for runtime errors" do
-      params = %{code: "error('runtime boom')"}
+      params = %{code: "error('runtime boom')", timeout_ms: 5_000}
 
       assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
                LuaEval.run(params, @context)

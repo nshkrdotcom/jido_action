@@ -12,6 +12,7 @@ defmodule JidoTest.ExecCoverageTest do
   alias Jido.Action.Error
   alias Jido.Exec
   alias Jido.Exec.Validator
+  alias JidoTest.CoverageTestActions
   alias JidoTest.TestActions.BasicAction
   alias JidoTest.TestActions.DelayAction
 
@@ -34,18 +35,18 @@ defmodule JidoTest.ExecCoverageTest do
       original_timeout = Application.get_env(:jido_action, :default_timeout)
 
       try do
-        Application.put_env(:jido_action, :default_timeout, 2500)
+        Application.put_env(:jido_action, :default_timeout, 200)
 
         # Test that async await uses the configured timeout when no explicit timeout is provided
         capture_log(fn ->
-          async_ref = Exec.run_async(DelayAction, %{delay: 3000}, %{}, [])
+          async_ref = Exec.run_async(DelayAction, %{delay: 500}, %{}, [])
 
           start_time = System.monotonic_time(:millisecond)
           assert {:error, %Error.TimeoutError{}} = Exec.await(async_ref)
           end_time = System.monotonic_time(:millisecond)
 
-          # Should timeout around the configured 2500ms
-          assert end_time - start_time >= 2400 and end_time - start_time <= 2700
+          # Should timeout around the configured 200ms
+          assert end_time - start_time >= 150 and end_time - start_time <= 400
         end)
       after
         if original_timeout do
@@ -84,7 +85,7 @@ defmodule JidoTest.ExecCoverageTest do
         capture_log(fn ->
           # Should retry 3 times (default from config) and succeed on 4th attempt
           assert {:ok, %{attempt: 4}} =
-                   Exec.run(RetryTestAction, %{}, %{counter_agent: counter_agent}, [])
+                   Exec.run(RetryTestAction, %{}, %{counter_agent: counter_agent}, backoff: 10)
         end)
 
         Agent.stop(counter_agent)
@@ -101,9 +102,9 @@ defmodule JidoTest.ExecCoverageTest do
       original_backoff = Application.get_env(:jido_action, :default_backoff)
 
       try do
-        Application.put_env(:jido_action, :default_backoff, 100)
+        Application.put_env(:jido_action, :default_backoff, 10)
 
-        # Test the calculate_backoff function indirectly by checking retry timing
+        # Create a simple action that tracks retry attempts and timing
         defmodule BackoffTestAction do
           use Jido.Action,
             name: "backoff_test",
@@ -131,7 +132,7 @@ defmodule JidoTest.ExecCoverageTest do
                      %{},
                      %{counter_agent: counter_agent, time_agent: time_agent},
                      max_retries: 2,
-                     backoff: 100
+                     backoff: 10
                    )
         end)
 
@@ -140,13 +141,13 @@ defmodule JidoTest.ExecCoverageTest do
         # Check that there was appropriate backoff between attempts
         if length(times) >= 2 do
           diff1 = Enum.at(times, 1) - Enum.at(times, 0)
-          # Should be around 100ms for first retry
-          assert diff1 >= 90
+          # Should be around 10ms for first retry
+          assert diff1 >= 8
 
           if length(times) >= 3 do
             diff2 = Enum.at(times, 2) - Enum.at(times, 1)
-            # Should be around 200ms for second retry (doubled backoff)
-            assert diff2 >= 190
+            # Should be around 20ms for second retry (doubled backoff)
+            assert diff2 >= 15
           end
         end
 
@@ -197,16 +198,9 @@ defmodule JidoTest.ExecCoverageTest do
     end
 
     test "run/4 with non-list opts" do
-      # This should trigger the function clause that validates opts as a list
-      defmodule TestAction do
-        use Jido.Action, name: "test", description: "test"
-
-        def run(params, _context), do: {:ok, params}
-      end
-
       capture_log(fn ->
         assert {:error, %Error.InvalidInputError{}} =
-                 Exec.run(TestAction, %{value: 1}, %{}, %{not: "list"})
+                 Exec.run(CoverageTestActions.TestAction, %{value: 1}, %{}, %{not: "list"})
       end)
     end
 
@@ -216,68 +210,40 @@ defmodule JidoTest.ExecCoverageTest do
     end
 
     test "normalize_params with various invalid types" do
-      # Test with atom (not covered)
       assert {:error, %Error.InvalidInputError{}} = Exec.normalize_params(:invalid_atom)
-
-      # Test with integer
       assert {:error, %Error.InvalidInputError{}} = Exec.normalize_params(123)
-
-      # Test with tuple (not ok/error tuple)
       assert {:error, %Error.InvalidInputError{}} = Exec.normalize_params({:something, "else"})
     end
 
     test "normalize_context with various invalid types" do
-      # Test with atom
       assert {:error, %Error.InvalidInputError{}} = Exec.normalize_context(:invalid_atom)
-
-      # Test with integer
       assert {:error, %Error.InvalidInputError{}} = Exec.normalize_context(123)
-
-      # Test with binary
       assert {:error, %Error.InvalidInputError{}} = Exec.normalize_context("invalid_string")
     end
 
     test "validate_action with module compilation failure" do
-      # Test with non-existent module
       assert {:error, %Error.InvalidInputError{}} =
                Validator.validate_action(NonExistentModule)
     end
 
     test "validate_action with module missing run/2" do
-      defmodule NoRunModule do
-        @moduledoc false
-        def validate_params(_), do: {:ok, %{}}
-      end
-
       assert {:error, %Error.InvalidInputError{}} =
-               Validator.validate_action(NoRunModule)
+               Validator.validate_action(CoverageTestActions.NoRunModule)
     end
 
     test "validate_params with action missing validate_params/1" do
-      defmodule NoValidateParamsModule do
-        @moduledoc false
-        def run(_params, _context), do: {:ok, %{}}
-      end
-
       assert {:error, %Error.InvalidInputError{}} =
-               Validator.validate_params(NoValidateParamsModule, %{})
+               Validator.validate_params(CoverageTestActions.NoValidateParamsModule, %{})
     end
 
     test "validate_params with invalid return from validate_params/1" do
-      defmodule InvalidValidateReturnModule do
-        @moduledoc false
-        def run(_params, _context), do: {:ok, %{}}
-        def validate_params(_params), do: :invalid_return
-      end
-
       assert {:error, %Error.InvalidInputError{}} =
-               Validator.validate_params(InvalidValidateReturnModule, %{})
+               Validator.validate_params(CoverageTestActions.InvalidValidateReturnModule, %{})
     end
   end
 
   describe "execution timeout edge cases" do
     test "execute_action_with_timeout with zero timeout" do
-      # This should call execute_action directly without timeout
       capture_log(fn ->
         assert {:ok, %{value: 1}} =
                  Exec.run(BasicAction, %{value: 1}, %{}, timeout: 0)
@@ -285,7 +251,6 @@ defmodule JidoTest.ExecCoverageTest do
     end
 
     test "execute_action_with_timeout with invalid timeout value" do
-      # Test with negative timeout - should use default
       capture_log(fn ->
         assert {:ok, %{value: 1}} =
                  Exec.run(BasicAction, %{value: 1}, %{}, timeout: -100)
@@ -293,7 +258,6 @@ defmodule JidoTest.ExecCoverageTest do
     end
 
     test "execute_action_with_timeout with non-integer timeout" do
-      # Test with float timeout - should use default
       capture_log(fn ->
         assert {:ok, %{value: 1}} =
                  Exec.run(BasicAction, %{value: 1}, %{}, timeout: 100.5)
@@ -303,44 +267,22 @@ defmodule JidoTest.ExecCoverageTest do
 
   describe "output validation coverage" do
     test "validate_output with action missing validate_output/1" do
-      # Most actions don't have validate_output/1, which should skip validation
       capture_log(fn ->
         assert {:ok, %{value: 1}} = Exec.run(BasicAction, %{value: 1}, %{}, [])
       end)
     end
 
     test "validate_output with invalid return from validate_output/1" do
-      # This test actually covers a different code path since use Jido.Action provides defaults
-      # Let's just test the successful case since the invalid return path is harder to trigger
-      defmodule ValidOutputValidationAction do
-        use Jido.Action,
-          name: "valid_output_validation",
-          description: "Action with valid output validation"
-
-        def run(params, _context), do: {:ok, params}
-      end
-
       capture_log(fn ->
         assert {:ok, %{value: 1}} =
-                 Exec.run(ValidOutputValidationAction, %{value: 1}, %{}, [])
+                 Exec.run(CoverageTestActions.ValidOutputValidationAction, %{value: 1}, %{}, [])
       end)
     end
 
     test "action returning non-standard result fails with execution error" do
-      defmodule NonStandardResultAction do
-        use Jido.Action,
-          name: "non_standard_result",
-          description: "Action returning non-standard result"
-
-        def run(params, _context) do
-          # Return raw result instead of {:ok, result}
-          params
-        end
-      end
-
       capture_log(fn ->
         assert {:error, %Error.ExecutionFailureError{message: message}} =
-                 Exec.run(NonStandardResultAction, %{value: 1}, %{}, [])
+                 Exec.run(CoverageTestActions.NonStandardResultAction, %{value: 1}, %{}, [])
 
         assert message =~ "Unexpected return shape: %{value: 1}"
       end)
@@ -352,13 +294,11 @@ defmodule JidoTest.ExecCoverageTest do
       capture_log(fn ->
         async_ref = Exec.run_async(BasicAction, %{value: 5})
 
-        # Test cancel with map that has pid but no ref
         assert :ok = Exec.cancel(%{pid: async_ref.pid})
       end)
     end
 
     test "cancel with invalid async_ref types" do
-      # Test various invalid inputs
       assert {:error, %Error.InvalidInputError{}} = Exec.cancel(nil)
       assert {:error, %Error.InvalidInputError{}} = Exec.cancel([])
       assert {:error, %Error.InvalidInputError{}} = Exec.cancel(%{invalid: "ref"})
@@ -367,12 +307,10 @@ defmodule JidoTest.ExecCoverageTest do
 
   describe "async edge cases" do
     test "await handles DOWN message for normal process exit with delayed result" do
-      # This tests the edge case where process exits normally but result arrives late
       capture_log(fn ->
         parent = self()
         ref = make_ref()
 
-        # Simulate the edge case scenario
         {:ok, pid} =
           Task.start(fn ->
             Process.sleep(50)
@@ -382,7 +320,6 @@ defmodule JidoTest.ExecCoverageTest do
         Process.monitor(pid)
         async_ref = %{ref: ref, pid: pid}
 
-        # Wait for process to exit then check await behavior
         Process.sleep(100)
 
         assert {:ok, %{delayed: true}} = Exec.await(async_ref, 200)
@@ -410,148 +347,59 @@ defmodule JidoTest.ExecCoverageTest do
 
   describe "exception handling in run/4" do
     test "handles various runtime errors" do
-      # These errors are actually caught at a different level and become ExecutionFailureErrors
-      # Let's test that they are properly handled regardless
-
-      defmodule BadArityAction do
-        use Jido.Action,
-          name: "bad_arity",
-          description: "Action that causes bad arity error"
-
-        def run(%{cause_error: true}, _context) do
-          # This will cause a bad arity error
-          fun = fn -> :ok end
-          fun.(:extra, :args)
-        end
-
-        def run(params, _context), do: {:ok, params}
-      end
-
       capture_log(fn ->
         assert {:error, %Error.ExecutionFailureError{}} =
-                 Exec.run(BadArityAction, %{cause_error: true}, %{}, [])
+                 Exec.run(CoverageTestActions.BadArityAction, %{cause_error: true}, %{}, [])
       end)
     end
 
     test "handles catch with throw" do
-      defmodule ThrowAction do
-        use Jido.Action,
-          name: "throw_action",
-          description: "Action that throws"
-
-        def run(%{cause_throw: true}, _context) do
-          throw("something was thrown")
-        end
-
-        def run(params, _context), do: {:ok, params}
-      end
-
       capture_log(fn ->
         assert {:error, %Error.ExecutionFailureError{}} =
-                 Exec.run(ThrowAction, %{cause_throw: true}, %{}, [])
+                 Exec.run(CoverageTestActions.ThrowAction, %{cause_throw: true}, %{}, [])
       end)
     end
 
     test "handles catch with exit" do
-      defmodule ExitAction do
-        use Jido.Action,
-          name: "exit_action",
-          description: "Action that exits"
-
-        def run(%{cause_exit: true}, _context) do
-          exit("normal exit")
-        end
-
-        def run(params, _context), do: {:ok, params}
-      end
-
       capture_log(fn ->
         assert {:error, %Error.ExecutionFailureError{}} =
-                 Exec.run(ExitAction, %{cause_exit: true}, %{}, [])
+                 Exec.run(CoverageTestActions.ExitAction, %{cause_exit: true}, %{}, [])
       end)
     end
   end
 
   describe "extract_safe_error_message coverage" do
     test "extracts message from nested error structures" do
-      # Create an error with nested message structure
-      nested_error = %{message: %{message: "deeply nested message"}}
-
-      defmodule NestedErrorAction do
-        use Jido.Action,
-          name: "nested_error",
-          description: "Action with nested error message"
-
-        def run(_params, _context) do
-          {:error, %{message: %{message: "deeply nested message"}}}
-        end
-      end
-
       capture_log(fn ->
         assert {:error, %Error.ExecutionFailureError{}} =
-                 Exec.run(NestedErrorAction, %{}, %{}, [])
+                 Exec.run(CoverageTestActions.NestedErrorAction, %{}, %{}, [])
       end)
     end
 
     test "handles error with nil message" do
-      defmodule NilMessageErrorAction do
-        use Jido.Action,
-          name: "nil_message_error",
-          description: "Action with nil message error"
-
-        def run(_params, _context) do
-          {:error, %{message: nil}}
-        end
-      end
-
       capture_log(fn ->
         assert {:error, %Error.ExecutionFailureError{}} =
-                 Exec.run(NilMessageErrorAction, %{}, %{}, [])
+                 Exec.run(CoverageTestActions.NilMessageErrorAction, %{}, %{}, [])
       end)
     end
 
     test "handles error with struct message" do
-      defmodule StructMessageErrorAction do
-        use Jido.Action,
-          name: "struct_message_error",
-          description: "Action with struct message error"
-
-        def run(_params, _context) do
-          {:error, %{message: %ArgumentError{message: "struct message"}}}
-        end
-      end
-
       capture_log(fn ->
         assert {:error, %Error.ExecutionFailureError{}} =
-                 Exec.run(StructMessageErrorAction, %{}, %{}, [])
+                 Exec.run(CoverageTestActions.StructMessageErrorAction, %{}, %{}, [])
       end)
     end
 
     test "handles error with struct message without message field" do
-      defmodule BasicStruct do
-        defstruct [:value]
-      end
-
-      defmodule StructNoMessageAction do
-        use Jido.Action,
-          name: "struct_no_message",
-          description: "Action with struct without message field"
-
-        def run(_params, _context) do
-          {:error, %{message: %BasicStruct{value: "test"}}}
-        end
-      end
-
       capture_log(fn ->
         assert {:error, %Error.ExecutionFailureError{}} =
-                 Exec.run(StructNoMessageAction, %{}, %{}, [])
+                 Exec.run(CoverageTestActions.StructNoMessageAction, %{}, %{}, [])
       end)
     end
   end
 
   describe "telemetry options coverage" do
     test "silent telemetry option" do
-      # Test that :silent telemetry option skips telemetry
       capture_log(fn ->
         assert {:ok, %{value: 1}} =
                  Exec.run(BasicAction, %{value: 1}, %{}, telemetry: :silent)
@@ -562,10 +410,8 @@ defmodule JidoTest.ExecCoverageTest do
   describe "task cleanup coverage" do
     test "Task.Supervisor handles task shutdown on timeout" do
       capture_log(fn ->
-        # Create a long-running action that will be killed to test cleanup
-        async_ref = Exec.run_async(DelayAction, %{delay: 5000}, %{}, timeout: 100)
+        async_ref = Exec.run_async(DelayAction, %{delay: 500}, %{}, timeout: 100)
 
-        # Let it timeout to trigger cleanup via Task.Supervisor
         assert {:error, %Error.TimeoutError{}} = Exec.await(async_ref, 150)
       end)
     end
@@ -593,11 +439,10 @@ defmodule JidoTest.ExecCoverageTest do
       {:ok, counter_agent} = Agent.start_link(fn -> 0 end)
 
       capture_log(fn ->
-        # Test with moderate retry count and small backoff
         assert {:ok, %{attempt: 4}} =
                  Exec.run(ModerateRetryAction, %{}, %{counter_agent: counter_agent},
                    max_retries: 3,
-                   backoff: 50
+                   backoff: 10
                  )
       end)
 

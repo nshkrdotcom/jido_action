@@ -8,6 +8,7 @@ defmodule JidoTest.ExecConfigTest do
   import ExUnit.CaptureLog
 
   alias Jido.Exec
+  alias JidoTest.CoverageTestActions
 
   @moduletag :capture_log
 
@@ -24,9 +25,6 @@ defmodule JidoTest.ExecConfigTest do
         Application.delete_env(:jido_action, :default_max_retries)
         Application.delete_env(:jido_action, :default_backoff)
 
-        # Force module recompilation to trigger the helper functions
-        Code.compiler_options(ignore_module_conflict: true)
-
         # These operations should trigger the config helper functions
         capture_log(fn ->
           # Test async without explicit timeout (should use get_default_timeout)
@@ -34,22 +32,10 @@ defmodule JidoTest.ExecConfigTest do
           assert {:ok, %{value: 1}} = Exec.await(async_ref)
         end)
 
-        # Test retry without explicit max_retries (should use get_default_max_retries)
-        defmodule ConfigTestAction do
-          use Jido.Action, name: "config_test", description: "Config test action"
-
-          alias Jido.Action.Error
-
-          def run(%{should_fail: true}, _context) do
-            {:error, Error.execution_error("config test error")}
-          end
-
-          def run(params, _context), do: {:ok, params}
-        end
-
         capture_log(fn ->
           # This should use default max_retries and backoff
-          assert {:error, _} = Exec.run(ConfigTestAction, %{should_fail: true}, %{})
+          assert {:error, _} =
+                   Exec.run(CoverageTestActions.ConfigTestAction, %{should_fail: true}, %{})
         end)
       after
         # Restore original config
@@ -64,8 +50,6 @@ defmodule JidoTest.ExecConfigTest do
         if original_backoff do
           Application.put_env(:jido_action, :default_backoff, original_backoff)
         end
-
-        Code.compiler_options(ignore_module_conflict: false)
       end
     end
 
@@ -83,22 +67,9 @@ defmodule JidoTest.ExecConfigTest do
           Application.delete_env(:jido_action, key)
         end)
 
-        # Create an action that will trigger all the config paths
-        defmodule AllConfigPathsAction do
-          use Jido.Action, name: "all_config_paths", description: "Triggers all config paths"
-
-          alias Jido.Action.Error
-
-          def run(%{attempt: attempt}, _context) when attempt < 2 do
-            {:error, Error.execution_error("retry error")}
-          end
-
-          def run(params, _context), do: {:ok, params}
-        end
-
         capture_log(fn ->
           # This should trigger get_default_max_retries and get_default_backoff
-          result = Exec.run(AllConfigPathsAction, %{attempt: 1}, %{})
+          result = Exec.run(CoverageTestActions.AllConfigPathsAction, %{attempt: 1}, %{})
           # Should eventually succeed after retries
           case result do
             {:ok, _} -> :ok
@@ -108,7 +79,7 @@ defmodule JidoTest.ExecConfigTest do
 
         # Test async path to trigger get_default_timeout
         capture_log(fn ->
-          async_ref = Exec.run_async(AllConfigPathsAction, %{attempt: 5}, %{})
+          async_ref = Exec.run_async(CoverageTestActions.AllConfigPathsAction, %{attempt: 5}, %{})
           # This should trigger get_default_timeout for await
           assert {:ok, %{attempt: 5}} = Exec.await(async_ref)
         end)

@@ -21,7 +21,7 @@ defmodule JidoTest.ExecCompensateTest do
       }
 
       assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
-               Exec.run(CompensateAction, params, %{}, timeout: 50, backoff: 25)
+               Exec.run(CompensateAction, params, %{}, timeout: 50, backoff: 10)
 
       assert Exception.message(error) =~ "Compensation completed for:"
       assert error.details.compensated == true
@@ -33,7 +33,7 @@ defmodule JidoTest.ExecCompensateTest do
       params = %{should_fail: true, compensation_should_fail: true}
 
       assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
-               Exec.run(CompensateAction, params, %{}, timeout: 100, backoff: 25)
+               Exec.run(CompensateAction, params, %{}, timeout: 100, backoff: 10)
 
       assert Exception.message(error) =~ "Compensation failed for:"
       assert error.details.compensated == false
@@ -46,7 +46,7 @@ defmodule JidoTest.ExecCompensateTest do
       context = %{test_id: "123"}
 
       assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
-               Exec.run(CompensateAction, params, context, timeout: 100, backoff: 25)
+               Exec.run(CompensateAction, params, context, timeout: 100, backoff: 10)
 
       assert error.details.compensation_result.compensation_context.test_id == "123"
     end
@@ -55,16 +55,16 @@ defmodule JidoTest.ExecCompensateTest do
       params = %{should_fail: true, test_value: "preserved"}
 
       assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
-               Exec.run(CompensateAction, params, %{}, timeout: 100, backoff: 25)
+               Exec.run(CompensateAction, params, %{}, timeout: 100, backoff: 10)
 
       assert error.details.compensation_result.test_value == "preserved"
     end
 
     test "compensation respects delay" do
-      params = %{should_fail: true, delay: 25}
+      params = %{should_fail: true, delay: 10}
 
       assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
-               Exec.run(CompensateAction, params, %{}, timeout: 100, backoff: 25)
+               Exec.run(CompensateAction, params, %{}, timeout: 100, backoff: 10)
 
       assert error.details.compensated == true
     end
@@ -76,7 +76,7 @@ defmodule JidoTest.ExecCompensateTest do
       params = %{should_fail: true, compensation_should_fail: false, delay: 100}
 
       assert {:error, %_{} = error} =
-               Exec.run(CompensateAction, params, %{}, timeout: 50, backoff: 25)
+               Exec.run(CompensateAction, params, %{}, timeout: 50, backoff: 10)
 
       assert is_exception(error)
       # This should be a timeout or compensation error
@@ -88,7 +88,7 @@ defmodule JidoTest.ExecCompensateTest do
       params = %{should_fail: true, delay: 10}
 
       assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
-               Exec.run(CompensateAction, params, %{}, timeout: 100, backoff: 25)
+               Exec.run(CompensateAction, params, %{}, timeout: 100, backoff: 10)
 
       assert error.details.compensated == true
     end
@@ -103,7 +103,7 @@ defmodule JidoTest.ExecCompensateTest do
                Exec.run(CompensateAction, params, %{},
                  telemetry: :full,
                  timeout: 100,
-                 backoff: 25
+                 backoff: 10
                )
 
       assert error.details.compensated == true
@@ -177,7 +177,7 @@ defmodule JidoTest.ExecCompensateTest do
       assert {:error, %Jido.Action.Error.ExecutionFailureError{}} =
                Exec.run(OptsCapturingCompensateAction, params, %{},
                  timeout: 150,
-                 backoff: 25,
+                 backoff: 10,
                  telemetry: :full
                )
 

@@ -42,7 +42,7 @@ defmodule JidoTest.Tools.Weather.CurrentConditionsTest do
           "windGust" => %{"value" => nil},
           "barometricPressure" => %{"value" => 101_325, "unitCode" => "wmoUnit:Pa"},
           "seaLevelPressure" => %{"value" => 101_500, "unitCode" => "wmoUnit:Pa"},
-          "visibility" => %{"value" => 16093, "unitCode" => "wmoUnit:m"},
+          "visibility" => %{"value" => 16_093, "unitCode" => "wmoUnit:m"},
           "maxTemperatureLast24Hours" => nil,
           "minTemperatureLast24Hours" => nil,
           "precipitationLastHour" => %{"value" => 0, "unitCode" => "wmoUnit:mm"},
@@ -98,7 +98,7 @@ defmodule JidoTest.Tools.Weather.CurrentConditionsTest do
       assert conditions.wind_gust == nil
       assert conditions.barometric_pressure == %{value: 101_325, unit: "Pa"}
       assert conditions.sea_level_pressure == %{value: 101_500, unit: "Pa"}
-      assert conditions.visibility == %{value: 16093, unit: "m"}
+      assert conditions.visibility == %{value: 16_093, unit: "m"}
       assert conditions.max_temperature_last_24_hours == nil
       assert conditions.min_temperature_last_24_hours == nil
       assert conditions.precipitation_last_hour == %{value: 0, unit: "mm"}

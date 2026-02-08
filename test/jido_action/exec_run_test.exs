@@ -152,7 +152,7 @@ defmodule JidoTest.ExecRunTest do
     test "handles timeout" do
       capture_log(fn ->
         assert {:error, %_{} = error} =
-                 Exec.run(DelayAction, %{delay: 1000}, %{}, timeout: 50)
+                 Exec.run(DelayAction, %{delay: 200}, %{}, timeout: 50)
 
         assert is_exception(error)
         message = Exception.message(error)
@@ -298,23 +298,23 @@ defmodule JidoTest.ExecRunTest do
       original_backoff = Application.get_env(:jido_action, :default_backoff)
 
       try do
-        Application.put_env(:jido_action, :default_timeout, 1_000)
+        Application.put_env(:jido_action, :default_timeout, 200)
         Application.put_env(:jido_action, :default_max_retries, 2)
-        Application.put_env(:jido_action, :default_backoff, 50)
+        Application.put_env(:jido_action, :default_backoff, 10)
 
         # Test timeout from application config (using a very slow action to ensure timeout)
         # Disable retries for this test to isolate timeout behavior
         start_time = System.monotonic_time(:millisecond)
 
         assert {:error, %Jido.Action.Error.TimeoutError{}} =
-                 Exec.run(DelayAction, %{delay: 2_000}, %{}, max_retries: 0)
+                 Exec.run(DelayAction, %{delay: 500}, %{}, max_retries: 0)
 
         end_time = System.monotonic_time(:millisecond)
         duration = end_time - start_time
 
-        # Should timeout around 1 second (our configured timeout), not the default 5 seconds
-        assert duration >= 900 && duration <= 1_200,
-               "Expected timeout around 1s, but took #{duration}ms"
+        # Should timeout around 200ms (our configured timeout), not the default 5 seconds
+        assert duration >= 150 && duration <= 400,
+               "Expected timeout around 200ms, but took #{duration}ms"
 
         # Test max_retries from application config
         # Reset attempts counter

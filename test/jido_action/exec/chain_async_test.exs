@@ -65,4 +65,21 @@ defmodule JidoTest.Exec.ChainAsyncTest do
       end)
     end
   end
+
+  describe "chain async await with stale monitor" do
+    test "uses a fresh monitor for dead process and returns quickly" do
+      pid = spawn(fn -> :ok end)
+      stale_monitor_ref = Process.monitor(pid)
+      assert_receive {:DOWN, ^stale_monitor_ref, :process, ^pid, :normal}
+      Process.demonitor(stale_monitor_ref, [:flush])
+
+      async_ref = %{ref: make_ref(), pid: pid, owner: self(), monitor_ref: stale_monitor_ref}
+
+      {elapsed_us, await_result} = :timer.tc(fn -> Chain.await(async_ref, 100) end)
+
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} = await_result
+      assert message =~ "Server error in async chain: :noproc"
+      assert elapsed_us < 200_000
+    end
+  end
 end

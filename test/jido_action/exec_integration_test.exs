@@ -166,7 +166,7 @@ defmodule JidoTest.ExecIntegrationTest do
 
     test "cancelled async action stops execution" do
       capture_log(fn ->
-        async_ref = Exec.run_async(DelayAction, %{delay: 1_000}, %{}, timeout: 5_000)
+        async_ref = Exec.run_async(DelayAction, %{delay: 200}, %{}, timeout: 500)
 
         # Cancel quickly after starting
         Process.sleep(10)
@@ -176,8 +176,10 @@ defmodule JidoTest.ExecIntegrationTest do
         refute Process.alive?(async_ref.pid)
 
         # Await should return appropriate error since process is dead
-        assert {:error, error} = Exec.await(async_ref, 100)
+        {await_us, await_result} = :timer.tc(fn -> Exec.await(async_ref, 100) end)
+        assert {:error, error} = await_result
         assert is_exception(error)
+        assert await_us < 300_000
       end)
     end
   end
@@ -310,7 +312,7 @@ defmodule JidoTest.ExecIntegrationTest do
         async_ref =
           Exec.run_async(
             CompensateAction,
-            %{should_fail: true, compensation_should_fail: false, delay: 50},
+            %{should_fail: true, compensation_should_fail: false, delay: 10},
             %{async_context: "test"}
           )
 

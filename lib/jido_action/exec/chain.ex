@@ -142,17 +142,23 @@ defmodule Jido.Exec.Chain do
   defp should_interrupt?(check) when is_function(check, 0), do: check.()
 
   defp monitor_ref_for_current_process(async_ref, pid) do
+    cleanup_owner_monitor(async_ref)
+    Process.monitor(pid)
+  end
+
+  defp cleanup_owner_monitor(async_ref) do
     case {Map.get(async_ref, :owner), Map.get(async_ref, :monitor_ref)} do
       {owner, monitor_ref}
       when is_pid(owner) and owner == self() and is_reference(monitor_ref) ->
-        monitor_ref
+        TaskHelper.demonitor_flush(monitor_ref)
 
       _ ->
-        Process.monitor(pid)
+        :ok
     end
   end
 
-  defp shutdown_process(pid, monitor_ref) do
+  defp shutdown_process(pid, stale_monitor_ref) when is_pid(pid) do
+    monitor_ref = Process.monitor(pid)
     Process.exit(pid, :shutdown)
 
     receive do
@@ -160,7 +166,7 @@ defmodule Jido.Exec.Chain do
         :ok
     after
       @shutdown_grace_period_ms ->
-        Process.exit(pid, :kill)
+        if Process.alive?(pid), do: Process.exit(pid, :kill)
 
         receive do
           {:DOWN, ^monitor_ref, :process, ^pid, _reason} -> :ok
@@ -170,6 +176,10 @@ defmodule Jido.Exec.Chain do
     end
 
     TaskHelper.demonitor_flush(monitor_ref)
+
+    if is_reference(stale_monitor_ref) and stale_monitor_ref != monitor_ref do
+      TaskHelper.demonitor_flush(stale_monitor_ref)
+    end
   end
 
   defp flush_messages(_ref, _pid, _monitor_ref, 0), do: :ok
