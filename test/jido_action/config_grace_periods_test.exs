@@ -65,4 +65,45 @@ defmodule JidoTest.ConfigGracePeriodsTest do
     Application.put_env(:jido_action, :mailbox_flush_max_messages, 25)
     assert Config.mailbox_flush_max_messages() == 25
   end
+
+  test "timeout_zero_mode supports :legacy_direct and :immediate_timeout" do
+    original = Application.get_env(:jido_action, :timeout_zero_mode)
+
+    on_exit(fn ->
+      if is_nil(original) do
+        Application.delete_env(:jido_action, :timeout_zero_mode)
+      else
+        Application.put_env(:jido_action, :timeout_zero_mode, original)
+      end
+    end)
+
+    Application.delete_env(:jido_action, :timeout_zero_mode)
+    assert Config.timeout_zero_mode() == :legacy_direct
+
+    Application.put_env(:jido_action, :timeout_zero_mode, :immediate_timeout)
+    assert Config.timeout_zero_mode() == :immediate_timeout
+
+    Application.put_env(:jido_action, :timeout_zero_mode, :legacy_direct)
+    assert Config.timeout_zero_mode() == :legacy_direct
+  end
+
+  test "validate! rejects invalid timeout_zero_mode value" do
+    original = Application.get_env(:jido_action, :timeout_zero_mode)
+
+    on_exit(fn ->
+      if is_nil(original) do
+        Application.delete_env(:jido_action, :timeout_zero_mode)
+      else
+        Application.put_env(:jido_action, :timeout_zero_mode, original)
+      end
+    end)
+
+    Application.put_env(:jido_action, :timeout_zero_mode, :invalid_mode)
+
+    assert_raise ArgumentError,
+                 ~r/timeout_zero_mode must be :legacy_direct or :immediate_timeout/,
+                 fn ->
+                   Config.validate!()
+                 end
+  end
 end

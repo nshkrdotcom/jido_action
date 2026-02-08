@@ -503,8 +503,14 @@ defmodule Jido.Exec do
       end
     end
 
-    defp execute_action_with_timeout(action, _params, _context, 0, _opts) do
-      {:error, timeout_error(action, 0)}
+    defp execute_action_with_timeout(action, params, context, 0, opts) do
+      case Config.timeout_zero_mode() do
+        :legacy_direct ->
+          execute_action(action, params, context, opts)
+
+        :immediate_timeout ->
+          {:error, timeout_error(action, 0)}
+      end
     end
 
     defp execute_action_with_timeout(action, params, context, _timeout, opts) do

@@ -193,6 +193,17 @@ defmodule JidoTest.Exec.InstanceIsolationTest do
   describe "timeout: 0 behavior (immediate timeout)" do
     test "returns timeout error with instance option when timeout is zero" do
       start_supervised!({Task.Supervisor, name: DirectRun.TaskSupervisor})
+      original_timeout_zero_mode = Application.get_env(:jido_action, :timeout_zero_mode)
+
+      on_exit(fn ->
+        if is_nil(original_timeout_zero_mode) do
+          Application.delete_env(:jido_action, :timeout_zero_mode)
+        else
+          Application.put_env(:jido_action, :timeout_zero_mode, original_timeout_zero_mode)
+        end
+      end)
+
+      Application.put_env(:jido_action, :timeout_zero_mode, :immediate_timeout)
 
       capture_log(fn ->
         assert {:error, %Jido.Action.Error.TimeoutError{timeout: 0}} =

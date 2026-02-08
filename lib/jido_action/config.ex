@@ -2,6 +2,7 @@ defmodule Jido.Action.Config do
   @moduledoc false
 
   @default_exec_timeout 30_000
+  @default_timeout_zero_mode :legacy_direct
   @default_await_timeout 5_000
   @default_max_retries 1
   @default_backoff 250
@@ -19,6 +20,11 @@ defmodule Jido.Action.Config do
   @spec exec_timeout() :: non_neg_integer()
   def exec_timeout do
     Application.get_env(:jido_action, :default_timeout, @default_exec_timeout)
+  end
+
+  @spec timeout_zero_mode() :: :legacy_direct | :immediate_timeout
+  def timeout_zero_mode do
+    Application.get_env(:jido_action, :timeout_zero_mode, @default_timeout_zero_mode)
   end
 
   @spec await_timeout() :: non_neg_integer()
@@ -128,6 +134,7 @@ defmodule Jido.Action.Config do
   @spec validate!() :: :ok
   def validate! do
     validate_non_neg_integer!(:default_timeout, exec_timeout())
+    validate_timeout_zero_mode!(:timeout_zero_mode, timeout_zero_mode())
     validate_non_neg_integer!(:default_await_timeout, await_timeout())
     validate_non_neg_integer!(:default_max_retries, max_retries())
     validate_non_neg_integer!(:default_backoff, backoff())
@@ -159,4 +166,13 @@ defmodule Jido.Action.Config do
 
   defp validate_flush_limit!(_key, :infinity), do: :ok
   defp validate_flush_limit!(key, value), do: validate_non_neg_integer!(key, value)
+
+  defp validate_timeout_zero_mode!(_key, value)
+       when value in [:legacy_direct, :immediate_timeout],
+       do: :ok
+
+  defp validate_timeout_zero_mode!(key, value) do
+    raise ArgumentError,
+          ":jido_action #{inspect(key)} must be :legacy_direct or :immediate_timeout, got: #{inspect(value)}"
+  end
 end

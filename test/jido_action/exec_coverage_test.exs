@@ -28,6 +28,64 @@ defmodule JidoTest.ExecCoverageTest do
     :ok
   end
 
+  defmodule ElsePathAction do
+    @moduledoc false
+    def validate_params(_params), do: {:error, :invalid_params}
+    def run(params, _context), do: {:ok, params}
+  end
+
+  defmodule FunctionClauseMetadataAction do
+    @moduledoc false
+    def validate_params(params), do: {:ok, params}
+    def run(params, _context), do: {:ok, params}
+
+    def __action_metadata__ do
+      raise FunctionClauseError, module: __MODULE__, function: :metadata, arity: 1
+    end
+  end
+
+  defmodule RuntimeMetadataAction do
+    @moduledoc false
+    def validate_params(params), do: {:ok, params}
+    def run(params, _context), do: {:ok, params}
+    def __action_metadata__, do: raise("metadata boom")
+  end
+
+  defmodule ThrowMetadataAction do
+    @moduledoc false
+    def validate_params(params), do: {:ok, params}
+    def run(params, _context), do: {:ok, params}
+    def __action_metadata__, do: throw(:metadata_boom)
+  end
+
+  describe "run/4 defensive paths" do
+    test "normalizes validator errors through with/else branch" do
+      assert {:error, %Error.InvalidInputError{}} =
+               Exec.run(ElsePathAction, %{value: 1}, %{}, log_level: :debug)
+    end
+
+    test "returns validation error for function clause metadata failures" do
+      assert {:error, %Error.InvalidInputError{message: message}} =
+               Exec.run(FunctionClauseMetadataAction, %{value: 1}, %{}, log_level: :debug)
+
+      assert message =~ "Invalid action module"
+    end
+
+    test "returns internal error for unexpected metadata exceptions" do
+      assert {:error, %Error.InternalError{message: message}} =
+               Exec.run(RuntimeMetadataAction, %{value: 1}, %{}, log_level: :debug)
+
+      assert message =~ "An unexpected error occurred"
+    end
+
+    test "returns internal error for thrown metadata failures" do
+      assert {:error, %Error.InternalError{message: message}} =
+               Exec.run(ThrowMetadataAction, %{value: 1}, %{}, log_level: :debug)
+
+      assert message =~ "Caught throw"
+    end
+  end
+
   describe "configuration functions coverage" do
     test "get_default_timeout uses application config" do
       original_timeout = Application.get_env(:jido_action, :default_timeout)
@@ -230,6 +288,18 @@ defmodule JidoTest.ExecCoverageTest do
 
   describe "execution timeout edge cases" do
     test "execute_action_with_timeout with zero timeout" do
+      original_timeout_zero_mode = Application.get_env(:jido_action, :timeout_zero_mode)
+
+      on_exit(fn ->
+        if is_nil(original_timeout_zero_mode) do
+          Application.delete_env(:jido_action, :timeout_zero_mode)
+        else
+          Application.put_env(:jido_action, :timeout_zero_mode, original_timeout_zero_mode)
+        end
+      end)
+
+      Application.put_env(:jido_action, :timeout_zero_mode, :immediate_timeout)
+
       assert {:error, %Error.TimeoutError{timeout: 0}} =
                Exec.run(BasicAction, %{value: 1}, %{}, timeout: 0)
     end

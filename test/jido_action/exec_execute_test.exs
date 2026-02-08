@@ -196,7 +196,44 @@ defmodule JidoTest.ExecExecuteTest do
                )
     end
 
-    test "returns immediate timeout when timeout is zero" do
+    test "executes directly when timeout is zero in legacy mode" do
+      original_timeout_zero_mode = Application.get_env(:jido_action, :timeout_zero_mode)
+
+      on_exit(fn ->
+        if is_nil(original_timeout_zero_mode) do
+          Application.delete_env(:jido_action, :timeout_zero_mode)
+        else
+          Application.put_env(:jido_action, :timeout_zero_mode, original_timeout_zero_mode)
+        end
+      end)
+
+      Application.put_env(:jido_action, :timeout_zero_mode, :legacy_direct)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, %{result: "Async action completed"}} =
+                   Exec.execute_action_with_timeout(DelayAction, %{delay: 50}, %{}, 0,
+                     log_level: :debug
+                   )
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.DelayAction"
+      assert log =~ "Finished execution of JidoTest.TestActions.DelayAction"
+    end
+
+    test "returns immediate timeout when timeout is zero in immediate mode" do
+      original_timeout_zero_mode = Application.get_env(:jido_action, :timeout_zero_mode)
+
+      on_exit(fn ->
+        if is_nil(original_timeout_zero_mode) do
+          Application.delete_env(:jido_action, :timeout_zero_mode)
+        else
+          Application.put_env(:jido_action, :timeout_zero_mode, original_timeout_zero_mode)
+        end
+      end)
+
+      Application.put_env(:jido_action, :timeout_zero_mode, :immediate_timeout)
+
       log =
         capture_log(fn ->
           assert {:error, %Jido.Action.Error.TimeoutError{timeout: 0}} =

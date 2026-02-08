@@ -70,6 +70,18 @@ defmodule JidoTest.ExecFinalCoverageTest do
     end
 
     test "timeout handling with edge cases" do
+      original_timeout_zero_mode = Application.get_env(:jido_action, :timeout_zero_mode)
+
+      on_exit(fn ->
+        if is_nil(original_timeout_zero_mode) do
+          Application.delete_env(:jido_action, :timeout_zero_mode)
+        else
+          Application.put_env(:jido_action, :timeout_zero_mode, original_timeout_zero_mode)
+        end
+      end)
+
+      Application.put_env(:jido_action, :timeout_zero_mode, :immediate_timeout)
+
       # Test timeout with exactly 0 (immediate timeout)
       assert {:error, %Error.TimeoutError{timeout: 0}} =
                Exec.run(JidoTest.TestActions.BasicAction, %{value: 1}, %{}, timeout: 0)
