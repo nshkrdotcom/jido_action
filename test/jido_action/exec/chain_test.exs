@@ -14,112 +14,88 @@ defmodule JidoTest.Exec.ChainTest do
 
   describe "chain/3" do
     test "executes a simple chain of actions successfully" do
-      capture_log(fn ->
-        result = Chain.chain([Add, Multiply], %{value: 5, amount: 2})
-        assert {:ok, %{value: 14, amount: 2}} = result
-      end)
+      result = Chain.chain([Add, Multiply], %{value: 5, amount: 2})
+      assert {:ok, %{value: 14, amount: 2}} = result
     end
 
     test "supports new syntax with action options" do
-      capture_log(fn ->
-        result =
-          Chain.chain(
-            [
-              Add,
-              {WriteFile, [file_name: "test.txt", content: "Hello"]},
-              Multiply
-            ],
-            %{value: 1, amount: 2}
-          )
+      result =
+        Chain.chain(
+          [
+            Add,
+            {WriteFile, [file_name: "test.txt", content: "Hello"]},
+            Multiply
+          ],
+          %{value: 1, amount: 2}
+        )
 
-        assert {:ok, %{value: 6, written_file: "test.txt"}} = result
-      end)
+      assert {:ok, %{value: 6, written_file: "test.txt"}} = result
     end
 
     test "executes a chain with mixed action formats" do
-      capture_log(fn ->
-        result = Chain.chain([Add, {Multiply, [amount: 3]}, Subtract], %{value: 5})
-        assert {:ok, %{value: 15, amount: 3}} = result
-      end)
+      result = Chain.chain([Add, {Multiply, [amount: 3]}, Subtract], %{value: 5})
+      assert {:ok, %{value: 15, amount: 3}} = result
     end
 
     test "executes a chain with map action parameters" do
-      capture_log(fn ->
-        result = Chain.chain([Add, {Multiply, %{amount: 3}}, Subtract], %{value: 5})
-        assert {:ok, %{value: 15, amount: 3}} = result
-      end)
+      result = Chain.chain([Add, {Multiply, %{amount: 3}}, Subtract], %{value: 5})
+      assert {:ok, %{value: 15, amount: 3}} = result
     end
 
     test "handles string keys in action parameters" do
-      capture_log(fn ->
-        result = Chain.chain([Add, {Multiply, %{"amount" => 3}}, Subtract], %{value: 5})
-        assert {:error, %Jido.Action.Error.InvalidInputError{}} = result
-      end)
+      result = Chain.chain([Add, {Multiply, %{"amount" => 3}}, Subtract], %{value: 5})
+      assert {:error, %Jido.Action.Error.InvalidInputError{}} = result
     end
 
     test "handles empty map action parameters" do
-      capture_log(fn ->
-        result = Chain.chain([Add, {Multiply, %{}}, Subtract], %{value: 5, amount: 2})
-        assert {:ok, %{value: 12, amount: 2}} = result
-      end)
+      result = Chain.chain([Add, {Multiply, %{}}, Subtract], %{value: 5, amount: 2})
+      assert {:ok, %{value: 12, amount: 2}} = result
     end
 
     test "handles nil action parameters" do
-      capture_log(fn ->
-        result = Chain.chain([Add, {Multiply, nil}, Subtract], %{value: 5})
+      result = Chain.chain([Add, {Multiply, nil}, Subtract], %{value: 5})
 
-        assert {:error, error} = result
-        assert is_exception(error)
-        assert Exception.message(error) =~ "Invalid chain action"
-      end)
+      assert {:error, error} = result
+      assert is_exception(error)
+      assert Exception.message(error) =~ "Invalid chain action"
     end
 
     test "handles errors in the chain" do
-      capture_log(fn ->
-        result = Chain.chain([Add, ErrorAction, Multiply], %{value: 5, error_type: :runtime})
-        assert {:error, error} = result
-        assert is_exception(error)
-        assert Exception.message(error) =~ "Runtime error"
-      end)
+      result = Chain.chain([Add, ErrorAction, Multiply], %{value: 5, error_type: :runtime})
+      assert {:error, error} = result
+      assert is_exception(error)
+      assert Exception.message(error) =~ "Runtime error"
     end
 
     test "stops execution on first error" do
-      capture_log(fn ->
-        result = Chain.chain([Add, ErrorAction, Multiply], %{value: 5, error_type: :runtime})
-        assert {:error, %_{}} = result
-        assert is_exception(result |> elem(1))
-        refute match?({:ok, %{value: _}}, result)
-      end)
+      result = Chain.chain([Add, ErrorAction, Multiply], %{value: 5, error_type: :runtime})
+      assert {:error, %_{}} = result
+      assert is_exception(result |> elem(1))
+      refute match?({:ok, %{value: _}}, result)
     end
 
     test "handles invalid actions in the chain" do
-      capture_log(fn ->
-        result = Chain.chain([Add, :invalid_action, Multiply], %{value: 5})
+      result = Chain.chain([Add, :invalid_action, Multiply], %{value: 5})
 
-        assert {:error, error} = result
-        assert is_exception(error)
-        assert Exception.message(error) =~ "Failed to compile module :invalid_action: :nofile"
-      end)
+      assert {:error, error} = result
+      assert is_exception(error)
+      assert Exception.message(error) =~ "Failed to compile module :invalid_action: :nofile"
     end
 
     test "executes chain asynchronously" do
-      capture_log(fn ->
-        async_ref = Chain.chain([Add, Multiply], %{value: 5}, async: true)
-        assert is_map(async_ref)
-        assert is_pid(async_ref.pid)
-        assert is_reference(async_ref.ref)
-        assert is_reference(async_ref.monitor_ref)
-        assert async_ref.owner == self()
-        assert {:ok, %{value: 12}} = Chain.await(async_ref, 1_000)
-      end)
+      async_ref = Chain.chain([Add, Multiply], %{value: 5}, async: true)
+      assert is_map(async_ref)
+      assert is_pid(async_ref.pid)
+      assert is_reference(async_ref.ref)
+      assert is_reference(async_ref.monitor_ref)
+      assert async_ref.owner == self()
+      assert {:ok, %{value: 12}} = Chain.await(async_ref, 1_000)
     end
 
     test "passes context to actions" do
-      capture_log(fn ->
-        context = %{multiplier: 3}
-        result = Chain.chain([Add, ContextAwareMultiply], %{value: 5}, context: context)
-        assert {:ok, %{value: 18}} = result
-      end)
+      context = %{multiplier: 3}
+      result = Chain.chain([Add, ContextAwareMultiply], %{value: 5}, context: context)
+      assert {:ok, %{value: 18}} = result
     end
 
     test "logs debug messages for each action" do
@@ -144,20 +120,18 @@ defmodule JidoTest.Exec.ChainTest do
     end
 
     test "executes a complex chain of actions" do
-      capture_log(fn ->
-        result =
-          Chain.chain(
-            [
-              Add,
-              {Multiply, [amount: 3]},
-              Subtract,
-              {Square, [amount: 2]}
-            ],
-            %{value: 10}
-          )
+      result =
+        Chain.chain(
+          [
+            Add,
+            {Multiply, [amount: 3]},
+            Subtract,
+            {Square, [amount: 2]}
+          ],
+          %{value: 10}
+        )
 
-        assert {:ok, %{value: 900}} = result
-      end)
+      assert {:ok, %{value: 900}} = result
     end
   end
 end

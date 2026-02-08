@@ -4,7 +4,7 @@ defmodule Jido.Exec.TaskHelper do
   alias Jido.Action.Error
   alias Jido.Exec.Supervisors
 
-  @default_down_grace_period_ms 100
+  @default_down_grace_period_ms 10
   @default_flush_timeout_ms 0
   @default_max_flush_messages 10
 

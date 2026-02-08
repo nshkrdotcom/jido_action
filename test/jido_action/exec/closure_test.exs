@@ -1,7 +1,6 @@
 defmodule JidoTest.Exec.ClosureTest do
   use JidoTest.ActionCase, async: false
 
-  import ExUnit.CaptureLog
   import Mimic
 
   alias Jido.Exec
@@ -14,13 +13,11 @@ defmodule JidoTest.Exec.ClosureTest do
 
   describe "closure/3" do
     test "creates a closure that can be called with params" do
-      capture_log(fn ->
-        closure = Closure.closure(BasicAction, %{})
-        assert is_function(closure, 1)
+      closure = Closure.closure(BasicAction, %{})
+      assert is_function(closure, 1)
 
-        result = closure.(%{value: 5})
-        assert {:ok, %{value: 5}} = result
-      end)
+      result = closure.(%{value: 5})
+      assert {:ok, %{value: 5}} = result
     end
 
     test "closure preserves context and options" do
@@ -33,13 +30,11 @@ defmodule JidoTest.Exec.ClosureTest do
     end
 
     test "closure handles errors from the action" do
-      capture_log(fn ->
-        closure = Closure.closure(ErrorAction)
+      closure = Closure.closure(ErrorAction)
 
-        assert {:error, error} = closure.(%{error_type: :runtime})
-        assert is_exception(error)
-        assert Exception.message(error) =~ "Runtime error"
-      end)
+      assert {:error, error} = closure.(%{error_type: :runtime})
+      assert is_exception(error)
+      assert Exception.message(error) =~ "Runtime error"
     end
 
     test "closure validates params before execution" do
@@ -52,41 +47,35 @@ defmodule JidoTest.Exec.ClosureTest do
 
   describe "async_closure/3" do
     test "creates an async closure that returns an async_ref" do
-      capture_log(fn ->
-        async_closure = Closure.async_closure(BasicAction)
-        assert is_function(async_closure, 1)
+      async_closure = Closure.async_closure(BasicAction)
+      assert is_function(async_closure, 1)
 
-        async_ref = async_closure.(%{value: 10})
-        assert is_map(async_ref)
-        assert is_pid(async_ref.pid)
-        assert is_reference(async_ref.ref)
+      async_ref = async_closure.(%{value: 10})
+      assert is_map(async_ref)
+      assert is_pid(async_ref.pid)
+      assert is_reference(async_ref.ref)
 
-        assert {:ok, %{value: 10}} = Exec.await(async_ref)
-      end)
+      assert {:ok, %{value: 10}} = Exec.await(async_ref)
     end
 
     test "async_closure preserves context and options" do
-      capture_log(fn ->
-        expect(Exec, :run_async, fn _, _, _, _ -> %{ref: make_ref(), pid: self()} end)
+      expect(Exec, :run_async, fn _, _, _, _ -> %{ref: make_ref(), pid: self()} end)
 
-        async_closure =
-          Closure.async_closure(ContextAction, %{async_context: true}, timeout: 10_000)
+      async_closure =
+        Closure.async_closure(ContextAction, %{async_context: true}, timeout: 10_000)
 
-        async_closure.(%{input: "async_test"})
+      async_closure.(%{input: "async_test"})
 
-        verify!(Exec)
-      end)
+      verify!(Exec)
     end
 
     test "async_closure handles errors from the action" do
-      capture_log(fn ->
-        async_closure = Closure.async_closure(ErrorAction)
-        async_ref = async_closure.(%{error_type: :runtime})
+      async_closure = Closure.async_closure(ErrorAction)
+      async_ref = async_closure.(%{error_type: :runtime})
 
-        assert {:error, error} = Exec.await(async_ref)
-        assert is_exception(error)
-        assert Exception.message(error) =~ "Runtime error"
-      end)
+      assert {:error, error} = Exec.await(async_ref)
+      assert is_exception(error)
+      assert Exception.message(error) =~ "Runtime error"
     end
   end
 

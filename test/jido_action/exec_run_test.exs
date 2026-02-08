@@ -106,19 +106,17 @@ defmodule JidoTest.ExecRunTest do
     test "retries on error and then succeeds", %{attempts_table: attempts_table} do
       stub(:telemetry, :execute, fn _, _, _ -> :ok end)
 
-      capture_log(fn ->
-        result =
-          Exec.run(
-            RetryAction,
-            %{max_attempts: 3, failure_type: :error},
-            %{attempts_table: attempts_table},
-            max_retries: 2,
-            backoff: 10
-          )
+      result =
+        Exec.run(
+          RetryAction,
+          %{max_attempts: 3, failure_type: :error},
+          %{attempts_table: attempts_table},
+          max_retries: 2,
+          backoff: 10
+        )
 
-        assert {:ok, %{result: "success after 3 attempts"}} = result
-        assert :ets.lookup(attempts_table, :attempts) == [{:attempts, 3}]
-      end)
+      assert {:ok, %{result: "success after 3 attempts"}} = result
+      assert :ets.lookup(attempts_table, :attempts) == [{:attempts, 3}]
 
       verify!()
     end
@@ -126,20 +124,18 @@ defmodule JidoTest.ExecRunTest do
     test "fails after max retries", %{attempts_table: attempts_table} do
       stub(:telemetry, :execute, fn _, _, _ -> :ok end)
 
-      capture_log(fn ->
-        result =
-          Exec.run(
-            RetryAction,
-            %{max_attempts: 5, failure_type: :error},
-            %{attempts_table: attempts_table},
-            max_retries: 2,
-            backoff: 10
-          )
+      result =
+        Exec.run(
+          RetryAction,
+          %{max_attempts: 5, failure_type: :error},
+          %{attempts_table: attempts_table},
+          max_retries: 2,
+          backoff: 10
+        )
 
-        assert {:error, %_{} = error} = result
-        assert is_exception(error)
-        assert :ets.lookup(attempts_table, :attempts) == [{:attempts, 3}]
-      end)
+      assert {:error, %_{} = error} = result
+      assert is_exception(error)
+      assert :ets.lookup(attempts_table, :attempts) == [{:attempts, 3}]
 
       verify!()
     end
@@ -150,15 +146,13 @@ defmodule JidoTest.ExecRunTest do
     end
 
     test "handles timeout" do
-      capture_log(fn ->
-        assert {:error, %_{} = error} =
-                 Exec.run(DelayAction, %{delay: 200}, %{}, timeout: 50)
+      assert {:error, %_{} = error} =
+               Exec.run(DelayAction, %{delay: 200}, %{}, timeout: 50)
 
-        assert is_exception(error)
-        message = Exception.message(error)
+      assert is_exception(error)
+      message = Exception.message(error)
 
-        assert message =~ "timed out after 50ms"
-      end)
+      assert message =~ "timed out after 50ms"
     end
 
     test "handles IO operations" do

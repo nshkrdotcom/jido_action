@@ -5,8 +5,6 @@ defmodule JidoTest.ExecConfigTest do
 
   use JidoTest.ActionCase, async: false
 
-  import ExUnit.CaptureLog
-
   alias Jido.Exec
   alias JidoTest.CoverageTestActions
 
@@ -26,17 +24,13 @@ defmodule JidoTest.ExecConfigTest do
         Application.delete_env(:jido_action, :default_backoff)
 
         # These operations should trigger the config helper functions
-        capture_log(fn ->
-          # Test async without explicit timeout (should use get_default_timeout)
-          async_ref = Exec.run_async(JidoTest.TestActions.BasicAction, %{value: 1}, %{})
-          assert {:ok, %{value: 1}} = Exec.await(async_ref)
-        end)
+        # Test async without explicit timeout (should use get_default_timeout)
+        async_ref = Exec.run_async(JidoTest.TestActions.BasicAction, %{value: 1}, %{})
+        assert {:ok, %{value: 1}} = Exec.await(async_ref)
 
-        capture_log(fn ->
-          # This should use default max_retries and backoff
-          assert {:error, _} =
-                   Exec.run(CoverageTestActions.ConfigTestAction, %{should_fail: true}, %{})
-        end)
+        # This should use default max_retries and backoff
+        assert {:error, _} =
+                 Exec.run(CoverageTestActions.ConfigTestAction, %{should_fail: true}, %{})
       after
         # Restore original config
         if original_timeout do
@@ -67,22 +61,18 @@ defmodule JidoTest.ExecConfigTest do
           Application.delete_env(:jido_action, key)
         end)
 
-        capture_log(fn ->
-          # This should trigger get_default_max_retries and get_default_backoff
-          result = Exec.run(CoverageTestActions.AllConfigPathsAction, %{attempt: 1}, %{})
-          # Should eventually succeed after retries
-          case result do
-            {:ok, _} -> :ok
-            {:error, _} -> :ok
-          end
-        end)
+        # This should trigger get_default_max_retries and get_default_backoff
+        result = Exec.run(CoverageTestActions.AllConfigPathsAction, %{attempt: 1}, %{})
+        # Should eventually succeed after retries
+        case result do
+          {:ok, _} -> :ok
+          {:error, _} -> :ok
+        end
 
         # Test async path to trigger get_default_timeout
-        capture_log(fn ->
-          async_ref = Exec.run_async(CoverageTestActions.AllConfigPathsAction, %{attempt: 5}, %{})
-          # This should trigger get_default_timeout for await
-          assert {:ok, %{attempt: 5}} = Exec.await(async_ref)
-        end)
+        async_ref = Exec.run_async(CoverageTestActions.AllConfigPathsAction, %{attempt: 5}, %{})
+        # This should trigger get_default_timeout for await
+        assert {:ok, %{attempt: 5}} = Exec.await(async_ref)
       after
         # Restore configs
         Enum.each(original_configs, fn {key, value} ->

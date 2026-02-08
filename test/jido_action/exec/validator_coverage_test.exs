@@ -45,7 +45,7 @@ defmodule JidoTest.Exec.ValidatorCoverageTest do
       assert {:error, %Jido.Action.Error.InvalidInputError{message: message}} =
                Validator.validate_params(NonExistent.Module.That.DoesNot.Exist, %{})
 
-      assert message =~ "Failed to compile"
+      assert message =~ "not loaded"
     end
 
     test "returns error for module without validate_params/1" do
@@ -74,7 +74,7 @@ defmodule JidoTest.Exec.ValidatorCoverageTest do
                  []
                )
 
-      assert message =~ "Failed to compile"
+      assert message =~ "not loaded"
     end
 
     test "validates output for action with output schema" do

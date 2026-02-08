@@ -137,10 +137,6 @@ defmodule Jido.Exec.Chain do
   @spec cancel(chain_async_ref() | pid()) :: :ok | {:error, Exception.t()}
   def cancel(async_ref_or_pid), do: Async.cancel(async_ref_or_pid)
 
-  @spec should_interrupt?(interrupt_check | nil) :: boolean()
-  defp should_interrupt?(nil), do: false
-  defp should_interrupt?(check) when is_function(check, 0), do: check.()
-
   defp monitor_ref_for_current_process(async_ref, pid) do
     cleanup_owner_monitor(async_ref)
     Process.monitor(pid)
@@ -157,6 +153,7 @@ defmodule Jido.Exec.Chain do
     end
   end
 
+  @dialyzer {:nowarn_function, shutdown_process: 2}
   defp shutdown_process(pid, stale_monitor_ref) when is_pid(pid) do
     monitor_ref = Process.monitor(pid)
     Process.exit(pid, :shutdown)
@@ -198,16 +195,18 @@ defmodule Jido.Exec.Chain do
 
   @spec maybe_execute_action(chain_action(), map(), map(), keyword(), interrupt_check | nil) ::
           {:cont, ok_t()} | {:halt, chain_result()}
-  defp maybe_execute_action(action, params, context, opts, interrupt_check) do
-    case should_interrupt?(interrupt_check) do
-      true -> handle_interruption(action, params)
-      false -> process_action(action, params, context, opts)
-    end
+  defp maybe_execute_action(action, params, context, opts, nil) do
+    process_action(action, params, context, opts)
   end
 
-  defp handle_interruption(action, params) do
-    Logger.info("Chain interrupted before action: #{inspect(action)}")
-    {:halt, {:interrupted, params}}
+  defp maybe_execute_action(action, params, context, opts, interrupt_check)
+       when is_function(interrupt_check, 0) do
+    if interrupt_check.() do
+      Logger.info("Chain interrupted before action: #{inspect(action)}")
+      {:halt, {:interrupted, params}}
+    else
+      process_action(action, params, context, opts)
+    end
   end
 
   @spec process_action(chain_action(), map(), map(), keyword()) ::

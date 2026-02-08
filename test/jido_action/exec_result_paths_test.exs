@@ -13,6 +13,8 @@ defmodule JidoTest.ExecResultPathsTest do
 
   defmodule DirectiveAction do
     @moduledoc false
+    alias Jido.Action.Error
+
     use Jido.Action,
       name: "directive_action",
       schema: [
@@ -26,7 +28,7 @@ defmodule JidoTest.ExecResultPathsTest do
     end
 
     def run(%{mode: :error_with_directive}, _context) do
-      {:error, Jido.Action.Error.execution_error("fail"), :err_directive}
+      {:error, Error.execution_error("fail"), :err_directive}
     end
 
     def run(%{mode: :unexpected}, _context) do

@@ -4,8 +4,6 @@ defmodule JidoTest.Exec.AsyncCoverageTest do
   """
   use JidoTest.ActionCase, async: false
 
-  import ExUnit.CaptureLog
-
   alias Jido.Exec.Async
   alias JidoTest.TestActions.Add
 
@@ -26,19 +24,15 @@ defmodule JidoTest.Exec.AsyncCoverageTest do
     end
 
     test "cancels with async_ref from non-owner process" do
-      capture_log(fn ->
-        async_ref = Async.start(Add, %{value: 5, amount: 1})
-        # Modify the owner to simulate non-owner
-        modified_ref = %{async_ref | owner: spawn(fn -> :ok end)}
-        assert :ok = Async.cancel(modified_ref)
-      end)
+      async_ref = Async.start(Add, %{value: 5, amount: 1})
+      # Modify the owner to simulate non-owner
+      modified_ref = %{async_ref | owner: spawn(fn -> :ok end)}
+      assert :ok = Async.cancel(modified_ref)
     end
 
     test "cancels with just a pid" do
-      capture_log(fn ->
-        async_ref = Async.start(Add, %{value: 5, amount: 1})
-        assert :ok = Async.cancel(async_ref.pid)
-      end)
+      async_ref = Async.start(Add, %{value: 5, amount: 1})
+      assert :ok = Async.cancel(async_ref.pid)
     end
 
     test "returns error for invalid cancel argument" do
@@ -65,17 +59,13 @@ defmodule JidoTest.Exec.AsyncCoverageTest do
     end
 
     test "returns result for completed action" do
-      capture_log(fn ->
-        async_ref = Async.start(Add, %{value: 10, amount: 5})
-        assert {:ok, %{value: 15}} = Async.await(async_ref, 5_000)
-      end)
+      async_ref = Async.start(Add, %{value: 10, amount: 5})
+      assert {:ok, %{value: 15}} = Async.await(async_ref, 5_000)
     end
 
     test "returns result using default timeout" do
-      capture_log(fn ->
-        async_ref = Async.start(Add, %{value: 10, amount: 5})
-        assert {:ok, %{value: 15}} = Async.await(async_ref)
-      end)
+      async_ref = Async.start(Add, %{value: 10, amount: 5})
+      assert {:ok, %{value: 15}} = Async.await(async_ref)
     end
 
     test "handles DOWN normal and then receives result in grace window" do

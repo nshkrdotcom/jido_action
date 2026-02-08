@@ -16,6 +16,7 @@ defmodule Jido.Exec.Validator do
   Validates that the given action module is valid and can be executed.
 
   Checks that the module can be compiled and has the required run/2 function.
+  Uses `Code.ensure_compiled/1` which may trigger compilation if needed.
   """
   @spec validate_action(module()) :: :ok | {:error, Exception.t()}
   def validate_action(action) do
@@ -39,28 +40,26 @@ defmodule Jido.Exec.Validator do
   @doc """
   Validates parameters for the given action using the action's validate_params/1 function.
 
-  Returns validated parameters on success or an error if validation fails.
+  Uses `Code.ensure_loaded/1` (lightweight) instead of `Code.ensure_compiled/1`
+  since the caller (`Exec.run/4`) always calls `validate_action/1` first which
+  guarantees compilation. This avoids redundant compilation checks.
   """
   @spec validate_params(module(), map()) :: {:ok, map()} | {:error, Exception.t()}
   def validate_params(action, params) do
-    case Code.ensure_compiled(action) do
+    case Code.ensure_loaded(action) do
       {:module, _} ->
-        validate_params_for_compiled_module(action, params)
+        if function_exported?(action, :validate_params, 1) do
+          normalize_validate_params_result(action.validate_params(params))
+        else
+          {:error,
+           Error.validation_error(
+             "Module #{inspect(action)} is not a valid action: missing validate_params/1 function"
+           )}
+        end
 
       {:error, reason} ->
         {:error,
-         Error.validation_error("Failed to compile module #{inspect(action)}: #{inspect(reason)}")}
-    end
-  end
-
-  defp validate_params_for_compiled_module(action, params) do
-    if function_exported?(action, :validate_params, 1) do
-      normalize_validate_params_result(action.validate_params(params))
-    else
-      {:error,
-       Error.validation_error(
-         "Module #{inspect(action)} is not a valid action: missing validate_params/1 function"
-       )}
+         Error.validation_error("Module #{inspect(action)} is not loaded: #{inspect(reason)}")}
     end
   end
 
@@ -79,18 +78,19 @@ defmodule Jido.Exec.Validator do
   Validates output from an action using the action's validate_output/1 function if present.
 
   If the action doesn't have a validate_output/1 function, validation is skipped.
+  Uses `Code.ensure_loaded/1` (lightweight) instead of `Code.ensure_compiled/1`.
   """
   @spec validate_output(module(), map(), keyword()) :: {:ok, map()} | {:error, Exception.t()}
   def validate_output(action, output, opts) do
     log_level = Keyword.get(opts, :log_level, :info)
 
-    case Code.ensure_compiled(action) do
+    case Code.ensure_loaded(action) do
       {:module, _} ->
         validate_output_for_compiled_module(action, output, log_level)
 
       {:error, reason} ->
         {:error,
-         Error.validation_error("Failed to compile module #{inspect(action)}: #{inspect(reason)}")}
+         Error.validation_error("Module #{inspect(action)} is not loaded: #{inspect(reason)}")}
     end
   end
 

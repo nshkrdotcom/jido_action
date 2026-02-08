@@ -21,11 +21,13 @@ defmodule JidoTest.Exec.ChainCoverageTest do
   end
 
   defmodule ErrorWithDirectiveAction do
+    alias Jido.Action.Error
+
     use Jido.Action, name: "error_with_directive_action", schema: []
 
     @impl true
     def run(_params, _context) do
-      {:error, Jido.Action.Error.execution_error("with directive"), :noop_directive}
+      {:error, Error.execution_error("with directive"), :noop_directive}
     end
   end
 

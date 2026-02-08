@@ -4,8 +4,8 @@ defmodule JidoTest.Action.SchemaCoverageTest do
   """
   use ExUnit.Case, async: true
 
-  alias Jido.Action.Schema
   alias Jido.Action.Error
+  alias Jido.Action.Schema
 
   @moduletag :capture_log
 
