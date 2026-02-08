@@ -36,6 +36,7 @@ defmodule Jido.Exec.Compensation do
       :opts,
       :compensation_run_opts,
       :timeout,
+      :max_retries,
       :max_attempts
     ]
     defstruct @enforce_keys
@@ -123,7 +124,8 @@ defmodule Jido.Exec.Compensation do
       metadata = action.__action_metadata__()
       compensation_opts = metadata[:compensation] || []
       timeout = get_compensation_timeout(opts, compensation_opts)
-      max_attempts = get_compensation_max_attempts(opts, compensation_opts)
+      max_retries = get_compensation_max_retries(opts, compensation_opts)
+      max_attempts = max_retries + 1
 
       compensation_run_opts =
         opts
@@ -136,7 +138,7 @@ defmodule Jido.Exec.Compensation do
           :compensation_max_retries
         ])
         |> Keyword.put(:compensation_timeout, timeout)
-        |> Keyword.put(:compensation_max_retries, max(max_attempts - 1, 0))
+        |> Keyword.put(:compensation_max_retries, max_retries)
 
       result =
         execute_compensation_with_retries(
@@ -147,10 +149,10 @@ defmodule Jido.Exec.Compensation do
           opts,
           compensation_run_opts,
           timeout,
-          max_attempts
+          max_retries
         )
 
-      handle_task_result(result, error, directive, timeout, max_attempts)
+      handle_task_result(result, error, directive, timeout, max_attempts, max_retries)
     end
 
     @type compensation_context :: %ExecutionContext{
@@ -161,6 +163,7 @@ defmodule Jido.Exec.Compensation do
             opts: run_opts(),
             compensation_run_opts: run_opts(),
             timeout: non_neg_integer(),
+            max_retries: non_neg_integer(),
             max_attempts: pos_integer()
           }
 
@@ -172,7 +175,7 @@ defmodule Jido.Exec.Compensation do
             run_opts(),
             run_opts(),
             non_neg_integer(),
-            pos_integer()
+            non_neg_integer()
           ) :: {:ok, any()} | {:exit, any()} | :timeout
     defp execute_compensation_with_retries(
            action,
@@ -182,7 +185,7 @@ defmodule Jido.Exec.Compensation do
            opts,
            compensation_run_opts,
            timeout,
-           max_attempts
+           max_retries
          ) do
       execution_context = %ExecutionContext{
         action: action,
@@ -192,7 +195,8 @@ defmodule Jido.Exec.Compensation do
         opts: opts,
         compensation_run_opts: compensation_run_opts,
         timeout: timeout,
-        max_attempts: max_attempts
+        max_retries: max_retries,
+        max_attempts: max_retries + 1
       }
 
       do_execute_compensation_with_retries(execution_context, 1)
@@ -291,20 +295,16 @@ defmodule Jido.Exec.Compensation do
         Config.compensation_timeout()
     end
 
-    @spec get_compensation_max_attempts(run_opts(), keyword() | map()) :: pos_integer()
-    defp get_compensation_max_attempts(opts, compensation_opts) do
-      retries =
-        Util.first_present(
-          [
-            Keyword.get(opts, :compensation_max_retries),
-            extract_max_retries_from_compensation_opts(compensation_opts)
-          ],
-          1
-        )
-
-      retries
+    @spec get_compensation_max_retries(run_opts(), keyword() | map()) :: non_neg_integer()
+    defp get_compensation_max_retries(opts, compensation_opts) do
+      Util.first_present(
+        [
+          Keyword.get(opts, :compensation_max_retries),
+          extract_max_retries_from_compensation_opts(compensation_opts)
+        ],
+        1
+      )
       |> normalize_retries()
-      |> max(1)
     end
 
     @spec extract_timeout_from_compensation_opts(keyword() | map() | any()) ::
@@ -333,23 +333,44 @@ defmodule Jido.Exec.Compensation do
             Exception.t(),
             any(),
             non_neg_integer(),
-            pos_integer()
+            pos_integer(),
+            non_neg_integer()
           ) :: exec_result
-    defp handle_task_result({:ok, result}, error, directive, _timeout, _max_attempts) do
+    defp handle_task_result(
+           {:ok, result},
+           error,
+           directive,
+           _timeout,
+           _max_attempts,
+           _max_retries
+         ) do
       handle_compensation_result(result, error, directive)
     end
 
-    defp handle_task_result(:timeout, error, directive, timeout, max_attempts) do
-      build_timeout_error(error, directive, timeout, max_attempts)
+    defp handle_task_result(:timeout, error, directive, timeout, max_attempts, max_retries) do
+      build_timeout_error(error, directive, timeout, max_attempts, max_retries)
     end
 
-    defp handle_task_result({:exit, reason}, error, directive, _timeout, max_attempts) do
-      build_exit_error(error, directive, reason, max_attempts)
+    defp handle_task_result(
+           {:exit, reason},
+           error,
+           directive,
+           _timeout,
+           max_attempts,
+           max_retries
+         ) do
+      build_exit_error(error, directive, reason, max_attempts, max_retries)
     end
 
-    @spec build_timeout_error(Exception.t(), any(), non_neg_integer(), pos_integer()) ::
+    @spec build_timeout_error(
+            Exception.t(),
+            any(),
+            non_neg_integer(),
+            pos_integer(),
+            non_neg_integer()
+          ) ::
             exec_result
-    defp build_timeout_error(error, directive, timeout, max_attempts) do
+    defp build_timeout_error(error, directive, timeout, max_attempts, max_retries) do
       compensation_error = Error.timeout_error("Compensation timed out after #{timeout}ms")
 
       error_result =
@@ -360,6 +381,7 @@ defmodule Jido.Exec.Compensation do
             compensation_result: nil,
             compensation_error: compensation_error,
             compensation_attempts: max_attempts,
+            compensation_max_retries: max_retries,
             original_error: error
           }
         )
@@ -367,8 +389,9 @@ defmodule Jido.Exec.Compensation do
       wrap_error_with_directive(error_result, directive)
     end
 
-    @spec build_exit_error(Exception.t(), any(), any(), pos_integer()) :: exec_result
-    defp build_exit_error(error, directive, reason, max_attempts) do
+    @spec build_exit_error(Exception.t(), any(), any(), pos_integer(), non_neg_integer()) ::
+            exec_result
+    defp build_exit_error(error, directive, reason, max_attempts, max_retries) do
       error_message = Telemetry.extract_safe_error_message(error)
       compensation_error = Error.execution_error("Compensation exited: #{inspect(reason)}")
 
@@ -380,6 +403,7 @@ defmodule Jido.Exec.Compensation do
             compensation_result: nil,
             compensation_error: compensation_error,
             compensation_attempts: max_attempts,
+            compensation_max_retries: max_retries,
             exit_reason: reason,
             original_error: error
           }

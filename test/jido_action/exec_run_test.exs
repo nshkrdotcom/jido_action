@@ -43,7 +43,7 @@ defmodule JidoTest.ExecRunTest do
 
       log =
         capture_log(fn ->
-          assert {:ok, %{value: 5}} = Exec.run(BasicAction, %{value: 5})
+          assert {:ok, %{value: 5}} = Exec.run(BasicAction, %{value: 5}, %{}, log_level: :debug)
         end)
 
       assert log =~ "Executing JidoTest.TestActions.BasicAction with params: %{value: 5}"
@@ -94,7 +94,9 @@ defmodule JidoTest.ExecRunTest do
 
       log =
         capture_log(fn ->
-          assert {:error, %_{} = error} = Exec.run(ErrorAction, %{}, %{}, timeout: 50)
+          assert {:error, %_{} = error} =
+                   Exec.run(ErrorAction, %{}, %{}, timeout: 50, log_level: :debug)
+
           assert is_exception(error)
         end)
 

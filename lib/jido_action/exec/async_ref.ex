@@ -71,12 +71,28 @@ defmodule Jido.Exec.AsyncRef do
   def from_legacy_cancel_map(%{pid: pid} = legacy_map, caller_module, default_result_tag \\ nil) do
     warn_legacy_map(caller_module, :cancel)
 
+    legacy_ref = Map.get(legacy_map, :ref)
+
+    ref =
+      case legacy_ref do
+        value when is_reference(value) -> value
+        _ -> make_ref()
+      end
+
+    result_tag =
+      if is_reference(legacy_ref) do
+        Map.get(legacy_map, :result_tag, default_result_tag)
+      else
+        # Missing refs cannot be safely flushed from the owner mailbox.
+        nil
+      end
+
     %__MODULE__{
-      ref: Map.get(legacy_map, :ref, make_ref()),
+      ref: ref,
       pid: pid,
       monitor_ref: Map.get(legacy_map, :monitor_ref),
       owner: Map.get(legacy_map, :owner),
-      result_tag: Map.get(legacy_map, :result_tag, default_result_tag)
+      result_tag: result_tag
     }
   end
 

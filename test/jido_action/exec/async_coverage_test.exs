@@ -101,6 +101,16 @@ defmodule JidoTest.Exec.AsyncCoverageTest do
   end
 
   describe "await/2" do
+    test "fails fast when async_ref owner does not match caller" do
+      async_ref = Async.start(Add, %{value: 10, amount: 5})
+      non_owner_ref = %{async_ref | owner: spawn(fn -> :ok end)}
+
+      assert {:error, %Jido.Action.Error.InvalidInputError{message: message}} =
+               Async.await(non_owner_ref, 1_000)
+
+      assert message =~ "owner process"
+    end
+
     test "uses a fresh monitor when async_ref monitor is stale" do
       pid = spawn(fn -> :ok end)
       stale_monitor_ref = Process.monitor(pid)

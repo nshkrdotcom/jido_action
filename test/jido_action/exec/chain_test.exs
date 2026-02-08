@@ -103,7 +103,7 @@ defmodule JidoTest.Exec.ChainTest do
     test "logs debug messages for each action" do
       log =
         capture_log(fn ->
-          Chain.chain([Add, Multiply], %{value: 5}, timeout: 10)
+          Chain.chain([Add, Multiply], %{value: 5}, timeout: 10, log_level: :debug)
         end)
 
       # assert log =~ "Executing action in chain"

@@ -55,7 +55,6 @@ defmodule Jido.Exec.AsyncLifecycle do
             down_grace_period_ms
           )
 
-          flush_messages(ref, pid, monitor_ref, opts)
           {:error, timeout_error.(timeout)}
       end
 

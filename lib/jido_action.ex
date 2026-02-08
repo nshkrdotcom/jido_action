@@ -301,7 +301,7 @@ defmodule Jido.Action do
   - `vsn` (optional, default: `"0.1.0"`) - Semantic version of the Action (for example, `"1.2.3"`).
   - `compensation` (optional, default: %{enabled: false, max_retries: #{@default_compensation_max_retries}, timeout: #{@default_compensation_timeout_ms}}) - Compensation configuration with keys:
     - `enabled` (default: false) - Whether compensation is enabled
-    - `max_retries` (default: #{@default_compensation_max_retries}) - Maximum compensation retry attempts when no runtime override is provided
+    - `max_retries` (default: #{@default_compensation_max_retries}) - Maximum additional compensation retries (excluding the initial compensation attempt)
     - `timeout` (default: #{@default_compensation_timeout_ms}) - Timeout in milliseconds for compensation execution
 
   Compensation retry precedence is:

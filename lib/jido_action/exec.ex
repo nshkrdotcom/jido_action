@@ -42,6 +42,7 @@ defmodule Jido.Exec do
   alias Jido.Action.Config
   alias Jido.Action.Error
   alias Jido.Action.Params
+  alias Jido.Action.TimeoutBudget
   alias Jido.Exec.Async
   alias Jido.Exec.AsyncRef
   alias Jido.Exec.Compensation
@@ -55,7 +56,6 @@ defmodule Jido.Exec do
   require Logger
 
   @execute_action_result_tag :execute_action_result
-  @exec_deadline_context_key :__jido_exec_deadline_ms__
 
   @type action :: Types.action()
   @type params :: Types.params()
@@ -234,6 +234,7 @@ defmodule Jido.Exec do
 
   - `async_ref`: The reference returned by `run_async/4`.
     Legacy map refs are still accepted for one release cycle and emit a deprecation warning.
+    Awaiting is owner-bound: only the process that started the async run may await it.
   - `timeout`: Maximum time (in ms) to wait for the result (default: 5000).
 
   ## Returns
@@ -305,7 +306,15 @@ defmodule Jido.Exec do
     defp normalize_params(params), do: Params.normalize_exec_params(params)
 
     @spec normalize_context(context()) :: {:ok, map()} | {:error, Exception.t()}
-    defp normalize_context(context), do: Params.normalize_exec_context(context)
+    defp normalize_context(context) do
+      case Params.normalize_exec_context(context) do
+        {:ok, normalized_context} ->
+          {:ok, TimeoutBudget.normalize_runtime_keys(normalized_context)}
+
+        {:error, %_{} = error} when is_exception(error) ->
+          {:error, error}
+      end
+    end
 
     @spec do_run_with_retry(action(), params(), context(), run_opts()) :: exec_result
     defp do_run_with_retry(action, params, context, opts) do
@@ -453,7 +462,7 @@ defmodule Jido.Exec do
     @dialyzer {:nowarn_function, execute_action_with_timeout: 5}
     defp execute_action_with_timeout(action, params, context, timeout, opts)
          when timeout == :infinity or (is_integer(timeout) and timeout > 0) do
-      context_with_deadline = maybe_put_exec_deadline(context, timeout)
+      context_with_deadline = TimeoutBudget.put_exec_deadline(context, timeout)
 
       case TaskLifecycle.run(
              fn -> execute_action(action, params, context_with_deadline, opts) end,
@@ -500,23 +509,6 @@ defmodule Jido.Exec do
 
     defp execute_action_with_timeout(action, params, context, _timeout, opts) do
       execute_action_with_timeout(action, params, context, Config.exec_timeout(), opts)
-    end
-
-    defp maybe_put_exec_deadline(context, :infinity), do: context
-
-    defp maybe_put_exec_deadline(context, timeout) when is_integer(timeout) and timeout > 0 do
-      deadline = System.monotonic_time(:millisecond) + timeout
-
-      existing_deadline = Map.get(context, @exec_deadline_context_key)
-
-      bounded_deadline =
-        if is_integer(existing_deadline) do
-          min(existing_deadline, deadline)
-        else
-          deadline
-        end
-
-      Map.put(context, @exec_deadline_context_key, bounded_deadline)
     end
 
     defp timeout_error(action, timeout_ms) do

@@ -74,9 +74,9 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec log_execution_start(module(), map(), map()) :: :ok
   def log_execution_start(action, params, context) do
-    Logger.notice(
+    Logger.debug(fn ->
       "Executing #{inspect(action)} with params: #{inspect_for_log(params)} and context: #{inspect_for_log(context)}"
-    )
+    end)
   end
 
   @doc """
@@ -144,8 +144,10 @@ defmodule Jido.Exec.Telemetry do
   def cond_log_start(log_level, action, params, context) do
     cond_log(
       log_level,
-      :notice,
-      "Executing #{inspect(action)} with params: #{inspect_for_log(params)} and context: #{inspect_for_log(context)}"
+      :debug,
+      fn ->
+        "Executing #{inspect(action)} with params: #{inspect_for_log(params)} and context: #{inspect_for_log(context)}"
+      end
     )
   end
 

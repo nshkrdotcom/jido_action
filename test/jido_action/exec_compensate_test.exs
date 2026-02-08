@@ -146,7 +146,8 @@ defmodule JidoTest.ExecCompensateTest do
                  backoff: 10
                )
 
-      assert error.details.compensation_attempts == 3
+      assert error.details.compensation_attempts == 4
+      assert error.details.compensation_max_retries == 3
     end
 
     test "prefers opts[:compensation_max_retries] over action metadata compensation.max_retries" do
@@ -160,7 +161,8 @@ defmodule JidoTest.ExecCompensateTest do
                  backoff: 10
                )
 
-      assert error.details.compensation_attempts == 2
+      assert error.details.compensation_attempts == 3
+      assert error.details.compensation_max_retries == 2
     end
 
     test "falls back to default compensation retries when no override is provided" do
@@ -169,7 +171,8 @@ defmodule JidoTest.ExecCompensateTest do
       assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
                Exec.run(CrashingCompensateAction, params, %{}, timeout: 200)
 
-      assert error.details.compensation_attempts == 1
+      assert error.details.compensation_attempts == 2
+      assert error.details.compensation_max_retries == 1
     end
   end
 

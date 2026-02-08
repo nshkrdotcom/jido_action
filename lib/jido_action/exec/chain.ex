@@ -116,30 +116,37 @@ defmodule Jido.Exec.Chain do
   Waits for the result of an asynchronous chain execution with a custom timeout.
 
   Legacy map refs are still accepted for one release cycle and emit a deprecation warning.
+  Awaiting is owner-bound: only the process that started the async chain may await it.
   """
   @spec await(chain_async_ref_input(), timeout()) :: chain_sync_result()
-  def await(%AsyncRef{} = async_ref, timeout),
-    do:
-      AsyncLifecycle.await(
-        async_ref,
-        timeout,
-        result_tag: @result_tag,
-        down_grace_period_ms: Config.chain_down_grace_period_ms(),
-        shutdown_grace_period_ms: Config.chain_shutdown_grace_period_ms(),
-        flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
-        max_flush_messages: Config.mailbox_flush_max_messages(),
-        no_result_error: fn ->
-          Error.execution_error("Chain completed but result was not received")
-        end,
-        down_error: fn reason ->
-          Error.execution_error("Server error in async chain: #{inspect(reason)}")
-        end,
-        timeout_error: fn timeout_ms ->
-          Error.timeout_error("Async chain timed out after #{timeout_ms}ms", %{
-            timeout: timeout_ms
-          })
-        end
-      )
+  def await(%AsyncRef{} = async_ref, timeout) do
+    case ensure_owner_can_await(async_ref) do
+      :ok ->
+        AsyncLifecycle.await(
+          async_ref,
+          timeout,
+          result_tag: @result_tag,
+          down_grace_period_ms: Config.chain_down_grace_period_ms(),
+          shutdown_grace_period_ms: Config.chain_shutdown_grace_period_ms(),
+          flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
+          max_flush_messages: Config.mailbox_flush_max_messages(),
+          no_result_error: fn ->
+            Error.execution_error("Chain completed but result was not received")
+          end,
+          down_error: fn reason ->
+            Error.execution_error("Server error in async chain: #{inspect(reason)}")
+          end,
+          timeout_error: fn timeout_ms ->
+            Error.timeout_error("Async chain timed out after #{timeout_ms}ms", %{
+              timeout: timeout_ms
+            })
+          end
+        )
+
+      {:error, %_{} = error} when is_exception(error) ->
+        {:error, error}
+    end
+  end
 
   def await(%{ref: ref, pid: pid} = legacy_async_ref, timeout)
       when is_reference(ref) and is_pid(pid) and not is_struct(legacy_async_ref, AsyncRef) do
@@ -268,4 +275,19 @@ defmodule Jido.Exec.Chain do
   defp finalize_chain_result({:ok, params, nil}), do: {:ok, params}
   defp finalize_chain_result({:ok, params, directive}), do: {:ok, params, directive}
   defp finalize_chain_result(other), do: other
+
+  defp ensure_owner_can_await(%AsyncRef{owner: owner, pid: pid})
+       when is_pid(owner) and owner != self() do
+    {:error,
+     Error.validation_error(
+       "Async chain ref can only be awaited by its owner process",
+       %{
+         owner: owner,
+         caller: self(),
+         pid: pid
+       }
+     )}
+  end
+
+  defp ensure_owner_can_await(%AsyncRef{}), do: :ok
 end

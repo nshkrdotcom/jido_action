@@ -3,14 +3,13 @@ defmodule Jido.Tools.Workflow.Execution do
 
   alias Jido.Action.Config
   alias Jido.Action.Error
+  alias Jido.Action.TimeoutBudget
   alias Jido.Action.Util
   alias Jido.Exec
   alias Jido.Exec.Supervisors
   alias Jido.Instruction
 
   @workflow_task_supervisor_key :__jido_workflow_task_supervisor__
-  @workflow_deadline_key :__jido_workflow_deadline_ms__
-  @exec_deadline_key :__jido_exec_deadline_ms__
 
   @type execution_result ::
           {:ok, map()}
@@ -323,23 +322,31 @@ defmodule Jido.Tools.Workflow.Execution do
          module,
          owner
        ) do
-    watcher_pid = spawn_owner_watcher(owner, self())
-
-    try do
-      execute_parallel_instruction(instruction, params, context, module)
-    after
-      Process.exit(watcher_pid, :kill)
-    end
+    _watcher_pid = spawn_owner_watcher(owner, self())
+    execute_parallel_instruction(instruction, params, context, module)
   end
 
   defp spawn_owner_watcher(owner, task_pid) when is_pid(owner) and is_pid(task_pid) do
     spawn(fn ->
-      monitor_ref = Process.monitor(owner)
+      owner_ref = Process.monitor(owner)
+      task_ref = Process.monitor(task_pid)
 
       receive do
-        {:DOWN, ^monitor_ref, :process, ^owner, _reason} ->
+        {:DOWN, ^owner_ref, :process, ^owner, _reason} ->
           Process.exit(task_pid, :kill)
+
+          receive do
+            {:DOWN, ^task_ref, :process, ^task_pid, _reason} -> :ok
+          after
+            0 -> :ok
+          end
+
+        {:DOWN, ^task_ref, :process, ^task_pid, _reason} ->
+          :ok
       end
+
+      Process.demonitor(owner_ref, [:flush])
+      Process.demonitor(task_ref, [:flush])
     end)
   end
 
@@ -431,7 +438,7 @@ defmodule Jido.Tools.Workflow.Execution do
   end
 
   defp stop_parallel_supervisor(task_sup) when is_pid(task_sup) do
-    Supervisor.stop(task_sup, :normal)
+    Supervisor.stop(task_sup, :normal, Config.async_shutdown_grace_period_ms())
   catch
     :exit, {:noproc, _} -> :ok
   end
@@ -477,27 +484,17 @@ defmodule Jido.Tools.Workflow.Execution do
     ])
   end
 
-  defp cap_timeout_by_workflow_deadline(timeout, nil), do: timeout
-
-  defp cap_timeout_by_workflow_deadline(_timeout, 0), do: 0
-
-  defp cap_timeout_by_workflow_deadline(:infinity, remaining_timeout_ms),
-    do: remaining_timeout_ms
-
-  defp cap_timeout_by_workflow_deadline(timeout, remaining_timeout_ms)
-       when is_integer(timeout) and is_integer(remaining_timeout_ms) do
-    min(timeout, remaining_timeout_ms)
-  end
+  defp cap_timeout_by_workflow_deadline(timeout, remaining_timeout_ms),
+    do: TimeoutBudget.cap_timeout_by_remaining(timeout, remaining_timeout_ms)
 
   defp extract_workflow_runtime_context(context) when is_map(context) do
     workflow_task_supervisor = Map.get(context, @workflow_task_supervisor_key)
-    workflow_deadline_ms = Map.get(context, @workflow_deadline_key)
+    workflow_deadline_ms = TimeoutBudget.workflow_deadline_ms(context)
 
     sanitized_context =
       context
       |> Map.delete(@workflow_task_supervisor_key)
-      |> Map.delete(@workflow_deadline_key)
-      |> Map.delete(@exec_deadline_key)
+      |> TimeoutBudget.drop_runtime_deadline_keys()
 
     {workflow_task_supervisor, workflow_deadline_ms, sanitized_context}
   end
@@ -505,9 +502,11 @@ defmodule Jido.Tools.Workflow.Execution do
   defp extract_workflow_runtime_context(context), do: {nil, nil, context}
 
   defp enrich_workflow_runtime_context(context) when is_map(context) do
-    case resolve_workflow_deadline(context) do
-      nil -> context
-      deadline_ms -> Map.put(context, @workflow_deadline_key, deadline_ms)
+    normalized_context = TimeoutBudget.normalize_runtime_keys(context)
+
+    case resolve_workflow_deadline(normalized_context) do
+      nil -> normalized_context
+      deadline_ms -> TimeoutBudget.put_workflow_deadline(normalized_context, deadline_ms)
     end
   end
 
@@ -516,8 +515,8 @@ defmodule Jido.Tools.Workflow.Execution do
   defp resolve_workflow_deadline(context) when is_map(context) do
     current_deadline =
       Util.first_present([
-        Map.get(context, @workflow_deadline_key),
-        Map.get(context, @exec_deadline_key)
+        TimeoutBudget.workflow_deadline_ms(context),
+        TimeoutBudget.exec_deadline_ms(context)
       ])
 
     case current_deadline do
@@ -535,11 +534,7 @@ defmodule Jido.Tools.Workflow.Execution do
     end
   end
 
-  defp timeout_to_deadline(timeout) when is_integer(timeout) and timeout > 0 do
-    System.monotonic_time(:millisecond) + timeout
-  end
-
-  defp timeout_to_deadline(_), do: nil
+  defp timeout_to_deadline(timeout), do: TimeoutBudget.timeout_to_deadline(timeout)
 
   defp ensure_workflow_time_remaining(context) do
     case remaining_timeout_ms(context) do
@@ -549,11 +544,12 @@ defmodule Jido.Tools.Workflow.Execution do
   end
 
   defp remaining_timeout_ms(context) when is_map(context) do
-    remaining_timeout_ms(Map.get(context, @workflow_deadline_key))
+    TimeoutBudget.workflow_deadline_ms(context)
+    |> remaining_timeout_ms()
   end
 
   defp remaining_timeout_ms(deadline_ms) when is_integer(deadline_ms) do
-    max(deadline_ms - System.monotonic_time(:millisecond), 0)
+    TimeoutBudget.remaining_timeout_ms(deadline_ms)
   end
 
   defp remaining_timeout_ms(_), do: nil

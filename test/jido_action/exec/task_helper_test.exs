@@ -30,6 +30,27 @@ defmodule JidoTest.Exec.TaskHelperTest do
       assert error.message =~ "Instance task supervisor"
       assert error.message =~ "Missing.Instance"
     end
+
+    test "terminates the task when the owner process exits" do
+      parent = self()
+
+      owner =
+        spawn(fn ->
+          assert {:ok, async_ref} =
+                   TaskHelper.spawn_monitored([], :task_helper_owner_exit, fn ->
+                     Process.sleep(:infinity)
+                   end)
+
+          send(parent, {:spawned_task, async_ref.pid})
+        end)
+
+      assert is_pid(owner)
+      assert_receive {:spawned_task, task_pid}, 500
+
+      monitor_ref = Process.monitor(task_pid)
+      assert_receive {:DOWN, ^monitor_ref, :process, ^task_pid, _reason}, 1_000
+      refute Process.alive?(task_pid)
+    end
   end
 
   describe "timeout_cleanup/6" do

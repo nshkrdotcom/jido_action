@@ -8,6 +8,7 @@ defmodule Jido.Tools.ReqTool do
 
   alias Jido.Action.Config
   alias Jido.Action.Error
+  alias Jido.Action.TimeoutBudget
 
   @req_config_schema NimbleOptions.new!(
                        url: [type: :string, required: true],
@@ -151,29 +152,9 @@ defmodule Jido.Tools.ReqTool do
   end
 
   defp resolve_request_timeout_ms(context) do
-    case extract_context_timeout(context) do
+    case TimeoutBudget.timeout_ms_from_context(context) do
       value when is_integer(value) and value >= 0 -> value
       _ -> Config.exec_timeout()
     end
   end
-
-  defp extract_context_timeout(context) when is_map(context) do
-    Enum.find(
-      [
-        remaining_timeout_ms(Map.get(context, :__jido_exec_deadline_ms__)),
-        remaining_timeout_ms(Map.get(context, "__jido_exec_deadline_ms__")),
-        Map.get(context, :timeout),
-        Map.get(context, "timeout")
-      ],
-      fn value -> is_integer(value) and value >= 0 end
-    )
-  end
-
-  defp extract_context_timeout(_), do: nil
-
-  defp remaining_timeout_ms(deadline_ms) when is_integer(deadline_ms) do
-    max(deadline_ms - System.monotonic_time(:millisecond), 0)
-  end
-
-  defp remaining_timeout_ms(_), do: nil
 end

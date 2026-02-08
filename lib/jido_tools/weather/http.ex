@@ -3,6 +3,7 @@ defmodule Jido.Tools.Weather.HTTP do
 
   alias Jido.Action.Config
   alias Jido.Action.Error
+  alias Jido.Action.TimeoutBudget
 
   @geojson_headers %{
     "User-Agent" => "jido_action/1.0 (weather tool)",
@@ -72,12 +73,7 @@ defmodule Jido.Tools.Weather.HTTP do
   defp resolve_timeout_ms(timeout_ms, context) do
     context_timeout =
       if is_map(context) do
-        first_positive_or_zero([
-          remaining_timeout_ms(Map.get(context, :__jido_exec_deadline_ms__)),
-          remaining_timeout_ms(Map.get(context, "__jido_exec_deadline_ms__")),
-          Map.get(context, :timeout),
-          Map.get(context, "timeout")
-        ])
+        TimeoutBudget.timeout_ms_from_context(context)
       else
         nil
       end
@@ -85,12 +81,6 @@ defmodule Jido.Tools.Weather.HTTP do
     first_positive_or_zero([timeout_ms, context_timeout, Config.exec_timeout()]) ||
       Config.exec_timeout()
   end
-
-  defp remaining_timeout_ms(deadline_ms) when is_integer(deadline_ms) do
-    max(deadline_ms - System.monotonic_time(:millisecond), 0)
-  end
-
-  defp remaining_timeout_ms(_), do: nil
 
   defp first_positive_or_zero(values) when is_list(values) do
     Enum.find(values, fn

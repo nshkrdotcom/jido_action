@@ -44,7 +44,7 @@ defmodule JidoTest.Exec.ChainAsyncTest do
   end
 
   describe "chain async await from non-owner process" do
-    test "creates new monitor when awaiting from non-owner" do
+    test "fails fast when awaiting from non-owner" do
       async_ref =
         Chain.chain(
           [Add, Multiply],
@@ -55,8 +55,10 @@ defmodule JidoTest.Exec.ChainAsyncTest do
       # Modify async_ref to simulate non-owner
       fake_ref = %{async_ref | owner: spawn(fn -> :ok end)}
 
-      # Should still work - creates new monitor
-      assert {:ok, %{value: 14}} = Chain.await(fake_ref, 5_000)
+      assert {:error, %Jido.Action.Error.InvalidInputError{message: message}} =
+               Chain.await(fake_ref, 5_000)
+
+      assert message =~ "owner process"
     end
   end
 

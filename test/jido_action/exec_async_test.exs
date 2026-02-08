@@ -1,6 +1,8 @@
 defmodule JidoTest.ExecAsyncTest do
   use JidoTest.ActionCase, async: false
 
+  alias Jido.Action
+  alias Jido.Action.Error
   alias Jido.Exec
   alias Jido.Exec.AsyncRef
   alias JidoTest.TestActions.BasicAction
@@ -8,6 +10,24 @@ defmodule JidoTest.ExecAsyncTest do
   alias JidoTest.TestActions.ErrorAction
 
   @moduletag :capture_log
+
+  defmodule SideEffectDelayAction do
+    @moduledoc false
+    use Action,
+      name: "side_effect_delay_action",
+      description: "Sleeps and then commits a side effect",
+      schema: [
+        agent: [type: :any, required: true],
+        delay: [type: :non_neg_integer, default: 200]
+      ]
+
+    @impl true
+    def run(%{agent: agent, delay: delay}, _context) do
+      Process.sleep(delay)
+      Agent.update(agent, fn _ -> :completed end)
+      {:ok, %{status: :completed}}
+    end
+  end
 
   describe "run_async/4" do
     test "returns an async_ref with pid and ref" do
@@ -49,6 +69,29 @@ defmodule JidoTest.ExecAsyncTest do
               %Jido.Action.Error.TimeoutError{message: "Async action timed out after 50ms"}} =
                Exec.await(async_ref, 50)
     end
+
+    test "fails fast when awaited from a non-owner process and leaves task awaitable by owner" do
+      test_pid = self()
+
+      owner_pid =
+        spawn(fn ->
+          async_ref = Exec.run_async(DelayAction, %{delay: 100}, %{}, timeout: 500)
+          send(test_pid, {:async_ref, async_ref, self()})
+
+          receive do
+            {:await_from_owner, caller} ->
+              send(caller, {:owner_await_result, Exec.await(async_ref, 1_000)})
+          end
+        end)
+
+      assert_receive {:async_ref, async_ref, ^owner_pid}
+
+      assert {:error, %Error.InvalidInputError{message: message}} = Exec.await(async_ref, 1_000)
+      assert message =~ "owner process"
+
+      send(owner_pid, {:await_from_owner, self()})
+      assert_receive {:owner_await_result, {:ok, %{result: "Async action completed"}}}, 2_000
+    end
   end
 
   describe "cancel/1" do
@@ -77,6 +120,26 @@ defmodule JidoTest.ExecAsyncTest do
 
     test "returns an error for invalid input" do
       assert {:error, %Jido.Action.Error.InvalidInputError{}} = Exec.cancel("invalid")
+    end
+
+    test "cancellation stops work before side effects are committed" do
+      {:ok, agent} = Agent.start_link(fn -> :pending end)
+
+      on_exit(fn ->
+        if Process.alive?(agent), do: Agent.stop(agent)
+      end)
+
+      async_ref =
+        Exec.run_async(SideEffectDelayAction, %{agent: agent, delay: 300}, %{},
+          timeout: 1_000,
+          max_retries: 0
+        )
+
+      Process.sleep(25)
+      assert :ok = Exec.cancel(async_ref)
+      Process.sleep(350)
+
+      assert Agent.get(agent, & &1) == :pending
     end
   end
 
