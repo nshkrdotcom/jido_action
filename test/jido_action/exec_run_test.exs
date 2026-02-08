@@ -147,7 +147,7 @@ defmodule JidoTest.ExecRunTest do
 
     test "handles timeout" do
       assert {:error, %_{} = error} =
-               Exec.run(DelayAction, %{delay: 200}, %{}, timeout: 50)
+               Exec.run(DelayAction, %{delay: 200}, %{}, timeout: 50, max_retries: 0)
 
       assert is_exception(error)
       message = Exception.message(error)

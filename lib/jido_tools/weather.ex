@@ -57,7 +57,7 @@ defmodule Jido.Tools.Weather do
   end
 
   defp execute_weather_request(by_location_params, context) do
-    Jido.Exec.run(Jido.Tools.Weather.ByLocation, by_location_params, context)
+    Jido.Exec.run(Jido.Tools.Weather.ByLocation, by_location_params, context, max_retries: 0)
   end
 
   defp format_result({:ok, weather_data}, :text) do

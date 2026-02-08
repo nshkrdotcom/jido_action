@@ -69,6 +69,26 @@ defmodule JidoTest.ExecReturnShapeTest do
       assert message =~ "Unexpected return shape: [1, 2, 3]"
     end
 
+    test "unexpected return shape does not retry even when retries are configured" do
+      {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+      on_exit(fn ->
+        if Process.alive?(counter), do: Agent.stop(counter)
+      end)
+
+      assert {:error, %Error.ExecutionFailureError{message: message}} =
+               Exec.run(
+                 CoverageTestActions.InvalidShapeCounterAction,
+                 %{counter: counter},
+                 %{},
+                 max_retries: 3,
+                 backoff: 1
+               )
+
+      assert message =~ "Unexpected return shape"
+      assert Agent.get(counter, & &1) == 1
+    end
+
     test "output validation only runs on {:ok, result} branch" do
       # Valid output passes validation
       assert {:ok, %{required_field: "valid"}} =

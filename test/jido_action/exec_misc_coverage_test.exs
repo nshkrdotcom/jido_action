@@ -53,7 +53,10 @@ defmodule JidoTest.ExecMiscCoverageTest do
 
     test "task cleanup and process group management" do
       assert {:error, %Error.TimeoutError{}} =
-               Exec.run(CoverageTestActions.CleanupTestAction, %{}, %{}, timeout: 30)
+               Exec.run(CoverageTestActions.CleanupTestAction, %{}, %{},
+                 timeout: 30,
+                 max_retries: 0
+               )
     end
 
     test "additional error handling paths" do

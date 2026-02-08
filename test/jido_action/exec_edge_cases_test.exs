@@ -84,7 +84,7 @@ defmodule JidoTest.ExecEdgeCasesTest do
       # This test exercises Task.Supervisor cleanup on timeout
       # Start a long-running action that will timeout and trigger cleanup
       assert {:error, %Error.TimeoutError{}} =
-               Exec.run(DelayAction, %{delay: 500}, %{}, timeout: 100)
+               Exec.run(DelayAction, %{delay: 500}, %{}, timeout: 100, max_retries: 0)
     end
   end
 

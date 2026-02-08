@@ -9,6 +9,7 @@ defmodule Jido.Exec.Retry do
   """
 
   alias Jido.Action.Config
+  alias Jido.Action.Error
   alias Jido.Exec.Telemetry
 
   require Logger
@@ -68,9 +69,62 @@ defmodule Jido.Exec.Retry do
       false
   """
   @spec should_retry?(any(), non_neg_integer(), non_neg_integer(), keyword()) :: boolean()
-  def should_retry?(_error, retry_count, max_retries, _opts) do
-    retry_count < max_retries
+  def should_retry?(error, retry_count, max_retries, _opts) do
+    retry_count < max_retries and retryable_error?(error)
   end
+
+  defp retryable_error?(error) do
+    case extract_exception(error) do
+      %Error.InvalidInputError{} ->
+        false
+
+      %Error.ConfigurationError{} ->
+        false
+
+      %_{} = exception when is_exception(exception) ->
+        case retry_hint(exception) do
+          true -> true
+          false -> false
+          :unset -> true
+        end
+
+      _other ->
+        true
+    end
+  end
+
+  defp extract_exception({:error, reason, _other}), do: reason
+  defp extract_exception({:error, reason}), do: reason
+  defp extract_exception(%_{} = error) when is_exception(error), do: error
+  defp extract_exception(other), do: other
+
+  defp retry_hint(%{details: details}) do
+    case extract_retry_value(details) do
+      {:ok, true} -> true
+      {:ok, false} -> false
+      _ -> :unset
+    end
+  end
+
+  defp retry_hint(_), do: :unset
+
+  defp extract_retry_value(details) when is_map(details) do
+    if Map.has_key?(details, :retry) do
+      {:ok, Map.get(details, :retry)}
+    else
+      :error
+    end
+  end
+
+  defp extract_retry_value(details) when is_list(details) do
+    if Keyword.keyword?(details) and Keyword.has_key?(details, :retry) do
+      {:ok, Keyword.get(details, :retry)}
+    else
+      :error
+    end
+  end
+
+  defp extract_retry_value(_), do: :error
 
   @doc """
   Execute a retry with proper backoff and logging.

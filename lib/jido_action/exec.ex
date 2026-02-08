@@ -555,7 +555,12 @@ defmodule Jido.Exec do
 
     # Handle unexpected return shapes
     defp handle_action_result(unexpected_result, action, log_level, _opts) do
-      error = Error.execution_error("Unexpected return shape: #{inspect(unexpected_result)}")
+      error =
+        Error.execution_error(
+          "Unexpected return shape: #{inspect(unexpected_result)}",
+          %{retry: false, return_shape: unexpected_result}
+        )
+
       Telemetry.cond_log_error(log_level, action, error)
       {:error, error}
     end

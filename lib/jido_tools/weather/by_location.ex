@@ -50,7 +50,9 @@ defmodule Jido.Tools.Weather.ByLocation do
   end
 
   defp get_grid_info(location, context) do
-    case Jido.Exec.run(Jido.Tools.Weather.LocationToGrid, %{location: location}, context) do
+    case Jido.Exec.run(Jido.Tools.Weather.LocationToGrid, %{location: location}, context,
+           max_retries: 0
+         ) do
       {:ok, grid_info} ->
         {:ok, grid_info}
 
@@ -73,7 +75,7 @@ defmodule Jido.Tools.Weather.ByLocation do
       format: if(params[:format] == :text, do: :detailed, else: params[:format])
     }
 
-    case Jido.Exec.run(Jido.Tools.Weather.Forecast, forecast_params, context) do
+    case Jido.Exec.run(Jido.Tools.Weather.Forecast, forecast_params, context, max_retries: 0) do
       {:ok, forecast} ->
         {:ok, forecast}
 

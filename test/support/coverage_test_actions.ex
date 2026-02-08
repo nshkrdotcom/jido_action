@@ -66,6 +66,20 @@ defmodule JidoTest.CoverageTestActions do
     def run(_params, _context), do: [1, 2, 3]
   end
 
+  defmodule InvalidShapeCounterAction do
+    use Action,
+      name: "invalid_shape_counter_action",
+      schema: [
+        counter: [type: :any, required: true]
+      ]
+
+    @dialyzer {:nowarn_function, run: 2}
+    def run(%{counter: counter}, _context) do
+      Agent.update(counter, &(&1 + 1))
+      :invalid_shape
+    end
+  end
+
   defmodule OutputValidationAction do
     use Action,
       name: "output_validation",

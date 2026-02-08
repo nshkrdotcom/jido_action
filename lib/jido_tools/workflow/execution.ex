@@ -80,8 +80,14 @@ defmodule Jido.Tools.Workflow.Execution do
   defp run_normalized_instruction(%Instruction{} = normalized, params, context) do
     merged_params = Map.merge(params, normalized.params)
     merged_context = Map.merge(normalized.context, context)
+    instruction_opts = default_internal_retry_opts(normalized.opts)
 
-    instruction = %{normalized | params: merged_params, context: merged_context}
+    instruction = %{
+      normalized
+      | params: merged_params,
+        context: merged_context,
+        opts: instruction_opts
+    }
 
     case Exec.run(instruction) do
       {:ok, result} ->
@@ -95,6 +101,14 @@ defmodule Jido.Tools.Workflow.Execution do
 
       {:error, reason, _other} ->
         {:error, ensure_error(reason)}
+    end
+  end
+
+  defp default_internal_retry_opts(opts) when is_list(opts) do
+    if Keyword.keyword?(opts) and not Keyword.has_key?(opts, :max_retries) do
+      Keyword.put(opts, :max_retries, 0)
+    else
+      opts
     end
   end
 

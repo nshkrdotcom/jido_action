@@ -245,6 +245,28 @@ defmodule JidoTest.Tools.WeatherTest do
     end)
   end
 
+  defp setup_demo_weather_mocks do
+    stub(Req, :request!, fn opts ->
+      cond do
+        String.contains?(opts[:url], "/points/") ->
+          location =
+            opts[:url]
+            |> String.split("/points/", parts: 2)
+            |> List.last()
+
+          assert opts[:method] == :get
+          mock_location_to_grid_response(location)
+
+        String.contains?(opts[:url], "/forecast") ->
+          assert opts[:method] == :get
+          mock_forecast_response(opts[:url], 14)
+
+        true ->
+          raise "Unexpected URL: #{opts[:url]}"
+      end
+    end)
+  end
+
   describe "run/2 basic functionality" do
     test "uses Chicago coordinates as default location with default text format" do
       setup_weather_mocks()
@@ -364,6 +386,43 @@ defmodule JidoTest.Tools.WeatherTest do
       assert message =~ "Invalid parameters"
       assert message =~ "expected one of [:detailed, :summary, :text]"
     end
+
+    test "invalid location path executes a single points request without nested retries" do
+      original_max_retries = Application.get_env(:jido_action, :default_max_retries)
+      Application.put_env(:jido_action, :default_max_retries, 3)
+
+      {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+      on_exit(fn ->
+        if is_nil(original_max_retries) do
+          Application.delete_env(:jido_action, :default_max_retries)
+        else
+          Application.put_env(:jido_action, :default_max_retries, original_max_retries)
+        end
+
+        if Process.alive?(counter), do: Agent.stop(counter)
+      end)
+
+      stub(Req, :request!, fn opts ->
+        Agent.update(counter, &(&1 + 1))
+
+        assert opts[:method] == :get
+        assert String.contains?(opts[:url], "/points/")
+
+        %{
+          status: 404,
+          body: %{
+            "detail" => "invalid location"
+          },
+          headers: %{"content-type" => "application/problem+json"}
+        }
+      end)
+
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{}} =
+               Weather.run(%{location: "invalid_location"}, %{})
+
+      assert Agent.get(counter, & &1) == 1
+    end
   end
 
   describe "run/2 format validation" do
@@ -450,15 +509,8 @@ defmodule JidoTest.Tools.WeatherTest do
 
   describe "demo/0" do
     test "demo function runs without crashing" do
-      # Set up mocks for the demo function calls
-      # Chicago text format
-      setup_weather_mocks(@chicago_coords, 5)
-
-      # LA map format (will fail validation)
-      # No mock needed since it fails at parameter validation
-
-      # NYC detailed format
-      setup_weather_mocks(@nyc_coords, 3)
+      # Single stub covers Chicago default, LA validation failure, and NYC detailed call.
+      setup_demo_weather_mocks()
 
       output =
         capture_io(fn ->

@@ -17,7 +17,6 @@ defmodule Jido.Exec.Compensation do
 
   require Logger
 
-  @down_grace_period_ms 100
   @flush_timeout_ms 0
 
   @type action :: Types.action()
@@ -236,7 +235,7 @@ defmodule Jido.Exec.Compensation do
                       TaskHelper.demonitor_flush(monitor_ref)
                       {:ok, result}
                   after
-                    @down_grace_period_ms ->
+                    Config.compensation_down_grace_period_ms() ->
                       TaskHelper.demonitor_flush(monitor_ref)
                       {:exit, reason}
                   end
@@ -255,7 +254,7 @@ defmodule Jido.Exec.Compensation do
                 monitor_ref,
                 :compensation_result,
                 ref,
-                down_grace_period_ms: @down_grace_period_ms,
+                down_grace_period_ms: Config.compensation_down_grace_period_ms(),
                 flush_timeout_ms: @flush_timeout_ms
               )
 

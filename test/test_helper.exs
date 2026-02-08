@@ -1,4 +1,7 @@
 require Logger
+# Match guides/configuration.md recommendation: no implicit retries in tests.
+Application.put_env(:jido_action, :default_max_retries, 0)
+
 # Prepare modules for Mimic
 Enum.each(
   [

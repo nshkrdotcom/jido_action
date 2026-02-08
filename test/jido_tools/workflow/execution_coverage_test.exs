@@ -57,6 +57,29 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
     end
   end
 
+  defmodule RetryProbeAction do
+    use Jido.Action,
+      name: "retry_probe_action",
+      description: "Tracks execution attempts for workflow retries",
+      schema: [
+        counter: [type: :any, required: true],
+        fail_attempts: [type: :integer, required: true]
+      ]
+
+    alias Jido.Action.Error
+
+    @impl true
+    def run(%{counter: counter, fail_attempts: fail_attempts}, _context) do
+      attempt = Agent.get_and_update(counter, fn current -> {current + 1, current + 1} end)
+
+      if attempt <= fail_attempts do
+        {:error, Error.execution_error("retry probe failure")}
+      else
+        {:ok, %{attempt: attempt}}
+      end
+    end
+  end
+
   defmodule TestWorkflow do
     use Jido.Tools.Workflow,
       name: "test_execution_workflow",
@@ -147,6 +170,52 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
                Execution.execute_step(step, %{}, %{}, TestWorkflow)
 
       assert error.details.type == :invalid_condition
+    end
+  end
+
+  describe "internal instruction retry defaults" do
+    test "defaults max_retries to 0 when instruction does not provide it" do
+      original_max_retries = Application.get_env(:jido_action, :default_max_retries)
+      Application.put_env(:jido_action, :default_max_retries, 2)
+
+      {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+      on_exit(fn ->
+        if is_nil(original_max_retries) do
+          Application.delete_env(:jido_action, :default_max_retries)
+        else
+          Application.put_env(:jido_action, :default_max_retries, original_max_retries)
+        end
+
+        if Process.alive?(counter), do: Agent.stop(counter)
+      end)
+
+      step =
+        {:step, [name: "retry_probe"],
+         [{RetryProbeAction, %{counter: counter, fail_attempts: 1}}]}
+
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{}} =
+               Execution.execute_step(step, %{}, %{}, TestWorkflow)
+
+      assert Agent.get(counter, & &1) == 1
+    end
+
+    test "preserves explicit max_retries from instruction opts" do
+      {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+      on_exit(fn ->
+        if Process.alive?(counter), do: Agent.stop(counter)
+      end)
+
+      step =
+        {:step, [name: "retry_probe_with_opts"],
+         [
+           {RetryProbeAction, %{counter: counter, fail_attempts: 1}, %{},
+            [max_retries: 2, backoff: 1]}
+         ]}
+
+      assert {:ok, %{attempt: 2}} = Execution.execute_step(step, %{}, %{}, TestWorkflow)
+      assert Agent.get(counter, & &1) == 2
     end
   end
 end

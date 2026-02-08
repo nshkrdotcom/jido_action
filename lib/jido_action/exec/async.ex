@@ -12,8 +12,6 @@ defmodule Jido.Exec.Async do
   alias Jido.Exec.TaskHelper
   alias Jido.Exec.Types
 
-  @down_grace_period_ms 100
-  @shutdown_grace_period_ms 1000
   @flush_timeout_ms 0
   @max_flush_messages 10
 
@@ -106,7 +104,7 @@ defmodule Jido.Exec.Async do
               demonitor(monitor_ref)
               result
           after
-            @down_grace_period_ms ->
+            Config.async_down_grace_period_ms() ->
               demonitor(monitor_ref)
               {:error, Error.execution_error("Process completed but result was not received")}
           end
@@ -176,13 +174,13 @@ defmodule Jido.Exec.Async do
       {:DOWN, ^monitor_ref, :process, ^pid, _reason} ->
         :ok
     after
-      @shutdown_grace_period_ms ->
+      Config.async_shutdown_grace_period_ms() ->
         if Process.alive?(pid), do: Process.exit(pid, :kill)
 
         receive do
           {:DOWN, ^monitor_ref, :process, ^pid, _reason} -> :ok
         after
-          @down_grace_period_ms -> :ok
+          Config.async_down_grace_period_ms() -> :ok
         end
     end
 

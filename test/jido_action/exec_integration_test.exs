@@ -139,7 +139,7 @@ defmodule JidoTest.ExecIntegrationTest do
     test "sync action times out properly" do
       capture_log(fn ->
         assert {:error, %Error.TimeoutError{} = error} =
-                 Exec.run(DelayAction, %{delay: 100}, %{}, timeout: 50)
+                 Exec.run(DelayAction, %{delay: 100}, %{}, timeout: 50, max_retries: 0)
 
         assert Exception.message(error) =~ "timed out after 50ms"
       end)
@@ -147,7 +147,7 @@ defmodule JidoTest.ExecIntegrationTest do
 
     test "async action times out during execution" do
       capture_log(fn ->
-        async_ref = Exec.run_async(DelayAction, %{delay: 200}, %{}, timeout: 100)
+        async_ref = Exec.run_async(DelayAction, %{delay: 200}, %{}, timeout: 100, max_retries: 0)
 
         assert {:error, %Error.TimeoutError{} = error} = Exec.await(async_ref, 2_000)
         assert Exception.message(error) =~ "timed out after 100ms"
@@ -156,7 +156,7 @@ defmodule JidoTest.ExecIntegrationTest do
 
     test "async await times out while waiting for result" do
       capture_log(fn ->
-        async_ref = Exec.run_async(DelayAction, %{delay: 200}, %{}, timeout: 500)
+        async_ref = Exec.run_async(DelayAction, %{delay: 200}, %{}, timeout: 500, max_retries: 0)
 
         # Await with shorter timeout than action execution time
         assert {:error, %Error.TimeoutError{} = error} = Exec.await(async_ref, 100)

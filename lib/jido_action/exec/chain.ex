@@ -34,8 +34,6 @@ defmodule Jido.Exec.Chain do
   @type interrupt_check :: (-> boolean())
 
   @result_tag :chain_async_result
-  @down_grace_period_ms 100
-  @shutdown_grace_period_ms 1000
   @flush_timeout_ms 0
   @max_flush_messages 10
 
@@ -110,7 +108,7 @@ defmodule Jido.Exec.Chain do
               TaskHelper.demonitor_flush(monitor_ref)
               result
           after
-            @down_grace_period_ms ->
+            Config.chain_down_grace_period_ms() ->
               TaskHelper.demonitor_flush(monitor_ref)
               {:error, Error.execution_error("Chain completed but result was not received")}
           end
@@ -162,13 +160,13 @@ defmodule Jido.Exec.Chain do
       {:DOWN, ^monitor_ref, :process, ^pid, _reason} ->
         :ok
     after
-      @shutdown_grace_period_ms ->
+      Config.chain_shutdown_grace_period_ms() ->
         if Process.alive?(pid), do: Process.exit(pid, :kill)
 
         receive do
           {:DOWN, ^monitor_ref, :process, ^pid, _reason} -> :ok
         after
-          @down_grace_period_ms -> :ok
+          Config.chain_down_grace_period_ms() -> :ok
         end
     end
 
