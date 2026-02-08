@@ -24,11 +24,15 @@ defmodule Jido.Tools.Weather.LocationToGrid do
   alias Jido.Tools.Weather.HTTP
 
   @impl Jido.Action
-  def run(%{location: location} = params, _context) do
+  def run(%{location: location} = params, context) do
     url = "https://api.weather.gov/points/#{location}"
 
     with {:ok, response} <-
-           HTTP.get(url, headers: HTTP.geojson_headers(), error_prefix: "HTTP error") do
+           HTTP.get(url,
+             headers: HTTP.geojson_headers(),
+             error_prefix: "HTTP error",
+             context: context
+           ) do
       transform_result(%{
         request: %{url: url, method: :get, params: params},
         response: %{status: response.status, body: response.body, headers: response.headers}

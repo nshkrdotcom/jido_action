@@ -70,8 +70,8 @@ defmodule JidoTest.ExecFinalCoverageTest do
     end
 
     test "timeout handling with edge cases" do
-      # Test timeout with exactly 0
-      assert {:ok, %{value: 1}} =
+      # Test timeout with exactly 0 (immediate timeout)
+      assert {:error, %Error.TimeoutError{timeout: 0}} =
                Exec.run(JidoTest.TestActions.BasicAction, %{value: 1}, %{}, timeout: 0)
 
       # Test timeout with negative value (should use default)

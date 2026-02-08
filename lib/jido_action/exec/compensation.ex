@@ -11,13 +11,13 @@ defmodule Jido.Exec.Compensation do
   alias Jido.Action.Config
   alias Jido.Action.Error
   alias Jido.Action.Util
-  alias Jido.Exec.AsyncRef
-  alias Jido.Exec.Supervisors
-  alias Jido.Exec.TaskHelper
+  alias Jido.Exec.TaskLifecycle
   alias Jido.Exec.Telemetry
   alias Jido.Exec.Types
 
   require Logger
+
+  @compensation_result_tag :compensation_result
 
   @type action :: Types.action()
   @type params :: Types.params()
@@ -234,54 +234,52 @@ defmodule Jido.Exec.Compensation do
            compensation_run_opts: compensation_run_opts,
            timeout: timeout
          }) do
-      case TaskHelper.spawn_monitored(opts, :compensation_result, fn ->
-             action.on_error(params, error, context, compensation_run_opts)
-           end) do
-        {:ok, %AsyncRef{ref: ref, pid: pid, monitor_ref: monitor_ref}} ->
-          receive do
-            {:compensation_result, ^ref, result} ->
-              TaskHelper.demonitor_flush(monitor_ref)
-              {:ok, result}
+      case TaskLifecycle.run(
+             fn ->
+               action.on_error(params, error, context, compensation_run_opts)
+             end,
+             timeout,
+             spawn_opts: opts,
+             result_tag: @compensation_result_tag,
+             down_grace_period_ms: Config.compensation_down_grace_period_ms(),
+             shutdown_grace_period_ms: Config.async_shutdown_grace_period_ms(),
+             flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
+             max_flush_messages: Config.mailbox_flush_max_messages(),
+             no_result_error: fn ->
+               Error.execution_error("Compensation task exited: :normal", %{
+                 reason: :normal,
+                 action: action
+               })
+             end,
+             down_error: fn reason ->
+               Error.execution_error("Compensation task exited: #{inspect(reason)}", %{
+                 reason: reason,
+                 action: action
+               })
+             end,
+             timeout_error: fn timeout_ms ->
+               Error.timeout_error("Compensation timed out after #{timeout_ms}ms", %{
+                 timeout: timeout_ms,
+                 action: action
+               })
+             end
+           ) do
+        {:ok, compensation_result} ->
+          {:ok, compensation_result}
 
-            {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
-              case reason do
-                :normal ->
-                  receive do
-                    {:compensation_result, ^ref, result} ->
-                      TaskHelper.demonitor_flush(monitor_ref)
-                      {:ok, result}
-                  after
-                    Config.compensation_down_grace_period_ms() ->
-                      TaskHelper.demonitor_flush(monitor_ref)
-                      {:exit, reason}
-                  end
+        {:error, %Error.TimeoutError{}} ->
+          :timeout
 
-                _ ->
-                  TaskHelper.demonitor_flush(monitor_ref)
-                  {:exit, reason}
-              end
-          after
-            timeout ->
-              task_sup = Supervisors.task_supervisor(opts)
-
-              TaskHelper.timeout_cleanup(
-                task_sup,
-                pid,
-                monitor_ref,
-                :compensation_result,
-                ref,
-                down_grace_period_ms: Config.compensation_down_grace_period_ms(),
-                flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
-                max_flush_messages: Config.mailbox_flush_max_messages()
-              )
-
-              :timeout
-          end
-
-        {:error, spawn_error} ->
-          {:exit, spawn_error}
+        {:error, %_{} = lifecycle_error} when is_exception(lifecycle_error) ->
+          {:exit, compensation_exit_reason(lifecycle_error)}
       end
     end
+
+    defp compensation_exit_reason(%{details: details} = lifecycle_error) when is_map(details) do
+      Map.get(details, :reason, lifecycle_error)
+    end
+
+    defp compensation_exit_reason(lifecycle_error), do: lifecycle_error
 
     @spec get_compensation_timeout(run_opts(), keyword() | map()) :: non_neg_integer()
     defp get_compensation_timeout(opts, compensation_opts) do

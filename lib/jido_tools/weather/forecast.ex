@@ -34,9 +34,13 @@ defmodule Jido.Tools.Weather.Forecast do
   alias Jido.Tools.Weather.HTTP
 
   @impl Jido.Action
-  def run(%{forecast_url: forecast_url} = params, _context) do
+  def run(%{forecast_url: forecast_url} = params, context) do
     with {:ok, response} <-
-           HTTP.get(forecast_url, headers: HTTP.geojson_headers(), error_prefix: "HTTP error") do
+           HTTP.get(forecast_url,
+             headers: HTTP.geojson_headers(),
+             error_prefix: "HTTP error",
+             context: context
+           ) do
       transform_result(%{
         request: %{url: forecast_url, method: :get, params: params},
         response: %{status: response.status, body: response.body, headers: response.headers}

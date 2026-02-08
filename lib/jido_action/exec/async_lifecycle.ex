@@ -35,15 +35,13 @@ defmodule Jido.Exec.AsyncLifecycle do
           result
 
         {:DOWN, ^monitor_ref, :process, ^pid, :normal} ->
-          receive do
-            {^result_tag, ^ref, result} ->
-              TaskHelper.demonitor_flush(monitor_ref)
-              result
-          after
-            down_grace_period_ms ->
-              TaskHelper.demonitor_flush(monitor_ref)
-              {:error, no_result_error.()}
-          end
+          await_result_after_normal_down(
+            result_tag,
+            ref,
+            monitor_ref,
+            down_grace_period_ms,
+            no_result_error
+          )
 
         {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
           TaskHelper.demonitor_flush(monitor_ref)
@@ -119,6 +117,41 @@ defmodule Jido.Exec.AsyncLifecycle do
 
       _ ->
         :ok
+    end
+  end
+
+  defp await_result_after_normal_down(
+         result_tag,
+         ref,
+         monitor_ref,
+         down_grace_period_ms,
+         no_result_error
+       ) do
+    case receive_result(result_tag, ref, down_grace_period_ms) do
+      {:ok, result} ->
+        TaskHelper.demonitor_flush(monitor_ref)
+        result
+
+      :timeout ->
+        case receive_result(result_tag, ref, down_grace_period_ms) do
+          {:ok, result} ->
+            TaskHelper.demonitor_flush(monitor_ref)
+            result
+
+          :timeout ->
+            TaskHelper.demonitor_flush(monitor_ref)
+            {:error, no_result_error.()}
+        end
+    end
+  end
+
+  defp receive_result(result_tag, ref, timeout_ms)
+       when is_atom(result_tag) and is_reference(ref) and is_integer(timeout_ms) and
+              timeout_ms >= 0 do
+    receive do
+      {^result_tag, ^ref, result} -> {:ok, result}
+    after
+      timeout_ms -> :timeout
     end
   end
 

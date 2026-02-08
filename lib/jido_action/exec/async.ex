@@ -11,6 +11,7 @@ defmodule Jido.Exec.Async do
   alias Jido.Action.Error
   alias Jido.Exec.AsyncLifecycle
   alias Jido.Exec.AsyncRef
+  alias Jido.Exec.TaskLifecycle
   alias Jido.Exec.TaskHelper
   alias Jido.Exec.Types
 
@@ -147,24 +148,15 @@ defmodule Jido.Exec.Async do
   - `{:error, reason}` if the cancellation failed or the input was invalid.
   """
   @spec cancel(cancel_async_ref_input() | pid()) :: :ok | exec_error
-  def cancel(%AsyncRef{
-        pid: pid,
-        ref: ref,
-        monitor_ref: monitor_ref,
-        owner: owner,
-        result_tag: result_tag
-      })
-      when is_pid(pid) and is_reference(ref) do
-    AsyncLifecycle.shutdown_process(
-      pid,
-      monitor_ref,
-      Config.async_shutdown_grace_period_ms(),
-      Config.async_down_grace_period_ms()
+  def cancel(%AsyncRef{pid: pid, owner: owner} = async_ref) when is_pid(pid) do
+    TaskLifecycle.cancel(
+      async_ref,
+      shutdown_grace_period_ms: Config.async_shutdown_grace_period_ms(),
+      down_grace_period_ms: Config.async_down_grace_period_ms(),
+      flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
+      max_flush_messages: Config.mailbox_flush_max_messages(),
+      flush?: is_nil(owner) or owner == self()
     )
-
-    maybe_flush_cancel_messages(ref, pid, monitor_ref, result_tag, owner)
-
-    :ok
   end
 
   def cancel(%{pid: pid} = legacy_async_ref)
@@ -186,23 +178,4 @@ defmodule Jido.Exec.Async do
   end
 
   def cancel(_), do: {:error, Error.validation_error("Invalid async ref for cancellation")}
-
-  defp maybe_flush_cancel_messages(ref, pid, monitor_ref, result_tag, owner)
-       when (is_reference(monitor_ref) or is_nil(monitor_ref)) and
-              is_reference(ref) and is_pid(pid) and is_atom(result_tag) do
-    if is_nil(owner) or owner == self() do
-      AsyncLifecycle.flush_messages(
-        ref,
-        pid,
-        monitor_ref,
-        result_tag: result_tag,
-        flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
-        max_flush_messages: Config.mailbox_flush_max_messages()
-      )
-    end
-
-    :ok
-  end
-
-  defp maybe_flush_cancel_messages(_ref, _pid, _monitor_ref, _result_tag, _owner), do: :ok
 end

@@ -190,13 +190,12 @@ defmodule JidoTest.Exec.InstanceIsolationTest do
     end
   end
 
-  describe "timeout: 0 behavior (uses configured default timeout)" do
-    test "works with instance option even with timeout: 0" do
+  describe "timeout: 0 behavior (immediate timeout)" do
+    test "returns timeout error with instance option when timeout is zero" do
       start_supervised!({Task.Supervisor, name: DirectRun.TaskSupervisor})
 
       capture_log(fn ->
-        # timeout: 0 should still resolve and use the configured supervisor path
-        assert {:ok, %{value: 42}} =
+        assert {:error, %Jido.Action.Error.TimeoutError{timeout: 0}} =
                  Exec.run(BasicAction, %{value: 42}, %{}, jido: DirectRun, timeout: 0)
       end)
     end

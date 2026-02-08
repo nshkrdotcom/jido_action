@@ -1,6 +1,7 @@
 defmodule Jido.Tools.Weather.HTTP do
   @moduledoc false
 
+  alias Jido.Action.Config
   alias Jido.Action.Error
 
   @geojson_headers %{
@@ -24,22 +25,35 @@ defmodule Jido.Tools.Weather.HTTP do
     headers = Keyword.get(opts, :headers, @geojson_headers)
     params = Keyword.get(opts, :params)
     error_prefix = Keyword.get(opts, :error_prefix, "HTTP error")
+    timeout_ms = resolve_timeout_ms(Keyword.get(opts, :timeout_ms), Keyword.get(opts, :context))
 
-    req_options =
-      [method: :get, url: url, headers: headers]
-      |> maybe_put_params(params)
+    if timeout_ms == 0 do
+      {:error,
+       Error.timeout_error("#{error_prefix}: request deadline exceeded before dispatch", %{
+         url: url,
+         timeout: timeout_ms
+       })}
+    else
+      req_options =
+        [method: :get, url: url, headers: headers]
+        |> maybe_put_params(params)
+        |> Keyword.put(:connect_options, timeout: timeout_ms)
+        |> Keyword.put(:receive_timeout, timeout_ms)
+        |> Keyword.put(:pool_timeout, timeout_ms)
 
-    try do
-      {:ok, Req.request!(req_options)}
-    rescue
-      e ->
-        {:error,
-         Error.execution_error("#{error_prefix}: #{Exception.message(e)}", %{
-           url: url,
-           params: params,
-           headers: headers,
-           exception: e
-         })}
+      try do
+        {:ok, Req.request!(req_options)}
+      rescue
+        e ->
+          {:error,
+           Error.execution_error("#{error_prefix}: #{Exception.message(e)}", %{
+             url: url,
+             params: params,
+             headers: headers,
+             timeout: timeout_ms,
+             exception: e
+           })}
+      end
     end
   end
 
@@ -54,4 +68,34 @@ defmodule Jido.Tools.Weather.HTTP do
 
   defp maybe_put_params(opts, nil), do: opts
   defp maybe_put_params(opts, params), do: Keyword.put(opts, :params, params)
+
+  defp resolve_timeout_ms(timeout_ms, context) do
+    context_timeout =
+      if is_map(context) do
+        first_positive_or_zero([
+          remaining_timeout_ms(Map.get(context, :__jido_exec_deadline_ms__)),
+          remaining_timeout_ms(Map.get(context, "__jido_exec_deadline_ms__")),
+          Map.get(context, :timeout),
+          Map.get(context, "timeout")
+        ])
+      else
+        nil
+      end
+
+    first_positive_or_zero([timeout_ms, context_timeout, Config.exec_timeout()]) ||
+      Config.exec_timeout()
+  end
+
+  defp remaining_timeout_ms(deadline_ms) when is_integer(deadline_ms) do
+    max(deadline_ms - System.monotonic_time(:millisecond), 0)
+  end
+
+  defp remaining_timeout_ms(_), do: nil
+
+  defp first_positive_or_zero(values) when is_list(values) do
+    Enum.find(values, fn
+      value when is_integer(value) and value >= 0 -> true
+      _ -> false
+    end)
+  end
 end

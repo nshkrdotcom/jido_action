@@ -46,8 +46,7 @@ defmodule Jido.Exec do
   alias Jido.Exec.AsyncRef
   alias Jido.Exec.Compensation
   alias Jido.Exec.Retry
-  alias Jido.Exec.Supervisors
-  alias Jido.Exec.TaskHelper
+  alias Jido.Exec.TaskLifecycle
   alias Jido.Exec.Telemetry
   alias Jido.Exec.Types
   alias Jido.Exec.Validator
@@ -56,6 +55,7 @@ defmodule Jido.Exec do
   require Logger
 
   @execute_action_result_tag :execute_action_result
+  @exec_deadline_context_key :__jido_exec_deadline_ms__
 
   @type action :: Types.action()
   @type params :: Types.params()
@@ -453,98 +453,80 @@ defmodule Jido.Exec do
     @dialyzer {:nowarn_function, execute_action_with_timeout: 5}
     defp execute_action_with_timeout(action, params, context, timeout, opts)
          when timeout == :infinity or (is_integer(timeout) and timeout > 0) do
-      # Get the current process's group leader for IO routing
-      case TaskHelper.spawn_monitored(opts, @execute_action_result_tag, fn ->
-             execute_action(action, params, context, opts)
-           end) do
-        {:ok, %AsyncRef{ref: ref, pid: pid, monitor_ref: monitor_ref}} ->
-          # Wait for completion, crash, or timeout.
-          result = await_task_result(ref, pid, monitor_ref, timeout, opts)
+      context_with_deadline = maybe_put_exec_deadline(context, timeout)
 
-          case result do
-            {:ok, result} ->
-              result
-
-            {:exit, reason} ->
-              {:error,
+      case TaskLifecycle.run(
+             fn -> execute_action(action, params, context_with_deadline, opts) end,
+             timeout,
+             spawn_opts: opts,
+             result_tag: @execute_action_result_tag,
+             down_grace_period_ms: Config.exec_down_grace_period_ms(),
+             shutdown_grace_period_ms: Config.async_shutdown_grace_period_ms(),
+             flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
+             max_flush_messages: Config.mailbox_flush_max_messages(),
+             no_result_error: fn ->
+               Error.execution_error("Task exited: :normal", %{
+                 reason: :normal,
+                 action: action
+               })
+             end,
+             down_error: fn reason ->
                Error.execution_error("Task exited: #{inspect(reason)}", %{
                  reason: reason,
                  action: action
-               })}
-
-            :timeout ->
-              {:error,
+               })
+             end,
+             timeout_error: fn timeout_ms ->
                Error.timeout_error(
-                 "Action #{inspect(action)} timed out after #{timeout}ms",
+                 "Action #{inspect(action)} timed out after #{timeout_ms}ms",
                  %{
-                   timeout: timeout,
+                   timeout: timeout_ms,
                    action: action
                  }
-               )}
-          end
+               )
+             end
+           ) do
+        {:ok, result} ->
+          result
 
-        {:error, error} ->
+        {:error, %_{} = error} when is_exception(error) ->
           {:error, error}
       end
+    end
+
+    defp execute_action_with_timeout(action, _params, _context, 0, _opts) do
+      {:error, timeout_error(action, 0)}
     end
 
     defp execute_action_with_timeout(action, params, context, _timeout, opts) do
       execute_action_with_timeout(action, params, context, Config.exec_timeout(), opts)
     end
 
-    defp await_task_result(ref, pid, monitor_ref, timeout, opts) do
-      receive do
-        {@execute_action_result_tag, ^ref, result} ->
-          TaskHelper.demonitor_flush(monitor_ref)
-          {:ok, result}
+    defp maybe_put_exec_deadline(context, :infinity), do: context
 
-        {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
-          handle_down_reason(reason, ref, pid, monitor_ref)
-      after
-        timeout ->
-          task_sup = Supervisors.task_supervisor(opts)
+    defp maybe_put_exec_deadline(context, timeout) when is_integer(timeout) and timeout > 0 do
+      deadline = System.monotonic_time(:millisecond) + timeout
 
-          TaskHelper.timeout_cleanup(
-            task_sup,
-            pid,
-            monitor_ref,
-            @execute_action_result_tag,
-            ref,
-            down_grace_period_ms: Config.exec_down_grace_period_ms(),
-            flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
-            max_flush_messages: Config.mailbox_flush_max_messages()
-          )
+      existing_deadline = Map.get(context, @exec_deadline_context_key)
 
-          :timeout
-      end
+      bounded_deadline =
+        if is_integer(existing_deadline) do
+          min(existing_deadline, deadline)
+        else
+          deadline
+        end
+
+      Map.put(context, @exec_deadline_context_key, bounded_deadline)
     end
 
-    # If the process exited normally, a result message may still be in flight.
-    defp handle_down_reason(:normal, ref, pid, monitor_ref) do
-      receive do
-        {@execute_action_result_tag, ^ref, result} ->
-          TaskHelper.demonitor_flush(monitor_ref)
-          {:ok, result}
-      after
-        Config.exec_down_grace_period_ms() ->
-          TaskHelper.demonitor_flush(monitor_ref)
-
-          TaskHelper.flush_messages(
-            @execute_action_result_tag,
-            ref,
-            pid,
-            monitor_ref,
-            flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
-            max_flush_messages: Config.mailbox_flush_max_messages()
-          )
-
-          {:exit, :normal}
-      end
-    end
-
-    defp handle_down_reason(reason, _ref, _pid, monitor_ref) do
-      TaskHelper.demonitor_flush(monitor_ref)
-      {:exit, reason}
+    defp timeout_error(action, timeout_ms) do
+      Error.timeout_error(
+        "Action #{inspect(action)} timed out after #{timeout_ms}ms",
+        %{
+          timeout: timeout_ms,
+          action: action
+        }
+      )
     end
 
     @spec execute_action(action(), params(), context(), run_opts()) :: exec_result

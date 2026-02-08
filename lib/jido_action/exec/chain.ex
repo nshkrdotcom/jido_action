@@ -144,7 +144,7 @@ defmodule Jido.Exec.Chain do
   def await(%{ref: ref, pid: pid} = legacy_async_ref, timeout)
       when is_reference(ref) and is_pid(pid) and not is_struct(legacy_async_ref, AsyncRef) do
     legacy_async_ref
-    |> AsyncRef.from_legacy_await_map(__MODULE__)
+    |> AsyncRef.from_legacy_await_map(__MODULE__, @result_tag)
     |> await(timeout)
   end
 
@@ -157,7 +157,7 @@ defmodule Jido.Exec.Chain do
   def cancel(%{pid: pid} = legacy_async_ref)
       when is_pid(pid) and not is_struct(legacy_async_ref, AsyncRef) do
     legacy_async_ref
-    |> AsyncRef.from_legacy_cancel_map(__MODULE__)
+    |> AsyncRef.from_legacy_cancel_map(__MODULE__, @result_tag)
     |> Async.cancel()
   end
 

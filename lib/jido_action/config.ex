@@ -23,11 +23,7 @@ defmodule Jido.Action.Config do
 
   @spec await_timeout() :: non_neg_integer()
   def await_timeout do
-    Application.get_env(
-      :jido_action,
-      :default_await_timeout,
-      Application.get_env(:jido_action, :default_timeout, @default_await_timeout)
-    )
+    Application.get_env(:jido_action, :default_await_timeout, @default_await_timeout)
   end
 
   @spec max_retries() :: non_neg_integer()

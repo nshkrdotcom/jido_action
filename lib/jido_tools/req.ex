@@ -91,42 +91,63 @@ defmodule Jido.Tools.ReqTool do
           end
 
           # Helper function to make the actual HTTP request
-          defp make_request(params, _context) do
+          defp make_request(params, context) do
             # Build the request based on the method
             method = @req_opts[:method]
             url = @req_opts[:url]
             headers = @req_opts[:headers]
             json = @req_opts[:json]
+            timeout_ms = resolve_request_timeout_ms(context)
 
             # Ensure Req is available
             if Code.ensure_loaded?(Req) do
-              try do
-                # Build options for Req
-                req_options = [
-                  method: method,
-                  url: url,
-                  headers: headers
-                ]
+              if timeout_ms == 0 do
+                {:error,
+                 Error.timeout_error("HTTP request deadline exceeded before dispatch", %{
+                   timeout: timeout_ms,
+                   url: url
+                 })}
+              else
+                try do
+                  # Build options for Req
+                  req_options = [
+                    method: method,
+                    url: url,
+                    headers: headers
+                  ]
 
-                # Add JSON decoding if enabled
-                req_options =
-                  if json, do: Keyword.put(req_options, :decode_json, json), else: req_options
+                  req_options =
+                    req_options
+                    |> Keyword.put(:connect_options, timeout: timeout_ms)
+                    |> Keyword.put(:receive_timeout, timeout_ms)
+                    |> Keyword.put(:pool_timeout, timeout_ms)
 
-                # Add body for POST/PUT requests if params are provided
-                req_options =
-                  case method do
-                    m when m in [:post, :put] ->
-                      Keyword.put(req_options, :json, params)
+                  # Add JSON decoding if enabled
+                  req_options =
+                    if json, do: Keyword.put(req_options, :decode_json, json), else: req_options
 
-                    _ ->
-                      Keyword.put(req_options, :params, params)
-                  end
+                  # Add body for POST/PUT requests if params are provided
+                  req_options =
+                    case method do
+                      m when m in [:post, :put] ->
+                        Keyword.put(req_options, :json, params)
 
-                # Execute the request
-                response = Req.request!(req_options)
-                {:ok, response}
-              rescue
-                e -> {:error, Error.execution_error("HTTP request failed", %{exception: e})}
+                      _ ->
+                        Keyword.put(req_options, :params, params)
+                    end
+
+                  # Execute the request
+                  response = Req.request!(req_options)
+                  {:ok, response}
+                rescue
+                  e ->
+                    {:error,
+                     Error.execution_error("HTTP request failed", %{
+                       exception: e,
+                       timeout: timeout_ms,
+                       url: url
+                     })}
+                end
               end
             else
               {:error,
@@ -136,6 +157,40 @@ defmodule Jido.Tools.ReqTool do
                )}
             end
           end
+
+          defp resolve_request_timeout_ms(context) do
+            context_timeout =
+              if is_map(context) do
+                Enum.find(
+                  [
+                    remaining_timeout_ms(Map.get(context, :__jido_exec_deadline_ms__)),
+                    remaining_timeout_ms(Map.get(context, "__jido_exec_deadline_ms__")),
+                    Map.get(context, :timeout),
+                    Map.get(context, "timeout")
+                  ],
+                  fn
+                    value when is_integer(value) and value >= 0 -> true
+                    _ -> false
+                  end
+                )
+              else
+                nil
+              end
+
+            case context_timeout do
+              value when is_integer(value) and value >= 0 ->
+                value
+
+              _ ->
+                Jido.Action.Config.exec_timeout()
+            end
+          end
+
+          defp remaining_timeout_ms(deadline_ms) when is_integer(deadline_ms) do
+            max(deadline_ms - System.monotonic_time(:millisecond), 0)
+          end
+
+          defp remaining_timeout_ms(_), do: nil
 
           # Default implementation for transform_result
           @impl Jido.Tools.ReqTool

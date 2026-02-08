@@ -24,7 +24,7 @@ defmodule Jido.Tools.Weather.Geocode do
   alias Jido.Tools.Weather.HTTP
 
   @impl Jido.Action
-  def run(%{location: location}, _context) do
+  def run(%{location: location}, context) do
     url = "https://nominatim.openstreetmap.org/search"
 
     with {:ok, response} <-
@@ -35,7 +35,8 @@ defmodule Jido.Tools.Weather.Geocode do
                limit: 1
              },
              headers: HTTP.json_headers(),
-             error_prefix: "Geocoding HTTP error"
+             error_prefix: "Geocoding HTTP error",
+             context: context
            ) do
       transform_result(response.status, response.body, location)
     end

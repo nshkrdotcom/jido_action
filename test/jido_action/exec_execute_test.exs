@@ -16,6 +16,22 @@ defmodule JidoTest.ExecExecuteTest do
 
   @moduletag :capture_log
 
+  defmodule DeadlineEchoAction do
+    use Jido.Action,
+      name: "deadline_echo_action",
+      description: "Echoes execution deadline from context",
+      schema: []
+
+    @impl true
+    def run(_params, context) do
+      {:ok,
+       %{
+         deadline: Map.get(context, :__jido_exec_deadline_ms__),
+         observed_at: System.monotonic_time(:millisecond)
+       }}
+    end
+  end
+
   setup do
     Logger.put_process_level(self(), :debug)
   end
@@ -141,7 +157,7 @@ defmodule JidoTest.ExecExecuteTest do
       log =
         capture_log(fn ->
           assert {:ok, %{result: "No params"}} =
-                   Exec.execute_action_with_timeout(NoParamsAction, %{}, %{}, 0,
+                   Exec.execute_action_with_timeout(NoParamsAction, %{}, %{}, 1_000,
                      log_level: :debug
                    )
         end)
@@ -163,27 +179,33 @@ defmodule JidoTest.ExecExecuteTest do
       assert log =~ "Finished execution of JidoTest.TestActions.BasicAction"
     end
 
-    test "uses configured default timeout when timeout is zero" do
-      original_timeout = Application.get_env(:jido_action, :default_timeout)
-      Application.put_env(:jido_action, :default_timeout, 10)
+    test "injects execution deadline into action context for finite timeouts" do
+      assert {:ok, %{deadline: deadline, observed_at: observed_at}} =
+               Exec.execute_action_with_timeout(DeadlineEchoAction, %{}, %{}, 200,
+                 log_level: :debug
+               )
 
-      on_exit(fn ->
-        if is_nil(original_timeout) do
-          Application.delete_env(:jido_action, :default_timeout)
-        else
-          Application.put_env(:jido_action, :default_timeout, original_timeout)
-        end
-      end)
+      assert is_integer(deadline)
+      assert deadline >= observed_at
+    end
 
+    test "does not inject execution deadline for infinite timeout" do
+      assert {:ok, %{deadline: nil}} =
+               Exec.execute_action_with_timeout(DeadlineEchoAction, %{}, %{}, :infinity,
+                 log_level: :debug
+               )
+    end
+
+    test "returns immediate timeout when timeout is zero" do
       log =
         capture_log(fn ->
-          assert {:error, %Jido.Action.Error.TimeoutError{timeout: 10}} =
+          assert {:error, %Jido.Action.Error.TimeoutError{timeout: 0}} =
                    Exec.execute_action_with_timeout(DelayAction, %{delay: 50}, %{}, 0,
                      log_level: :debug
                    )
         end)
 
-      assert log =~ "Starting execution of JidoTest.TestActions.DelayAction"
+      assert log == ""
     end
 
     test "times out for slow action" do
@@ -284,11 +306,11 @@ defmodule JidoTest.ExecExecuteTest do
       assert log =~ "Starting execution of JidoTest.TestActions.SlowKilledAction"
     end
 
-    test "uses default timeout when not specified" do
+    test "uses default timeout for nil timeout value" do
       log =
         capture_log(fn ->
           assert {:ok, %{result: "Async action completed"}} ==
-                   Exec.execute_action_with_timeout(DelayAction, %{delay: 80}, %{}, 0,
+                   Exec.execute_action_with_timeout(DelayAction, %{delay: 80}, %{}, nil,
                      log_level: :debug
                    )
         end)

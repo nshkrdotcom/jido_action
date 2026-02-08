@@ -147,4 +147,28 @@ defmodule JidoTest.Actions.ReqTest do
     assert error.message == "HTTP request failed"
     assert error.details.exception.message == "Network error"
   end
+
+  test "req action applies timeout budget to request options" do
+    mock_response = %{
+      status: 200,
+      body: %{"data" => "example response"},
+      headers: %{"content-type" => "application/json"}
+    }
+
+    expect(Req, :request!, fn opts ->
+      assert opts[:receive_timeout] == 123
+      assert opts[:pool_timeout] == 123
+      assert opts[:connect_options] == [timeout: 123]
+      mock_response
+    end)
+
+    assert {:ok, _result} = SimpleGet.run(%{}, %{timeout: 123})
+  end
+
+  test "req action returns timeout when deadline has already elapsed" do
+    expired_deadline_ms = System.monotonic_time(:millisecond) - 1
+
+    assert {:error, %Error.TimeoutError{timeout: 0}} =
+             SimpleGet.run(%{}, %{__jido_exec_deadline_ms__: expired_deadline_ms})
+  end
 end

@@ -68,19 +68,16 @@ defmodule JidoTest.ExecDoRunTest do
     end
 
     test "executes action in silent mode" do
-      Mimic.reject(&System.monotonic_time/1)
-
       log =
         capture_log(fn ->
           assert {:ok, %{value: 5}} =
                    Exec.do_run(BasicAction, %{value: 5}, %{},
                      telemetry: :silent,
-                     timeout: 0
+                     timeout: 50
                    )
         end)
 
       assert log == ""
-      verify!()
     end
 
     test "handles action error" do

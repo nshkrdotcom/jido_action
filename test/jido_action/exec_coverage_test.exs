@@ -230,7 +230,7 @@ defmodule JidoTest.ExecCoverageTest do
 
   describe "execution timeout edge cases" do
     test "execute_action_with_timeout with zero timeout" do
-      assert {:ok, %{value: 1}} =
+      assert {:error, %Error.TimeoutError{timeout: 0}} =
                Exec.run(BasicAction, %{value: 1}, %{}, timeout: 0)
     end
 

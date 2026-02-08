@@ -165,6 +165,44 @@ defmodule JidoTest.Exec.AsyncCoverageTest do
       assert ^result = Async.await(async_ref, 1_000)
     end
 
+    test "handles DOWN normal and then receives result in second grace window" do
+      original_down_grace = Application.get_env(:jido_action, :async_down_grace_period_ms)
+      Application.put_env(:jido_action, :async_down_grace_period_ms, 50)
+
+      on_exit(fn ->
+        if is_nil(original_down_grace) do
+          Application.delete_env(:jido_action, :async_down_grace_period_ms)
+        else
+          Application.put_env(:jido_action, :async_down_grace_period_ms, original_down_grace)
+        end
+      end)
+
+      ref = make_ref()
+
+      pid =
+        spawn(fn ->
+          receive do
+            :stop -> :ok
+          end
+        end)
+
+      result = {:ok, %{value: 321}}
+      parent = self()
+
+      spawn(fn ->
+        Process.sleep(10)
+        send(pid, :stop)
+      end)
+
+      spawn(fn ->
+        Process.sleep(75)
+        send(parent, {:action_async_result, ref, result})
+      end)
+
+      async_ref = %{ref: ref, pid: pid}
+      assert ^result = Async.await(async_ref, 1_000)
+    end
+
     test "returns execution error when DOWN normal arrives without result" do
       pid =
         spawn(fn ->

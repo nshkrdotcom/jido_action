@@ -24,29 +24,31 @@ defmodule Jido.Tools.Weather.CurrentConditions do
   alias Jido.Tools.Weather.HTTP
 
   @impl Jido.Action
-  def run(params, _context) do
-    with {:ok, stations} <- get_observation_stations(params[:observation_stations_url]) do
-      get_current_conditions(List.first(stations))
+  def run(params, context) do
+    with {:ok, stations} <- get_observation_stations(params[:observation_stations_url], context) do
+      get_current_conditions(List.first(stations), context)
     end
   end
 
-  defp get_observation_stations(stations_url) do
+  defp get_observation_stations(stations_url, context) do
     with {:ok, response} <-
            HTTP.get(stations_url,
              headers: HTTP.geojson_headers(),
-             error_prefix: "HTTP error getting stations"
+             error_prefix: "HTTP error getting stations",
+             context: context
            ) do
       parse_observation_stations_response(response)
     end
   end
 
-  defp get_current_conditions(%{url: station_url}) do
+  defp get_current_conditions(%{url: station_url}, context) do
     observations_url = "#{station_url}/observations/latest"
 
     with {:ok, response} <-
            HTTP.get(observations_url,
              headers: HTTP.geojson_headers(),
-             error_prefix: "HTTP error getting conditions"
+             error_prefix: "HTTP error getting conditions",
+             context: context
            ) do
       case response do
         %{status: 200, body: body} ->
@@ -83,7 +85,7 @@ defmodule Jido.Tools.Weather.CurrentConditions do
     end
   end
 
-  defp get_current_conditions(nil) do
+  defp get_current_conditions(nil, _context) do
     {:error, Error.execution_error("No observation stations available")}
   end
 
