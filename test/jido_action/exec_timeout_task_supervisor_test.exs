@@ -245,19 +245,28 @@ defmodule Jido.ExecTimeoutTaskSupervisorTest do
         end
       end
 
-      initial_count = length(Process.list())
+      task_supervisor = Jido.Action.TaskSupervisor
+      initial_children = length(Task.Supervisor.children(task_supervisor))
 
       # Run several actions that timeout
       for _ <- 1..10 do
         Exec.execute_action_with_timeout(LeakTestAction, %{}, %{}, 50, log_level: :info)
       end
 
-      # Wait for cleanup
-      Process.sleep(100)
-
-      final_count = length(Process.list())
-      # Should be roughly the same (allow small variance for system processes)
-      assert_in_delta initial_count, final_count, 5
+      assert eventually_task_children_at_or_below?(task_supervisor, initial_children)
     end
+  end
+
+  defp eventually_task_children_at_or_below?(task_supervisor, limit, attempts \\ 20) do
+    Enum.reduce_while(1..attempts, false, fn _, _acc ->
+      current = length(Task.Supervisor.children(task_supervisor))
+
+      if current <= limit do
+        {:halt, true}
+      else
+        Process.sleep(50)
+        {:cont, false}
+      end
+    end)
   end
 end

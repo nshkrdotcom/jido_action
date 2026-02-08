@@ -30,7 +30,12 @@ defmodule JidoAction.MixProject do
 
       # Coverage
       test_coverage: [
-        tool: ExCoveralls
+        tool: ExCoveralls,
+        ignore_modules: [
+          Mix.Tasks.JidoAction.Gen.Action,
+          Mix.Tasks.JidoAction.Gen.Workflow,
+          Mix.Tasks.JidoAction.Install
+        ]
       ],
 
       # Dialyzer

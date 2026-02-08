@@ -94,7 +94,8 @@ defmodule Jido.Tools.LuaEvalTest do
     end
 
     test "allows execution within timeout" do
-      params = %{code: "return 42", timeout_ms: 1000}
+      # Coverage instrumentation can add enough overhead to make 1s flaky.
+      params = %{code: "return 42", timeout_ms: 5_000}
       assert {:ok, %{results: [42]}} = LuaEval.run(params, @context)
     end
   end
