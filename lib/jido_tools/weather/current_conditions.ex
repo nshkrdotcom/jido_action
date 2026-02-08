@@ -36,23 +36,7 @@ defmodule Jido.Tools.Weather.CurrentConditions do
              headers: HTTP.geojson_headers(),
              error_prefix: "HTTP error getting stations"
            ) do
-      case response do
-        %{status: 200, body: body} ->
-          stations =
-            body["features"]
-            |> Enum.map(fn feature ->
-              %{
-                id: feature["properties"]["stationIdentifier"],
-                name: feature["properties"]["name"],
-                url: feature["id"]
-              }
-            end)
-
-          {:ok, stations}
-
-        %{status: status, body: body} ->
-          HTTP.status_error("Failed to get observation stations", status, body)
-      end
+      parse_observation_stations_response(response)
     end
   end
 
@@ -101,6 +85,23 @@ defmodule Jido.Tools.Weather.CurrentConditions do
 
   defp get_current_conditions(nil) do
     {:error, Error.execution_error("No observation stations available")}
+  end
+
+  defp parse_observation_stations_response(%{status: 200, body: body}) do
+    stations = Enum.map(body["features"], &station_from_feature/1)
+    {:ok, stations}
+  end
+
+  defp parse_observation_stations_response(%{status: status, body: body}) do
+    HTTP.status_error("Failed to get observation stations", status, body)
+  end
+
+  defp station_from_feature(feature) do
+    %{
+      id: feature["properties"]["stationIdentifier"],
+      name: feature["properties"]["name"],
+      url: feature["id"]
+    }
   end
 
   defp format_measurement(%{"value" => nil}), do: nil

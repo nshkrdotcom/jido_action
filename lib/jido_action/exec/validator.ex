@@ -45,32 +45,35 @@ defmodule Jido.Exec.Validator do
   def validate_params(action, params) do
     case Code.ensure_compiled(action) do
       {:module, _} ->
-        if function_exported?(action, :validate_params, 1) do
-          case action.validate_params(params) do
-            {:ok, params} ->
-              {:ok, params}
-
-            {:error, %_{} = reason} when is_exception(reason) ->
-              {:error, reason}
-
-            {:error, reason} ->
-              {:error, Error.validation_error(inspect(reason))}
-
-            _ ->
-              {:error, Error.validation_error("Invalid return from action.validate_params/1")}
-          end
-        else
-          {:error,
-           Error.validation_error(
-             "Module #{inspect(action)} is not a valid action: missing validate_params/1 function"
-           )}
-        end
+        validate_params_for_compiled_module(action, params)
 
       {:error, reason} ->
         {:error,
          Error.validation_error("Failed to compile module #{inspect(action)}: #{inspect(reason)}")}
     end
   end
+
+  defp validate_params_for_compiled_module(action, params) do
+    if function_exported?(action, :validate_params, 1) do
+      normalize_validate_params_result(action.validate_params(params))
+    else
+      {:error,
+       Error.validation_error(
+         "Module #{inspect(action)} is not a valid action: missing validate_params/1 function"
+       )}
+    end
+  end
+
+  defp normalize_validate_params_result({:ok, params}), do: {:ok, params}
+
+  defp normalize_validate_params_result({:error, %_{} = reason}) when is_exception(reason),
+    do: {:error, reason}
+
+  defp normalize_validate_params_result({:error, reason}),
+    do: {:error, Error.validation_error(inspect(reason))}
+
+  defp normalize_validate_params_result(_),
+    do: {:error, Error.validation_error("Invalid return from action.validate_params/1")}
 
   @doc """
   Validates output from an action using the action's validate_output/1 function if present.

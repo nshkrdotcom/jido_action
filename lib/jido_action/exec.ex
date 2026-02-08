@@ -431,66 +431,74 @@ defmodule Jido.Exec do
     defp execute_action_with_timeout(action, params, context, timeout, opts)
          when is_integer(timeout) and timeout > 0 do
       # Get the current process's group leader for IO routing
-      with {:ok, %{ref: ref, pid: pid, monitor_ref: monitor_ref}} <-
-             TaskHelper.spawn_monitored(opts, :execute_action_result, fn ->
-               execute_action(action, params, context, opts)
-             end) do
-        # Wait for completion, crash, or timeout.
-        result =
-          receive do
-            {:execute_action_result, ^ref, result} ->
-              TaskHelper.demonitor_flush(monitor_ref)
-              {:ok, result}
+      case TaskHelper.spawn_monitored(opts, :execute_action_result, fn ->
+             execute_action(action, params, context, opts)
+           end) do
+        {:ok, %{ref: ref, pid: pid, monitor_ref: monitor_ref}} ->
+          # Wait for completion, crash, or timeout.
+          result =
+            receive do
+              {:execute_action_result, ^ref, result} ->
+                TaskHelper.demonitor_flush(monitor_ref)
+                {:ok, result}
 
-            {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
-              # If the process exited normally, a result message may still be in flight.
-              case reason do
-                :normal ->
-                  receive do
-                    {:execute_action_result, ^ref, result} ->
-                      TaskHelper.demonitor_flush(monitor_ref)
-                      {:ok, result}
-                  after
-                    0 ->
-                      TaskHelper.demonitor_flush(monitor_ref)
-                      {:exit, reason}
-                  end
+              {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
+                # If the process exited normally, a result message may still be in flight.
+                case reason do
+                  :normal ->
+                    receive do
+                      {:execute_action_result, ^ref, result} ->
+                        TaskHelper.demonitor_flush(monitor_ref)
+                        {:ok, result}
+                    after
+                      0 ->
+                        TaskHelper.demonitor_flush(monitor_ref)
+                        {:exit, reason}
+                    end
 
-                _ ->
-                  TaskHelper.demonitor_flush(monitor_ref)
-                  {:exit, reason}
-              end
-          after
-            timeout ->
-              task_sup = Supervisors.task_supervisor(opts)
-              TaskHelper.timeout_cleanup(task_sup, pid, monitor_ref, :execute_action_result, ref)
+                  _ ->
+                    TaskHelper.demonitor_flush(monitor_ref)
+                    {:exit, reason}
+                end
+            after
+              timeout ->
+                task_sup = Supervisors.task_supervisor(opts)
 
-              :timeout
+                TaskHelper.timeout_cleanup(
+                  task_sup,
+                  pid,
+                  monitor_ref,
+                  :execute_action_result,
+                  ref
+                )
+
+                :timeout
+            end
+
+          case result do
+            {:ok, result} ->
+              result
+
+            {:exit, reason} ->
+              {:error,
+               Error.execution_error("Task exited: #{inspect(reason)}", %{
+                 reason: reason,
+                 action: action
+               })}
+
+            :timeout ->
+              {:error,
+               Error.timeout_error(
+                 "Action #{inspect(action)} timed out after #{timeout}ms",
+                 %{
+                   timeout: timeout,
+                   action: action
+                 }
+               )}
           end
 
-        case result do
-          {:ok, result} ->
-            result
-
-          {:exit, reason} ->
-            {:error,
-             Error.execution_error("Task exited: #{inspect(reason)}", %{
-               reason: reason,
-               action: action
-             })}
-
-          :timeout ->
-            {:error,
-             Error.timeout_error(
-               "Action #{inspect(action)} timed out after #{timeout}ms",
-               %{
-                 timeout: timeout,
-                 action: action
-               }
-             )}
-        end
-      else
-        {:error, error} -> {:error, error}
+        {:error, error} ->
+          {:error, error}
       end
     end
 

@@ -100,57 +100,65 @@ defmodule Jido.Tools.LuaEval do
   @dialyzer {:nowarn_function, run: 2}
   def run(params, _context) do
     if Code.ensure_loaded?(Lua) do
-      timeout_ms = Map.get(params, :timeout_ms, 1000)
-
-      case TaskHelper.spawn_monitored([], :lua_eval_result, fn -> do_run(params) end) do
-        {:ok, %{ref: ref, pid: pid, monitor_ref: monitor_ref}} ->
-          receive do
-            {:lua_eval_result, ^ref, result} ->
-              TaskHelper.demonitor_flush(monitor_ref)
-              result
-
-            {:DOWN, ^monitor_ref, :process, ^pid, :normal} ->
-              receive do
-                {:lua_eval_result, ^ref, result} ->
-                  TaskHelper.demonitor_flush(monitor_ref)
-                  result
-              after
-                @down_grace_period_ms ->
-                  TaskHelper.demonitor_flush(monitor_ref)
-
-                  {:error,
-                   Error.execution_error("Lua execution completed but no result was received")}
-              end
-
-            {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
-              TaskHelper.demonitor_flush(monitor_ref)
-
-              {:error,
-               Error.execution_error("Lua task exited: #{inspect(reason)}", %{reason: reason})}
-          after
-            timeout_ms ->
-              TaskHelper.timeout_cleanup(
-                Jido.Action.TaskSupervisor,
-                pid,
-                monitor_ref,
-                :lua_eval_result,
-                ref
-              )
-
-              {:error,
-               Error.timeout_error("Lua execution timed out after #{timeout_ms}ms", %{
-                 timeout: timeout_ms
-               })}
-          end
-
-        {:error, error} ->
-          {:error, error}
-      end
+      run_with_lua(params)
     else
       msg =
         "Lua library (:lua) is not available. Add {:lua, \"~> 0.3\"} to your deps and run mix deps.get"
 
       {:error, Error.config_error(msg, %{dependency: :lua})}
+    end
+  end
+
+  defp run_with_lua(params) do
+    timeout_ms = Map.get(params, :timeout_ms, 1000)
+
+    case TaskHelper.spawn_monitored([], :lua_eval_result, fn -> do_run(params) end) do
+      {:ok, async_ref} ->
+        await_lua_result(async_ref, timeout_ms)
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
+  defp await_lua_result(%{ref: ref, pid: pid, monitor_ref: monitor_ref}, timeout_ms) do
+    receive do
+      {:lua_eval_result, ^ref, result} ->
+        TaskHelper.demonitor_flush(monitor_ref)
+        result
+
+      {:DOWN, ^monitor_ref, :process, ^pid, :normal} ->
+        handle_normal_lua_completion(ref, monitor_ref)
+
+      {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
+        TaskHelper.demonitor_flush(monitor_ref)
+        {:error, Error.execution_error("Lua task exited: #{inspect(reason)}", %{reason: reason})}
+    after
+      timeout_ms ->
+        TaskHelper.timeout_cleanup(
+          Jido.Action.TaskSupervisor,
+          pid,
+          monitor_ref,
+          :lua_eval_result,
+          ref
+        )
+
+        {:error,
+         Error.timeout_error("Lua execution timed out after #{timeout_ms}ms", %{
+           timeout: timeout_ms
+         })}
+    end
+  end
+
+  defp handle_normal_lua_completion(ref, monitor_ref) do
+    receive do
+      {:lua_eval_result, ^ref, result} ->
+        TaskHelper.demonitor_flush(monitor_ref)
+        result
+    after
+      @down_grace_period_ms ->
+        TaskHelper.demonitor_flush(monitor_ref)
+        {:error, Error.execution_error("Lua execution completed but no result was received")}
     end
   end
 

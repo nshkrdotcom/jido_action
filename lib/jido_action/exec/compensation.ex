@@ -137,6 +137,17 @@ defmodule Jido.Exec.Compensation do
       handle_task_result(result, error, directive, timeout, max_attempts)
     end
 
+    @type compensation_context :: %{
+            action: action(),
+            params: params(),
+            context: context(),
+            error: Exception.t(),
+            opts: run_opts(),
+            compensation_run_opts: run_opts(),
+            timeout: non_neg_integer(),
+            max_attempts: pos_integer()
+          }
+
     @spec execute_compensation_with_retries(
             action(),
             params(),
@@ -157,149 +168,101 @@ defmodule Jido.Exec.Compensation do
            timeout,
            max_attempts
          ) do
-      do_execute_compensation_with_retries(
-        action,
-        params,
-        context,
-        error,
-        opts,
-        compensation_run_opts,
-        timeout,
-        1,
-        max_attempts
-      )
+      execution_context = %{
+        action: action,
+        params: params,
+        context: context,
+        error: error,
+        opts: opts,
+        compensation_run_opts: compensation_run_opts,
+        timeout: timeout,
+        max_attempts: max_attempts
+      }
+
+      do_execute_compensation_with_retries(execution_context, 1)
     end
 
     @spec do_execute_compensation_with_retries(
-            action(),
-            params(),
-            context(),
-            Exception.t(),
-            run_opts(),
-            run_opts(),
-            non_neg_integer(),
-            pos_integer(),
+            compensation_context(),
             pos_integer()
           ) :: {:ok, any()} | {:exit, any()} | :timeout
     defp do_execute_compensation_with_retries(
-           action,
-           params,
-           context,
-           error,
-           opts,
-           compensation_run_opts,
-           timeout,
-           attempt,
-           max_attempts
+           %{max_attempts: max_attempts} = execution_context,
+           attempt
          ) do
-      case execute_compensation_once(
-             action,
-             params,
-             context,
-             error,
-             opts,
-             compensation_run_opts,
-             timeout
-           ) do
+      case execute_compensation_once(execution_context) do
         :timeout when attempt < max_attempts ->
           Logger.debug("Compensation timed out, retrying attempt #{attempt + 1}/#{max_attempts}")
-
-          do_execute_compensation_with_retries(
-            action,
-            params,
-            context,
-            error,
-            opts,
-            compensation_run_opts,
-            timeout,
-            attempt + 1,
-            max_attempts
-          )
+          do_execute_compensation_with_retries(execution_context, attempt + 1)
 
         {:exit, reason} when attempt < max_attempts ->
           Logger.debug(
             "Compensation exited (#{inspect(reason)}), retrying attempt #{attempt + 1}/#{max_attempts}"
           )
 
-          do_execute_compensation_with_retries(
-            action,
-            params,
-            context,
-            error,
-            opts,
-            compensation_run_opts,
-            timeout,
-            attempt + 1,
-            max_attempts
-          )
+          do_execute_compensation_with_retries(execution_context, attempt + 1)
 
-        other ->
-          other
+        result ->
+          result
       end
     end
 
-    @spec execute_compensation_once(
-            action(),
-            params(),
-            context(),
-            Exception.t(),
-            run_opts(),
-            run_opts(),
-            non_neg_integer()
-          ) :: {:ok, any()} | {:exit, any()} | :timeout
-    defp execute_compensation_once(
-           action,
-           params,
-           context,
-           error,
-           opts,
-           compensation_run_opts,
-           timeout
-         ) do
-      with {:ok, %{ref: ref, pid: pid, monitor_ref: monitor_ref}} <-
-             TaskHelper.spawn_monitored(opts, :compensation_result, fn ->
-               action.on_error(params, error, context, compensation_run_opts)
-             end) do
-        receive do
-          {:compensation_result, ^ref, result} ->
-            TaskHelper.demonitor_flush(monitor_ref)
-            {:ok, result}
+    @spec execute_compensation_once(compensation_context()) ::
+            {:ok, any()} | {:exit, any()} | :timeout
+    defp execute_compensation_once(%{
+           action: action,
+           params: params,
+           context: context,
+           error: error,
+           opts: opts,
+           compensation_run_opts: compensation_run_opts,
+           timeout: timeout
+         }) do
+      case TaskHelper.spawn_monitored(opts, :compensation_result, fn ->
+             action.on_error(params, error, context, compensation_run_opts)
+           end) do
+        {:ok, %{ref: ref, pid: pid, monitor_ref: monitor_ref}} ->
+          receive do
+            {:compensation_result, ^ref, result} ->
+              TaskHelper.demonitor_flush(monitor_ref)
+              {:ok, result}
 
-          {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
-            case reason do
-              :normal ->
-                receive do
-                  {:compensation_result, ^ref, result} ->
-                    TaskHelper.demonitor_flush(monitor_ref)
-                    {:ok, result}
-                after
-                  @down_grace_period_ms ->
-                    TaskHelper.demonitor_flush(monitor_ref)
-                    {:exit, reason}
-                end
+            {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
+              case reason do
+                :normal ->
+                  receive do
+                    {:compensation_result, ^ref, result} ->
+                      TaskHelper.demonitor_flush(monitor_ref)
+                      {:ok, result}
+                  after
+                    @down_grace_period_ms ->
+                      TaskHelper.demonitor_flush(monitor_ref)
+                      {:exit, reason}
+                  end
 
-              _ ->
-                TaskHelper.demonitor_flush(monitor_ref)
-                {:exit, reason}
-            end
-        after
-          timeout ->
-            task_sup = Jido.Exec.Supervisors.task_supervisor(opts)
+                _ ->
+                  TaskHelper.demonitor_flush(monitor_ref)
+                  {:exit, reason}
+              end
+          after
+            timeout ->
+              task_sup = Jido.Exec.Supervisors.task_supervisor(opts)
 
-            TaskHelper.timeout_cleanup(
-              task_sup,
-              pid,
-              monitor_ref,
-              :compensation_result,
-              ref,
-              down_grace_period_ms: @down_grace_period_ms,
-              flush_timeout_ms: @flush_timeout_ms
-            )
+              TaskHelper.timeout_cleanup(
+                task_sup,
+                pid,
+                monitor_ref,
+                :compensation_result,
+                ref,
+                down_grace_period_ms: @down_grace_period_ms,
+                flush_timeout_ms: @flush_timeout_ms
+              )
 
-            :timeout
-        end
-      else
-        {:error, spawn_error} -> {:exit, spawn_error}
+              :timeout
+          end
+
+        {:error, spawn_error} ->
+          {:exit, spawn_error}
       end
     end
 
