@@ -57,7 +57,7 @@ defmodule JidoTest.Exec.ChainTest do
 
       assert {:error, error} = result
       assert is_exception(error)
-      assert Exception.message(error) =~ "Invalid chain action"
+      assert Exception.message(error) =~ "Exec parameters must be a map or keyword list"
     end
 
     test "handles errors in the chain" do

@@ -69,7 +69,8 @@ defmodule Jido.Exec.Async do
   ## Returns
 
   - `{:ok, result}` if the Action executes successfully.
-  - `{:error, reason}` if an error occurs during execution or if the action times out.
+  - `{:error, %Jido.Action.Error.TimeoutError{}}` if the action times out.
+  - `{:error, %Jido.Action.Error.ExecutionFailureError{}}` if the process crashes or no result is received.
   """
   @spec await(async_ref()) :: exec_result
   def await(async_ref), do: await(async_ref, Config.await_timeout())
@@ -85,7 +86,8 @@ defmodule Jido.Exec.Async do
   ## Returns
 
   - `{:ok, result}` if the Action completes successfully.
-  - `{:error, reason}` if an error occurs or timeout is reached.
+  - `{:error, %Jido.Action.Error.TimeoutError{}}` if timeout is reached.
+  - `{:error, %Jido.Action.Error.ExecutionFailureError{}}` if an execution failure occurs.
   """
   @spec await(async_ref(), timeout()) :: exec_result
   def await(%{ref: ref, pid: pid} = async_ref, timeout) do

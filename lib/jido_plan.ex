@@ -204,7 +204,7 @@ defmodule Jido.Plan do
           opts: plan_opts
         }
 
-        %{plan | steps: Map.put(plan.steps, step_name, plan_instruction)}
+        put_step(plan, step_name, plan_instruction)
 
       {:error, _error} ->
         error = Error.validation_error("Invalid instruction format", %{step_def: step_def})
@@ -239,7 +239,7 @@ defmodule Jido.Plan do
         new_deps = (current_deps ++ List.wrap(deps)) |> Enum.uniq()
         updated_instruction = %{plan_instruction | depends_on: new_deps}
 
-        %{plan | steps: Map.put(plan.steps, step_name, updated_instruction)}
+        put_step(plan, step_name, updated_instruction)
     end
   end
 
@@ -321,6 +321,10 @@ defmodule Jido.Plan do
     {:ok, add(plan, step_name, clean_step_def, depends_on: depends_on)}
   rescue
     error -> {:error, error}
+  end
+
+  defp put_step(%__MODULE__{} = plan, step_name, plan_instruction) when is_atom(step_name) do
+    %{plan | steps: Map.put(plan.steps, step_name, plan_instruction)}
   end
 
   defp prepare_step_definition(step_def, opts) do

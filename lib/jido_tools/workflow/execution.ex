@@ -6,24 +6,37 @@ defmodule Jido.Tools.Workflow.Execution do
   alias Jido.Exec.Supervisors
   alias Jido.Instruction
 
-  @spec execute_workflow(list(), map(), map(), module()) :: {:ok, map()} | {:error, any()}
+  @type execution_result ::
+          {:ok, map()}
+          | {:ok, map(), any()}
+          | {:error, Exception.t()}
+          | {:error, Exception.t(), any()}
+
+  @spec execute_workflow(list(), map(), map(), module()) :: execution_result()
   def execute_workflow(steps, params, context, module) do
-    initial_acc = {:ok, params, %{}}
+    initial_acc = {:ok, params, %{}, nil}
 
     steps
     |> Enum.reduce_while(initial_acc, &reduce_step(&1, &2, context, module))
     |> case do
-      {:ok, _final_params, final_results} -> {:ok, final_results}
-      {:error, reason} -> {:error, reason}
+      {:ok, _final_params, final_results, nil} -> {:ok, final_results}
+      {:ok, _final_params, final_results, directive} -> {:ok, final_results, directive}
+      {:error, reason} -> {:error, ensure_error(reason)}
+      {:error, reason, directive} -> {:error, ensure_error(reason), directive}
     end
   end
 
-  defp reduce_step(step, {_status, current_params, results}, context, module) do
+  defp reduce_step(step, {_status, current_params, results, current_directive}, context, module) do
     case module.execute_step(step, current_params, context) do
       {:ok, step_result} when is_map(step_result) ->
         updated_results = Map.merge(results, step_result)
         updated_params = Map.merge(current_params, step_result)
-        {:cont, {:ok, updated_params, updated_results}}
+        {:cont, {:ok, updated_params, updated_results, current_directive}}
+
+      {:ok, step_result, directive} when is_map(step_result) ->
+        updated_results = Map.merge(results, step_result)
+        updated_params = Map.merge(current_params, step_result)
+        {:cont, {:ok, updated_params, updated_results, directive}}
 
       {:ok, step_result} ->
         {:halt,
@@ -34,12 +47,16 @@ defmodule Jido.Tools.Workflow.Execution do
           })}}
 
       {:error, reason} ->
-        {:halt, {:error, reason}}
+        {:halt, {:error, ensure_error(reason)}}
+
+      {:error, reason, directive} ->
+        {:halt, {:error, ensure_error(reason), directive}}
     end
   end
 
   @doc false
-  @spec execute_step(tuple(), map(), map(), module()) :: {:ok, any()} | {:error, any()}
+  @spec execute_step(tuple(), map(), map(), module()) ::
+          {:ok, any()} | {:ok, any(), any()} | {:error, any()} | {:error, any(), any()}
   def execute_step(step, params, context, module) do
     case step do
       {:step, _metadata, [instruction]} ->
@@ -93,14 +110,14 @@ defmodule Jido.Tools.Workflow.Execution do
       {:ok, result} ->
         {:ok, result}
 
-      {:ok, result, _other} ->
-        {:ok, result}
+      {:ok, result, directive} ->
+        {:ok, result, directive}
 
       {:error, reason} ->
         {:error, ensure_error(reason)}
 
-      {:error, reason, _other} ->
-        {:error, ensure_error(reason)}
+      {:error, reason, directive} ->
+        {:error, ensure_error(reason), directive}
     end
   end
 
@@ -176,7 +193,9 @@ defmodule Jido.Tools.Workflow.Execution do
   defp execute_parallel_instruction(instruction, params, context, module) do
     case module.execute_step(instruction, params, context) do
       {:ok, result} -> result
+      {:ok, result, directive} -> %{result: result, directive: directive}
       {:error, reason} -> %{error: ensure_error(reason)}
+      {:error, reason, directive} -> %{error: ensure_error(reason), directive: directive}
     end
   rescue
     e ->

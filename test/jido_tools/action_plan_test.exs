@@ -1,6 +1,7 @@
 defmodule Jido.Tools.ActionPlanTest do
   use ExUnit.Case, async: true
 
+  alias Jido.Action.Error
   alias Jido.Plan
   alias Jido.Tools.ActionPlan
 
@@ -50,6 +51,28 @@ defmodule Jido.Tools.ActionPlanTest do
     @impl Jido.Action
     def run(_params, _context) do
       {:error, "This action always fails"}
+    end
+  end
+
+  defmodule DirectiveAction do
+    use Jido.Action,
+      name: "directive_action_plan_step",
+      description: "Returns directive on success"
+
+    @impl Jido.Action
+    def run(_params, _context) do
+      {:ok, %{result: "directive_result"}, :plan_directive}
+    end
+  end
+
+  defmodule DirectiveFailingAction do
+    use Jido.Action,
+      name: "directive_failing_action_plan_step",
+      description: "Returns directive on failure"
+
+    @impl Jido.Action
+    def run(_params, _context) do
+      {:error, Error.execution_error("Directive step failed"), :plan_error_directive}
     end
   end
 
@@ -119,6 +142,47 @@ defmodule Jido.Tools.ActionPlanTest do
     def build(_params, context) do
       Plan.new(context: context)
       |> Plan.add(:failing_step, FailingAction)
+    end
+  end
+
+  defmodule DirectiveActionPlan do
+    use ActionPlan,
+      name: "directive_workflow",
+      description: "A workflow that returns directives from steps"
+
+    @impl ActionPlan
+    def build(_params, context) do
+      Plan.new(context: context)
+      |> Plan.add(:directive_step, DirectiveAction)
+    end
+  end
+
+  defmodule DirectiveFailingActionPlan do
+    use ActionPlan,
+      name: "directive_failing_workflow",
+      description: "A workflow that fails with directive"
+
+    @impl ActionPlan
+    def build(_params, context) do
+      Plan.new(context: context)
+      |> Plan.add(:directive_failing_step, DirectiveFailingAction)
+    end
+  end
+
+  defmodule TransformDirectiveActionPlan do
+    use ActionPlan,
+      name: "transform_directive_workflow",
+      description: "A workflow that emits both execution and transform directives"
+
+    @impl ActionPlan
+    def build(_params, context) do
+      Plan.new(context: context)
+      |> Plan.add(:directive_step, DirectiveAction)
+    end
+
+    @impl ActionPlan
+    def transform_result(result) do
+      {:ok, %{wrapped: result}, :transform_directive}
     end
   end
 
@@ -275,6 +339,25 @@ defmodule Jido.Tools.ActionPlanTest do
 
       assert {:ok, result} = EmptyPhasesActionPlan.run(params, context)
       assert result == %{}
+    end
+
+    test "propagates directive on successful plan execution" do
+      assert {:ok, %{directive_step: %{result: "directive_result"}}, :plan_directive} =
+               DirectiveActionPlan.run(%{}, %{})
+    end
+
+    test "propagates directive when plan step fails" do
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error, :plan_error_directive} =
+               DirectiveFailingActionPlan.run(%{}, %{})
+
+      assert error.details.type == :step_execution_failed
+    end
+
+    test "preserves transform_result directive and execution directive" do
+      assert {:ok, %{wrapped: %{directive_step: %{result: "directive_result"}}}, directive} =
+               TransformDirectiveActionPlan.run(%{}, %{})
+
+      assert directive == %{transform_result: :transform_directive, execution: :plan_directive}
     end
   end
 

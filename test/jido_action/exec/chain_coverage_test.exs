@@ -31,6 +31,13 @@ defmodule JidoTest.Exec.ChainCoverageTest do
     end
   end
 
+  defmodule PlainMapAction do
+    use Jido.Action, name: "plain_map_action", schema: []
+
+    @impl true
+    def run(_params, _context), do: {:ok, %{plain: true}}
+  end
+
   describe "chain/3 with interrupt check" do
     test "interrupts chain when interrupt_check returns true" do
       capture_log(fn ->
@@ -146,7 +153,7 @@ defmodule JidoTest.Exec.ChainCoverageTest do
   describe "chain/3 run_action branch coverage" do
     test "handles {:ok, result, directive} action returns" do
       capture_log(fn ->
-        assert {:ok, result} =
+        assert {:ok, result, :noop_directive} =
                  Chain.chain([OkWithDirectiveAction], %{base: true})
 
         assert result.base == true
@@ -154,9 +161,20 @@ defmodule JidoTest.Exec.ChainCoverageTest do
       end)
     end
 
+    test "keeps latest directive when following actions return {:ok, map}" do
+      capture_log(fn ->
+        assert {:ok, result, :noop_directive} =
+                 Chain.chain([OkWithDirectiveAction, PlainMapAction], %{base: true})
+
+        assert result.base == true
+        assert result.merged == true
+        assert result.plain == true
+      end)
+    end
+
     test "handles {:error, error, directive} action returns" do
       capture_log(fn ->
-        assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
+        assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error, :noop_directive} =
                  Chain.chain([ErrorWithDirectiveAction], %{base: true})
 
         assert error.message =~ "with directive"

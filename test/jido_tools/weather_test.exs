@@ -5,6 +5,7 @@ defmodule JidoTest.Tools.WeatherTest do
   import Mimic
 
   alias Jido.Tools.Weather
+  alias Jido.Tools.Weather.ByLocation
 
   @moduletag :capture_log
 
@@ -268,6 +269,16 @@ defmodule JidoTest.Tools.WeatherTest do
   end
 
   describe "run/2 basic functionality" do
+    test "keeps default periods aligned with weather_by_location" do
+      assert ByLocation.default_periods() == 7
+
+      assert {:ok, weather_params} = Weather.validate_params(%{})
+      assert weather_params.periods == ByLocation.default_periods()
+
+      assert {:ok, by_location_params} = ByLocation.validate_params(%{location: @chicago_coords})
+      assert by_location_params.periods == ByLocation.default_periods()
+    end
+
     test "uses Chicago coordinates as default location with default text format" do
       setup_weather_mocks()
 

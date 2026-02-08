@@ -10,6 +10,12 @@ defmodule Jido.Tools.Weather.ByLocation do
   """
 
   alias Jido.Action.Error
+  alias Jido.Tools.Weather.Config
+
+  @default_periods Config.default_periods()
+
+  @spec default_periods() :: pos_integer()
+  def default_periods, do: @default_periods
 
   use Jido.Action,
     name: "weather_by_location",
@@ -25,7 +31,7 @@ defmodule Jido.Tools.Weather.ByLocation do
       ],
       periods: [
         type: :integer,
-        default: 7,
+        default: @default_periods,
         doc: "Number of forecast periods to return"
       ],
       format: [
@@ -71,7 +77,7 @@ defmodule Jido.Tools.Weather.ByLocation do
   defp get_forecast(forecast_url, params, context) do
     forecast_params = %{
       forecast_url: forecast_url,
-      periods: params[:periods] || 7,
+      periods: params[:periods] || @default_periods,
       format: if(params[:format] == :text, do: :detailed, else: params[:format])
     }
 

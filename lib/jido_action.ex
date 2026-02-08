@@ -155,8 +155,12 @@ defmodule Jido.Action do
   > downstream Actions or systems.
   """
 
+  alias Jido.Action.Config
   alias Jido.Action.Error
   alias Jido.Action.Tool
+
+  @default_compensation_max_retries 1
+  @default_compensation_timeout_ms Config.default_compensation_timeout()
 
   # Define Zoi schema for Action metadata
   @schema Zoi.struct(
@@ -212,10 +216,20 @@ defmodule Jido.Action do
                           compensation:
                             Zoi.object(%{
                               enabled: Zoi.boolean() |> Zoi.default(false),
-                              max_retries: Zoi.integer() |> Zoi.min(0) |> Zoi.default(1),
-                              timeout: Zoi.integer() |> Zoi.min(0) |> Zoi.default(5000)
+                              max_retries:
+                                Zoi.integer()
+                                |> Zoi.min(0)
+                                |> Zoi.default(@default_compensation_max_retries),
+                              timeout:
+                                Zoi.integer()
+                                |> Zoi.min(0)
+                                |> Zoi.default(@default_compensation_timeout_ms)
                             })
-                            |> Zoi.default(%{enabled: false, max_retries: 1, timeout: 5000}),
+                            |> Zoi.default(%{
+                              enabled: false,
+                              max_retries: @default_compensation_max_retries,
+                              timeout: @default_compensation_timeout_ms
+                            }),
                           schema:
                             Zoi.any(
                               description:
@@ -285,10 +299,10 @@ defmodule Jido.Action do
   - `category` (optional) - The category of the Action.
   - `tags` (optional, default: []) - A list of tags associated with the Action.
   - `vsn` (optional, default: `"0.1.0"`) - Semantic version of the Action (for example, `"1.2.3"`).
-  - `compensation` (optional, default: %{enabled: false, max_retries: 1, timeout: 5000}) - Compensation configuration with keys:
+  - `compensation` (optional, default: %{enabled: false, max_retries: #{@default_compensation_max_retries}, timeout: #{@default_compensation_timeout_ms}}) - Compensation configuration with keys:
     - `enabled` (default: false) - Whether compensation is enabled
-    - `max_retries` (default: 1) - Reserved for future use (compensation retries not yet implemented)
-    - `timeout` (default: 5000) - Timeout in milliseconds for compensation execution
+    - `max_retries` (default: #{@default_compensation_max_retries}) - Reserved for future use (compensation retries not yet implemented)
+    - `timeout` (default: #{@default_compensation_timeout_ms}) - Timeout in milliseconds for compensation execution
   - `schema` (optional, default: []) - A NimbleOptions or Zoi schema for validating the Action's input parameters.
   - `output_schema` (optional, default: []) - A NimbleOptions or Zoi schema for validating the Action's output. Only specified fields are validated.
 

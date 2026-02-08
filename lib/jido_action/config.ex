@@ -51,6 +51,9 @@ defmodule Jido.Action.Config do
     )
   end
 
+  @spec default_compensation_timeout() :: non_neg_integer()
+  def default_compensation_timeout, do: @default_compensation_timeout
+
   @spec async_down_grace_period_ms() :: non_neg_integer()
   def async_down_grace_period_ms do
     Application.get_env(

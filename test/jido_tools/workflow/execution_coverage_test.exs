@@ -57,6 +57,32 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
     end
   end
 
+  defmodule OkWithDirectiveAction do
+    use Jido.Action,
+      name: "ok_with_directive_action",
+      description: "Returns ok with directive",
+      schema: []
+
+    @impl true
+    def run(_params, _context) do
+      {:ok, %{done: true}, :workflow_directive}
+    end
+  end
+
+  defmodule ErrorWithDirectiveAction do
+    use Jido.Action,
+      name: "error_with_directive_action",
+      description: "Returns error with directive",
+      schema: []
+
+    alias Jido.Action.Error
+
+    @impl true
+    def run(_params, _context) do
+      {:error, Error.execution_error("directive failure"), :workflow_error_directive}
+    end
+  end
+
   defmodule RetryProbeAction do
     use Jido.Action,
       name: "retry_probe_action",
@@ -123,6 +149,37 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
 
       assert {:error, %Jido.Action.Error.ExecutionFailureError{}} =
                Execution.execute_workflow(steps, %{}, %{}, TestWorkflow)
+    end
+  end
+
+  describe "directive propagation" do
+    test "execute_step/4 returns directive from action result" do
+      step = {:step, [name: "ok_directive"], [{OkWithDirectiveAction, []}]}
+
+      assert {:ok, %{done: true}, :workflow_directive} =
+               Execution.execute_step(step, %{}, %{}, TestWorkflow)
+    end
+
+    test "execute_workflow/4 returns latest successful directive" do
+      steps = [
+        {:step, [name: "ok"], [{OkAction, []}]},
+        {:step, [name: "ok_directive"], [{OkWithDirectiveAction, []}]}
+      ]
+
+      assert {:ok, %{done: true}, :workflow_directive} =
+               Execution.execute_workflow(steps, %{}, %{}, TestWorkflow)
+    end
+
+    test "execute_workflow/4 returns directive from failing step" do
+      steps = [
+        {:step, [name: "failing_directive"], [{ErrorWithDirectiveAction, []}]}
+      ]
+
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error,
+              :workflow_error_directive} =
+               Execution.execute_workflow(steps, %{}, %{}, TestWorkflow)
+
+      assert error.message =~ "directive failure"
     end
   end
 

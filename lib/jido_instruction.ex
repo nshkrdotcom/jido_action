@@ -246,8 +246,7 @@ defmodule Jido.Instruction do
       iex> Instruction.new(action: MyAction)
       {:ok, %Instruction{action: MyAction}}
 
-      iex> Instruction.new(%{params: %{value: 1}})
-      {:error, :missing_action}
+      iex> {:error, %Jido.Action.Error.InvalidInputError{}} = Instruction.new(%{params: %{value: 1}})
   """
   @spec new(map() | keyword()) ::
           {:ok, t()} | {:error, Exception.t()}

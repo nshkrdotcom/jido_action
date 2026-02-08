@@ -4,6 +4,13 @@ defmodule Jido.Tools.Github.Issues do
 
   Provides actions for creating, listing, filtering, finding, and updating GitHub issues.
   """
+
+  @doc false
+  @spec get_client(map(), map()) :: any()
+  def get_client(params, context) do
+    params[:client] || context[:client] || get_in(context, [:tool_context, :client])
+  end
+
   defmodule Create do
     @moduledoc "Action for creating new GitHub issues."
 
@@ -26,7 +33,7 @@ defmodule Jido.Tools.Github.Issues do
 
     @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
     def run(params, context) do
-      client = get_client(params, context)
+      client = Jido.Tools.Github.Issues.get_client(params, context)
 
       body = %{
         title: params.title,
@@ -44,10 +51,6 @@ defmodule Jido.Tools.Github.Issues do
          data: result,
          raw: result
        }}
-    end
-
-    defp get_client(params, context) do
-      params[:client] || context[:client] || get_in(context, [:tool_context, :client])
     end
   end
 
@@ -75,7 +78,7 @@ defmodule Jido.Tools.Github.Issues do
 
     @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
     def run(params, context) do
-      client = get_client(params, context)
+      client = Jido.Tools.Github.Issues.get_client(params, context)
 
       filters = %{
         state: params[:state],
@@ -95,10 +98,6 @@ defmodule Jido.Tools.Github.Issues do
          data: result,
          raw: result
        }}
-    end
-
-    defp get_client(params, context) do
-      params[:client] || context[:client] || get_in(context, [:tool_context, :client])
     end
   end
 
@@ -120,7 +119,7 @@ defmodule Jido.Tools.Github.Issues do
 
     @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
     def run(params, context) do
-      client = get_client(params, context)
+      client = Jido.Tools.Github.Issues.get_client(params, context)
       result = Tentacat.Issues.find(client, params.owner, params.repo, params.number)
 
       {:ok,
@@ -129,10 +128,6 @@ defmodule Jido.Tools.Github.Issues do
          data: result,
          raw: result
        }}
-    end
-
-    defp get_client(params, context) do
-      params[:client] || context[:client] || get_in(context, [:tool_context, :client])
     end
   end
 
@@ -153,7 +148,7 @@ defmodule Jido.Tools.Github.Issues do
 
     @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
     def run(params, context) do
-      client = get_client(params, context)
+      client = Jido.Tools.Github.Issues.get_client(params, context)
       result = Tentacat.Issues.list(client, params.owner, params.repo)
 
       {:ok,
@@ -162,10 +157,6 @@ defmodule Jido.Tools.Github.Issues do
          data: result,
          raw: result
        }}
-    end
-
-    defp get_client(params, context) do
-      params[:client] || context[:client] || get_in(context, [:tool_context, :client])
     end
   end
 
@@ -193,7 +184,7 @@ defmodule Jido.Tools.Github.Issues do
 
     @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
     def run(params, context) do
-      client = get_client(params, context)
+      client = Jido.Tools.Github.Issues.get_client(params, context)
 
       body = %{
         title: params[:title],
@@ -213,10 +204,6 @@ defmodule Jido.Tools.Github.Issues do
          data: result,
          raw: result
        }}
-    end
-
-    defp get_client(params, context) do
-      params[:client] || context[:client] || get_in(context, [:tool_context, :client])
     end
   end
 end

@@ -109,7 +109,10 @@ defmodule Jido.Tools.Workflow do
   Takes a step tuple, parameters, and context and returns the result.
   """
   @callback execute_step(step :: tuple(), params :: map(), context :: map()) ::
-              {:ok, map()} | {:error, any()}
+              {:ok, map()}
+              | {:ok, map(), any()}
+              | {:error, any()}
+              | {:error, any(), any()}
 
   # Make the callback optional
   @optional_callbacks [execute_step: 3]
@@ -203,7 +206,8 @@ defmodule Jido.Tools.Workflow do
 
           Handles step, branch, converge, and parallel step types.
           """
-          @spec execute_step(tuple(), map(), map()) :: {:ok, any()} | {:error, any()}
+          @spec execute_step(tuple(), map(), map()) ::
+                  {:ok, any()} | {:ok, any(), any()} | {:error, any()} | {:error, any(), any()}
           def execute_step(step, params, context) do
             Execution.execute_step(step, params, context, __MODULE__)
           end

@@ -75,8 +75,16 @@ defmodule Jido.Tools.ActionPlan do
             transform_result(result)
             |> Runner.normalize_transform_result()
 
+          {:ok, result, directive} ->
+            transform_result(result)
+            |> Runner.normalize_transform_result()
+            |> Runner.attach_directive(directive)
+
           {:error, reason} ->
             {:error, Runner.ensure_error(reason, "Plan execution failed")}
+
+          {:error, reason, directive} ->
+            {:error, Runner.ensure_error(reason, "Plan execution failed"), directive}
         end
       end
 
