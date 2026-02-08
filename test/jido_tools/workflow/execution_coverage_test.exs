@@ -4,6 +4,7 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
   """
   use JidoTest.ActionCase, async: true
 
+  alias Jido.Exec
   alias Jido.Tools.Workflow.Execution
 
   @moduletag :capture_log
@@ -119,6 +120,28 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
     end
   end
 
+  defmodule SleepAndNotifyAction do
+    use Jido.Action,
+      name: "sleep_and_notify_action",
+      description: "Sleeps and optionally notifies a process",
+      schema: [
+        ms: [type: :non_neg_integer, required: true],
+        notify: [type: :any]
+      ]
+
+    @impl true
+    def run(%{ms: ms} = params, _context) do
+      Process.sleep(ms)
+
+      case Map.get(params, :notify) do
+        pid when is_pid(pid) -> send(pid, :parallel_task_completed)
+        _ -> :ok
+      end
+
+      {:ok, %{slept: ms}}
+    end
+  end
+
   defmodule TestWorkflow do
     use Jido.Tools.Workflow,
       name: "test_execution_workflow",
@@ -126,6 +149,22 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
       schema: [],
       workflow: [
         {:step, [name: "ok_step"], [{OkAction, []}]}
+      ]
+  end
+
+  defmodule ParallelTimeoutWorkflow do
+    use Jido.Tools.Workflow,
+      name: "parallel_timeout_workflow",
+      description: "Workflow used to verify parallel task cancellation on timeout",
+      schema: [
+        notify: [type: :any]
+      ],
+      workflow: [
+        {:parallel, [name: "par_cancel", max_concurrency: 2],
+         [
+           {:step, [name: "sleep_1"], [{SleepAndNotifyAction, %{ms: 300}}]},
+           {:step, [name: "sleep_2"], [{SleepAndNotifyAction, %{ms: 300}}]}
+         ]}
       ]
   end
 
@@ -211,7 +250,7 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
       assert length(results) == 2
     end
 
-    test "supports instance context for parallel execution supervisor resolution" do
+    test "supports instance context for parallel execution" do
       instructions = [
         {:step, [name: "p1"], [{OkAction, []}]},
         {:step, [name: "p2"], [{OkAction, []}]}
@@ -241,6 +280,16 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
              } = result
 
       assert message =~ "Parallel task exited"
+    end
+
+    test "parallel tasks do not outlive workflow timeout" do
+      assert {:error, %Jido.Action.Error.TimeoutError{}} =
+               Exec.run(ParallelTimeoutWorkflow, %{notify: self()}, %{},
+                 timeout: 50,
+                 max_retries: 0
+               )
+
+      refute_receive :parallel_task_completed, 700
     end
   end
 

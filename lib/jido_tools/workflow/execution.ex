@@ -5,7 +5,6 @@ defmodule Jido.Tools.Workflow.Execution do
   alias Jido.Action.Error
   alias Jido.Action.Util
   alias Jido.Exec
-  alias Jido.Exec.Supervisors
   alias Jido.Instruction
 
   @type execution_result ::
@@ -124,11 +123,17 @@ defmodule Jido.Tools.Workflow.Execution do
   end
 
   defp default_internal_retry_opts(opts) when is_list(opts) do
-    if Keyword.keyword?(opts) and not Keyword.has_key?(opts, :max_retries) do
-      Keyword.put(opts, :max_retries, 0)
+    if Keyword.keyword?(opts) do
+      opts
+      |> maybe_put_default(:max_retries, 0)
+      |> maybe_put_default(:timeout, :infinity)
     else
       opts
     end
+  end
+
+  defp maybe_put_default(opts, key, value) when is_list(opts) and is_atom(key) do
+    if Keyword.has_key?(opts, key), do: opts, else: Keyword.put(opts, key, value)
   end
 
   defp execute_branch(condition, true_branch, false_branch, params, context, _metadata, module)
@@ -160,31 +165,39 @@ defmodule Jido.Tools.Workflow.Execution do
     max_concurrency = Keyword.get(metadata, :max_concurrency, System.schedulers_online())
     timeout = resolve_parallel_timeout(metadata, context)
 
-    # Extract jido instance from context if present (set by parent workflow)
-    jido_opts = if context[:__jido__], do: [jido: context[:__jido__]], else: []
+    # Scope parallel child tasks under a supervisor linked to this workflow process.
+    # If the workflow is terminated (for example on timeout), this supervisor exits,
+    # ensuring in-flight parallel tasks are also terminated.
+    case Task.Supervisor.start_link() do
+      {:ok, task_sup} ->
+        try do
+          stream_opts = [
+            ordered: true,
+            max_concurrency: max_concurrency,
+            timeout: timeout,
+            on_timeout: :kill_task
+          ]
 
-    # Resolve supervisor based on jido: option (defaults to global)
-    task_sup = Supervisors.task_supervisor(jido_opts)
+          results =
+            Task.Supervisor.async_stream_nolink(
+              task_sup,
+              instructions,
+              fn instruction ->
+                execute_parallel_instruction(instruction, params, context, module)
+              end,
+              stream_opts
+            )
+            |> Enum.map(&handle_stream_result/1)
 
-    stream_opts = [
-      ordered: true,
-      max_concurrency: max_concurrency,
-      timeout: timeout,
-      on_timeout: :kill_task
-    ]
+          {:ok, %{parallel_results: results}}
+        after
+          stop_parallel_supervisor(task_sup)
+        end
 
-    results =
-      Task.Supervisor.async_stream_nolink(
-        task_sup,
-        instructions,
-        fn instruction ->
-          execute_parallel_instruction(instruction, params, context, module)
-        end,
-        stream_opts
-      )
-      |> Enum.map(&handle_stream_result/1)
-
-    {:ok, %{parallel_results: results}}
+      {:error, reason} ->
+        {:error,
+         Error.execution_error("Failed to start parallel task supervisor", %{reason: reason})}
+    end
   end
 
   defp handle_stream_result({:ok, value}), do: value
@@ -241,6 +254,14 @@ defmodule Jido.Tools.Workflow.Execution do
   defp normalize_timeout(:infinity), do: :infinity
   defp normalize_timeout(timeout) when is_integer(timeout) and timeout >= 0, do: timeout
   defp normalize_timeout(_invalid), do: Config.exec_timeout()
+
+  defp stop_parallel_supervisor(task_sup) do
+    if Process.alive?(task_sup) do
+      Supervisor.stop(task_sup, :normal)
+    else
+      :ok
+    end
+  end
 
   defp ensure_error(reason), do: Error.ensure_error(reason, "Workflow step failed")
 end
