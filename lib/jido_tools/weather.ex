@@ -36,8 +36,8 @@ defmodule Jido.Tools.Weather do
         default: @default_periods
       ],
       format: [
-        type: {:in, [:text, :map, :detailed]},
-        doc: "Output format (text/map/detailed)",
+        type: {:in, [:text, :summary, :detailed]},
+        doc: "Output format (text/summary/detailed)",
         default: :text
       ]
     ]
@@ -91,7 +91,7 @@ defmodule Jido.Tools.Weather do
   @spec demo() :: :ok
   def demo do
     demo_text_format()
-    demo_map_format()
+    demo_summary_format()
     demo_detailed_format()
   end
 
@@ -100,9 +100,9 @@ defmodule Jido.Tools.Weather do
     handle_demo_result(run(%{format: :text}, %{}))
   end
 
-  defp demo_map_format do
-    IO.puts("\n=== Testing NWS API with map format (LA) ===")
-    handle_demo_result(run(%{location: "34.0522,-118.2437", format: :map}, %{}))
+  defp demo_summary_format do
+    IO.puts("\n=== Testing NWS API with summary format (LA) ===")
+    handle_demo_result(run(%{location: "34.0522,-118.2437", format: :summary}, %{}))
   end
 
   defp demo_detailed_format do

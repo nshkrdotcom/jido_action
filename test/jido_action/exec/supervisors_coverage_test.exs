@@ -19,6 +19,11 @@ defmodule JidoTest.Exec.SupervisorsCoverageTest do
       assert Supervisors.task_supervisor(jido: MyApp.Jido) == MyApp.Jido.TaskSupervisor
     end
 
+    test "returns explicitly provided task supervisor when configured" do
+      assert Supervisors.task_supervisor(task_supervisor: Custom.TaskSupervisor) ==
+               Custom.TaskSupervisor
+    end
+
     test "raises for non-atom jido option" do
       assert_raise ArgumentError, ~r/Expected :jido option to be an atom/, fn ->
         Supervisors.task_supervisor(jido: "not_an_atom")
@@ -48,6 +53,12 @@ defmodule JidoTest.Exec.SupervisorsCoverageTest do
     test "raises for non-atom jido option" do
       assert_raise ArgumentError, fn ->
         Supervisors.task_supervisor_name(jido: 123)
+      end
+    end
+
+    test "raises for atom that is not an Elixir module alias" do
+      assert_raise ArgumentError, ~r/Elixir module atom/, fn ->
+        Supervisors.task_supervisor_name(jido: :not_a_module_alias)
       end
     end
   end

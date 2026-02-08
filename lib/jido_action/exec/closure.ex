@@ -66,7 +66,7 @@ defmodule Jido.Exec.Closure do
   @spec async_closure(action(), context(), run_opts()) :: (params() -> Exec.async_ref())
   def async_closure(action, context \\ %{}, opts \\ []) when is_atom(action) and is_list(opts) do
     fn params ->
-      Exec.run_async(action, params, context, opts)
+      Exec.run_async!(action, params, context, opts)
     end
   end
 end

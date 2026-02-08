@@ -65,15 +65,7 @@ defmodule Jido.Tools.ActionPlan.Runner do
   @doc """
   Wraps an arbitrary reason in an `Error` struct when it isn't one already.
   """
-  def ensure_error(%_{} = error, _message) when is_exception(error), do: error
-
-  def ensure_error(reason, _message) when is_binary(reason) do
-    Error.execution_error(reason)
-  end
-
-  def ensure_error(reason, message) do
-    Error.execution_error(message, %{reason: reason})
-  end
+  def ensure_error(reason, message), do: Error.ensure_error(reason, message)
 
   # -- private helpers -------------------------------------------------------
 

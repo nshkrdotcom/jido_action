@@ -202,4 +202,15 @@ defmodule Jido.Action.Util do
   end
 
   def convert_nested_opt(other), do: other
+
+  @doc """
+  Returns the first non-nil value from a list, or a default.
+  """
+  @spec first_present(list(), any()) :: any()
+  def first_present(values, default \\ nil) when is_list(values) do
+    Enum.find_value(values, default, fn
+      nil -> false
+      value -> value
+    end)
+  end
 end

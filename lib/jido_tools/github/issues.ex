@@ -5,10 +5,69 @@ defmodule Jido.Tools.Github.Issues do
   Provides actions for creating, listing, filtering, finding, and updating GitHub issues.
   """
 
+  alias Jido.Action.Error
+  alias Jido.Tools.Util
+
   @doc false
   @spec get_client(map(), map()) :: any()
   def get_client(params, context) do
-    params[:client] || context[:client] || get_in(context, [:tool_context, :client])
+    Util.get_from(params, context, [:client], [[:client], [:tool_context, :client]])
+  end
+
+  @doc false
+  @spec success_payload(any()) :: {:ok, map()}
+  def success_payload(data) do
+    {:ok,
+     %{
+       status: "success",
+       data: data,
+       raw: data
+     }}
+  end
+
+  @doc false
+  @spec issues_request(String.t(), map(), (-> any())) :: {:ok, any()} | {:error, Error.t()}
+  def issues_request(operation, metadata, request_fun)
+      when is_binary(operation) and is_map(metadata) and is_function(request_fun, 0) do
+    request_fun.()
+    |> normalize_tentacat_response(operation, metadata)
+  rescue
+    e ->
+      {:error,
+       Error.execution_error(
+         "GitHub issues #{operation} failed: #{Exception.message(e)}",
+         Map.put(metadata, :exception, e)
+       )}
+  catch
+    kind, reason ->
+      {:error,
+       Error.execution_error(
+         "GitHub issues #{operation} failed",
+         Map.merge(metadata, %{kind: kind, reason: reason})
+       )}
+  end
+
+  defp normalize_tentacat_response({:ok, data}, _operation, _metadata), do: {:ok, data}
+
+  defp normalize_tentacat_response({:error, reason}, operation, metadata)
+       when is_binary(reason) do
+    {:error, Error.execution_error("GitHub issues #{operation} failed: #{reason}", metadata)}
+  end
+
+  defp normalize_tentacat_response({:error, reason}, operation, metadata) do
+    {:error, Error.ensure_error(reason, "GitHub issues #{operation} failed", metadata)}
+  end
+
+  defp normalize_tentacat_response(data, _operation, _metadata)
+       when is_map(data) or is_list(data),
+       do: {:ok, data}
+
+  defp normalize_tentacat_response(other, operation, metadata) do
+    {:error,
+     Error.execution_error(
+       "Unexpected GitHub issues #{operation} response",
+       Map.merge(metadata, %{response: other})
+     )}
   end
 
   defmodule Create do
@@ -36,21 +95,21 @@ defmodule Jido.Tools.Github.Issues do
       client = Jido.Tools.Github.Issues.get_client(params, context)
 
       body = %{
-        title: params.title,
-        body: params.body,
-        assignee: params.assignee,
-        milestone: params.milestone,
-        labels: params.labels
+        title: params[:title],
+        body: params[:body],
+        assignee: params[:assignee],
+        milestone: params[:milestone],
+        labels: params[:labels]
       }
 
-      result = Tentacat.Issues.create(client, params.owner, params.repo, body)
-
-      {:ok,
-       %{
-         status: "success",
-         data: result,
-         raw: result
-       }}
+      with {:ok, result} <-
+             Jido.Tools.Github.Issues.issues_request(
+               "create",
+               %{owner: params[:owner], repo: params[:repo], title: params[:title]},
+               fn -> Tentacat.Issues.create(client, params[:owner], params[:repo], body) end
+             ) do
+        Jido.Tools.Github.Issues.success_payload(result)
+      end
     end
   end
 
@@ -90,14 +149,14 @@ defmodule Jido.Tools.Github.Issues do
         since: params[:since]
       }
 
-      result = Tentacat.Issues.filter(client, params.owner, params.repo, filters)
-
-      {:ok,
-       %{
-         status: "success",
-         data: result,
-         raw: result
-       }}
+      with {:ok, result} <-
+             Jido.Tools.Github.Issues.issues_request(
+               "filter",
+               %{owner: params[:owner], repo: params[:repo], filters: filters},
+               fn -> Tentacat.Issues.filter(client, params[:owner], params[:repo], filters) end
+             ) do
+        Jido.Tools.Github.Issues.success_payload(result)
+      end
     end
   end
 
@@ -120,14 +179,17 @@ defmodule Jido.Tools.Github.Issues do
     @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
     def run(params, context) do
       client = Jido.Tools.Github.Issues.get_client(params, context)
-      result = Tentacat.Issues.find(client, params.owner, params.repo, params.number)
 
-      {:ok,
-       %{
-         status: "success",
-         data: result,
-         raw: result
-       }}
+      with {:ok, result} <-
+             Jido.Tools.Github.Issues.issues_request(
+               "find",
+               %{owner: params[:owner], repo: params[:repo], number: params[:number]},
+               fn ->
+                 Tentacat.Issues.find(client, params[:owner], params[:repo], params[:number])
+               end
+             ) do
+        Jido.Tools.Github.Issues.success_payload(result)
+      end
     end
   end
 
@@ -149,14 +211,15 @@ defmodule Jido.Tools.Github.Issues do
     @spec run(map(), map()) :: {:ok, map()} | {:error, Jido.Action.Error.t()}
     def run(params, context) do
       client = Jido.Tools.Github.Issues.get_client(params, context)
-      result = Tentacat.Issues.list(client, params.owner, params.repo)
 
-      {:ok,
-       %{
-         status: "success",
-         data: result,
-         raw: result
-       }}
+      with {:ok, result} <-
+             Jido.Tools.Github.Issues.issues_request(
+               "list",
+               %{owner: params[:owner], repo: params[:repo]},
+               fn -> Tentacat.Issues.list(client, params[:owner], params[:repo]) end
+             ) do
+        Jido.Tools.Github.Issues.success_payload(result)
+      end
     end
   end
 
@@ -196,14 +259,17 @@ defmodule Jido.Tools.Github.Issues do
       }
 
       result =
-        Tentacat.Issues.update(client, params.owner, params.repo, params.number, body)
+        Jido.Tools.Github.Issues.issues_request(
+          "update",
+          %{owner: params[:owner], repo: params[:repo], number: params[:number]},
+          fn ->
+            Tentacat.Issues.update(client, params[:owner], params[:repo], params[:number], body)
+          end
+        )
 
-      {:ok,
-       %{
-         status: "success",
-         data: result,
-         raw: result
-       }}
+      with {:ok, response} <- result do
+        Jido.Tools.Github.Issues.success_payload(response)
+      end
     end
   end
 end

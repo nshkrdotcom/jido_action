@@ -1,7 +1,9 @@
 defmodule Jido.Tools.Workflow.Execution do
   @moduledoc false
 
+  alias Jido.Action.Config
   alias Jido.Action.Error
+  alias Jido.Action.Util
   alias Jido.Exec
   alias Jido.Exec.Supervisors
   alias Jido.Instruction
@@ -156,6 +158,7 @@ defmodule Jido.Tools.Workflow.Execution do
 
   defp execute_parallel(instructions, params, context, metadata, module) do
     max_concurrency = Keyword.get(metadata, :max_concurrency, System.schedulers_online())
+    timeout = resolve_parallel_timeout(metadata, context)
 
     # Extract jido instance from context if present (set by parent workflow)
     jido_opts = if context[:__jido__], do: [jido: context[:__jido__]], else: []
@@ -166,7 +169,7 @@ defmodule Jido.Tools.Workflow.Execution do
     stream_opts = [
       ordered: true,
       max_concurrency: max_concurrency,
-      timeout: :infinity,
+      timeout: timeout,
       on_timeout: :kill_task
     ]
 
@@ -205,7 +208,39 @@ defmodule Jido.Tools.Workflow.Execution do
       %{error: Error.execution_error("Parallel step caught", %{kind: kind, reason: reason})}
   end
 
-  defp ensure_error(%_{} = error) when is_exception(error), do: error
-  defp ensure_error(reason) when is_binary(reason), do: Error.execution_error(reason)
-  defp ensure_error(reason), do: Error.execution_error("Workflow step failed", %{reason: reason})
+  defp resolve_parallel_timeout(metadata, context) do
+    timeout =
+      Util.first_present(
+        [
+          metadata_timeout(metadata),
+          context_timeout(context)
+        ],
+        Config.exec_timeout()
+      )
+
+    normalize_timeout(timeout)
+  end
+
+  @spec metadata_timeout(Keyword.t()) :: non_neg_integer() | :infinity | nil
+  defp metadata_timeout(metadata) when is_list(metadata) do
+    Util.first_present([
+      Keyword.get(metadata, :parallel_timeout),
+      Keyword.get(metadata, :timeout)
+    ])
+  end
+
+  defp context_timeout(context) when is_map(context) do
+    Util.first_present([
+      Map.get(context, :parallel_timeout),
+      Map.get(context, "parallel_timeout")
+    ])
+  end
+
+  defp context_timeout(_), do: nil
+
+  defp normalize_timeout(:infinity), do: :infinity
+  defp normalize_timeout(timeout) when is_integer(timeout) and timeout >= 0, do: timeout
+  defp normalize_timeout(_invalid), do: Config.exec_timeout()
+
+  defp ensure_error(reason), do: Error.ensure_error(reason, "Workflow step failed")
 end

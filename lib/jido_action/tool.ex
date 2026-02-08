@@ -13,9 +13,11 @@ defmodule Jido.Action.Tool do
 
   - `convert_params_using_schema/2` - Normalizes LLM arguments (string keys → atom keys, type coercion)
   - `build_parameters_schema/1` - Converts action schema to JSON Schema format
+  - `execute_action_raw/3` - Executes an action with normalized `{:ok, _} | {:error, exception}` tuples
   - `execute_action/3` - Executes an action with schema-based param conversion
   """
 
+  alias Jido.Action.Error
   alias Jido.Action.Schema
 
   @type tool :: %{
@@ -24,6 +26,7 @@ defmodule Jido.Action.Tool do
           function: (map(), map() -> {:ok, String.t()} | {:error, String.t()}),
           parameters_schema: map()
         }
+  @type raw_tool_result :: {:ok, any()} | {:error, Exception.t()}
 
   @doc """
   Converts a Jido Exec into a tool representation.
@@ -63,19 +66,33 @@ defmodule Jido.Action.Tool do
   """
   @spec execute_action(module(), map(), map()) :: {:ok, String.t()} | {:error, String.t()}
   def execute_action(action, params, context) do
+    case execute_action_raw(action, params, context) do
+      {:ok, result} ->
+        {:ok, Jason.encode!(result)}
+
+      {:error, %_{} = error} when is_exception(error) ->
+        {:error, Jason.encode!(%{error: inspect(error)})}
+    end
+  end
+
+  @doc """
+  Executes an action and returns normalized Jido execution tuples.
+  """
+  @spec execute_action_raw(module(), map(), map()) :: raw_tool_result()
+  def execute_action_raw(action, params, context) do
     # Convert string keys to atom keys and handle type conversion based on schema
     converted_params = convert_params_using_schema(params, action.schema())
     safe_context = context || %{}
 
     case Jido.Exec.run(action, converted_params, safe_context) do
       {:ok, result} ->
-        {:ok, Jason.encode!(result)}
+        {:ok, result}
 
       {:error, %_{} = error} when is_exception(error) ->
-        {:error, Jason.encode!(%{error: inspect(error)})}
+        {:error, error}
 
       {:error, reason} ->
-        {:error, Jason.encode!(%{error: inspect(reason)})}
+        {:error, Error.ensure_error(reason, "Tool action failed")}
     end
   end
 

@@ -289,6 +289,22 @@ defmodule Jido.Action.Error do
   end
 
   @doc """
+  Normalizes arbitrary failure reasons to a concrete execution error struct.
+  """
+  @spec ensure_error(any(), String.t(), map()) :: Exception.t()
+  def ensure_error(reason, message \\ "Execution failed", details \\ %{})
+
+  def ensure_error(%_{} = error, _message, _details) when is_exception(error), do: error
+
+  def ensure_error(reason, _message, _details) when is_binary(reason) do
+    execution_error(reason)
+  end
+
+  def ensure_error(reason, message, details) do
+    execution_error(message, Map.put(details, :reason, reason))
+  end
+
+  @doc """
   Formats a NimbleOptions configuration error for display.
   Used when configuration validation fails during compilation.
   """

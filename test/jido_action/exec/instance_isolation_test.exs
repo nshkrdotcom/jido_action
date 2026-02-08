@@ -126,9 +126,17 @@ defmodule JidoTest.Exec.InstanceIsolationTest do
       end)
     end
 
-    test "raises when instance supervisor not running for async" do
+    test "returns error when instance supervisor not running for async" do
+      assert {:error, %ArgumentError{} = error} =
+               Exec.run_async(BasicAction, %{value: 42}, %{}, jido: Missing.Async.Instance)
+
+      assert error.message =~ "Instance task supervisor"
+      assert error.message =~ "is not running"
+    end
+
+    test "run_async! raises when instance supervisor not running for async" do
       assert_raise ArgumentError, ~r/Instance task supervisor.*is not running/, fn ->
-        Exec.run_async(BasicAction, %{value: 42}, %{}, jido: Missing.Async.Instance)
+        Exec.run_async!(BasicAction, %{value: 42}, %{}, jido: Missing.Async.Instance)
       end
     end
   end

@@ -35,6 +35,7 @@ defmodule Jido.Exec.Supervisors do
 
   ## Options
 
+  - `:task_supervisor` - Explicit supervisor name override (atom). Preferred when dynamic composition is undesirable.
   - `:jido` - Optional instance name (atom). When provided, returns the
     instance-scoped TaskSupervisor. When absent, returns the global supervisor.
     This should be a known module atom (for example `MyApp.Jido`).
@@ -58,19 +59,16 @@ defmodule Jido.Exec.Supervisors do
   """
   @spec task_supervisor(keyword()) :: atom()
   def task_supervisor(opts) when is_list(opts) do
-    case Keyword.fetch(opts, :jido) do
-      :error ->
-        Jido.Action.TaskSupervisor
-
-      {:ok, nil} ->
-        Jido.Action.TaskSupervisor
-
-      {:ok, jido} when is_atom(jido) ->
-        Module.concat(jido, TaskSupervisor)
+    case Keyword.fetch(opts, :task_supervisor) do
+      {:ok, task_supervisor} when is_atom(task_supervisor) ->
+        task_supervisor
 
       {:ok, other} ->
         raise ArgumentError,
-              "Expected :jido option to be an atom (module), got: #{inspect(other)}"
+              "Expected :task_supervisor option to be an atom, got: #{inspect(other)}"
+
+      :error ->
+        task_supervisor_name(opts)
     end
   end
 
@@ -104,11 +102,28 @@ defmodule Jido.Exec.Supervisors do
         Jido.Action.TaskSupervisor
 
       {:ok, jido} when is_atom(jido) ->
+        validate_jido_module_atom!(jido)
         Module.concat(jido, TaskSupervisor)
 
       {:ok, other} ->
         raise ArgumentError,
               "Expected :jido option to be an atom (module), got: #{inspect(other)}"
+    end
+  end
+
+  def task_supervisor_name(opts) do
+    raise ArgumentError,
+          "Expected opts to be a keyword list, got: #{inspect(opts)}"
+  end
+
+  defp validate_jido_module_atom!(jido) do
+    jido_name = Atom.to_string(jido)
+
+    if String.starts_with?(jido_name, "Elixir.") and String.contains?(jido_name, ".") do
+      :ok
+    else
+      raise ArgumentError,
+            "Expected :jido option to be an Elixir module atom (for example MyApp.Jido), got: #{inspect(jido)}"
     end
   end
 end

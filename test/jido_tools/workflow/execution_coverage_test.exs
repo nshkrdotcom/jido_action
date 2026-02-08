@@ -57,6 +57,19 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
     end
   end
 
+  defmodule SlowAction do
+    use Jido.Action,
+      name: "slow_action",
+      description: "Sleeps before returning",
+      schema: []
+
+    @impl true
+    def run(_params, _context) do
+      Process.sleep(100)
+      {:ok, %{done: true}}
+    end
+  end
+
   defmodule OkWithDirectiveAction do
     use Jido.Action,
       name: "ok_with_directive_action",
@@ -211,6 +224,23 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
                Execution.execute_step(step, %{}, context, TestWorkflow)
 
       assert length(results) == 2
+    end
+
+    test "applies finite parallel timeout from metadata" do
+      instructions = [
+        {:step, [name: "slow"], [{SlowAction, []}]}
+      ]
+
+      step = {:parallel, [name: "par_timeout", max_concurrency: 1, timeout: 10], instructions}
+
+      assert {:ok, %{parallel_results: [result]}} =
+               Execution.execute_step(step, %{}, %{}, TestWorkflow)
+
+      assert %{
+               error: %Jido.Action.Error.ExecutionFailureError{message: message}
+             } = result
+
+      assert message =~ "Parallel task exited"
     end
   end
 

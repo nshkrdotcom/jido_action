@@ -64,7 +64,7 @@ defmodule JidoTest.Exec.ClosureTest do
     end
 
     test "async_closure preserves context and options" do
-      expect(Exec, :run_async, fn _, _, _, _ -> %{ref: make_ref(), pid: self()} end)
+      expect(Exec, :run_async!, fn _, _, _, _ -> %{ref: make_ref(), pid: self()} end)
 
       async_closure =
         Closure.async_closure(ContextAction, %{async_context: true}, timeout: 10_000)

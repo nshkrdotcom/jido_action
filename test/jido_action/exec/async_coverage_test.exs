@@ -57,6 +57,21 @@ defmodule JidoTest.Exec.AsyncCoverageTest do
     end
   end
 
+  describe "start/4" do
+    test "returns error tuple when supervisor is missing" do
+      assert {:error, %ArgumentError{} = error} =
+               Async.start(Add, %{value: 1}, %{}, jido: Missing.Async.Supervisor)
+
+      assert error.message =~ "Instance task supervisor"
+    end
+
+    test "start!/4 raises when supervisor is missing" do
+      assert_raise ArgumentError, ~r/Instance task supervisor.*is not running/, fn ->
+        Async.start!(Add, %{value: 1}, %{}, jido: Missing.Async.Supervisor)
+      end
+    end
+  end
+
   describe "await/2" do
     test "uses a fresh monitor when async_ref monitor is stale" do
       pid = spawn(fn -> :ok end)

@@ -12,6 +12,9 @@ defmodule Jido.Action.Config do
   @default_chain_down_grace_period_ms 100
   @default_chain_shutdown_grace_period_ms 1_000
   @default_compensation_down_grace_period_ms 100
+  @default_exec_down_grace_period_ms 100
+  @default_mailbox_flush_timeout_ms 0
+  @default_mailbox_flush_max_messages :infinity
 
   @spec exec_timeout() :: non_neg_integer()
   def exec_timeout do
@@ -99,6 +102,33 @@ defmodule Jido.Action.Config do
     )
   end
 
+  @spec exec_down_grace_period_ms() :: non_neg_integer()
+  def exec_down_grace_period_ms do
+    Application.get_env(
+      :jido_action,
+      :exec_down_grace_period_ms,
+      @default_exec_down_grace_period_ms
+    )
+  end
+
+  @spec mailbox_flush_timeout_ms() :: non_neg_integer()
+  def mailbox_flush_timeout_ms do
+    Application.get_env(
+      :jido_action,
+      :mailbox_flush_timeout_ms,
+      @default_mailbox_flush_timeout_ms
+    )
+  end
+
+  @spec mailbox_flush_max_messages() :: non_neg_integer() | :infinity
+  def mailbox_flush_max_messages do
+    Application.get_env(
+      :jido_action,
+      :mailbox_flush_max_messages,
+      @default_mailbox_flush_max_messages
+    )
+  end
+
   @spec validate!() :: :ok
   def validate! do
     validate_non_neg_integer!(:default_timeout, exec_timeout())
@@ -117,6 +147,10 @@ defmodule Jido.Action.Config do
       compensation_down_grace_period_ms()
     )
 
+    validate_non_neg_integer!(:exec_down_grace_period_ms, exec_down_grace_period_ms())
+    validate_non_neg_integer!(:mailbox_flush_timeout_ms, mailbox_flush_timeout_ms())
+    validate_flush_limit!(:mailbox_flush_max_messages, mailbox_flush_max_messages())
+
     :ok
   end
 
@@ -126,4 +160,7 @@ defmodule Jido.Action.Config do
     raise ArgumentError,
           ":jido_action #{inspect(key)} must be a non-negative integer, got: #{inspect(value)}"
   end
+
+  defp validate_flush_limit!(_key, :infinity), do: :ok
+  defp validate_flush_limit!(key, value), do: validate_non_neg_integer!(key, value)
 end

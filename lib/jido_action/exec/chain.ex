@@ -22,6 +22,7 @@ defmodule Jido.Exec.Chain do
   alias Jido.Action.Params
   alias Jido.Exec
   alias Jido.Exec.Async
+  alias Jido.Exec.AsyncLifecycle
   alias Jido.Exec.AsyncRef
   alias Jido.Exec.TaskHelper
   alias Jido.Exec.Types
@@ -35,13 +36,12 @@ defmodule Jido.Exec.Chain do
   @type chain_async_ref :: Types.async_ref()
   @type chain_async_ref_input :: Types.async_ref_input()
   @type chain_cancel_input :: Types.cancel_async_ref_input()
+  @type chain_start_error :: {:error, Exception.t()}
   @type chain_sync_result :: chain_ok() | chain_error() | {:interrupted, map()}
-  @type chain_result :: chain_sync_result() | chain_async_ref()
+  @type chain_result :: chain_sync_result() | chain_async_ref() | chain_start_error()
   @type interrupt_check :: (-> boolean())
 
   @result_tag :chain_async_result
-  @flush_timeout_ms 0
-  @max_flush_messages 10
 
   @doc """
   Executes a chain of actions sequentially with optional interruption support.
@@ -86,10 +86,21 @@ defmodule Jido.Exec.Chain do
     if async do
       case TaskHelper.spawn_monitored(opts, @result_tag, chain_fun) do
         {:ok, async_ref} -> async_ref
-        {:error, error} -> raise error
+        {:error, error} -> {:error, error}
       end
     else
       chain_fun.()
+    end
+  end
+
+  @doc """
+  Same as `chain/3`, but raises if the async chain cannot be started.
+  """
+  @spec chain!([chain_action()], map(), keyword()) :: chain_sync_result() | chain_async_ref()
+  def chain!(actions, initial_params \\ %{}, opts \\ []) do
+    case chain(actions, initial_params, opts) do
+      {:error, %_{} = error} when is_exception(error) -> raise error
+      result -> result
     end
   end
 
@@ -107,41 +118,28 @@ defmodule Jido.Exec.Chain do
   Legacy map refs are still accepted for one release cycle and emit a deprecation warning.
   """
   @spec await(chain_async_ref_input(), timeout()) :: chain_sync_result()
-  def await(%AsyncRef{ref: ref, pid: pid} = async_ref, timeout) do
-    monitor_ref = monitor_ref_for_current_process(async_ref, pid)
-
-    result =
-      receive do
-        {@result_tag, ^ref, result} ->
-          TaskHelper.demonitor_flush(monitor_ref)
-          result
-
-        {:DOWN, ^monitor_ref, :process, ^pid, :normal} ->
-          receive do
-            {@result_tag, ^ref, result} ->
-              TaskHelper.demonitor_flush(monitor_ref)
-              result
-          after
-            Config.chain_down_grace_period_ms() ->
-              TaskHelper.demonitor_flush(monitor_ref)
-              {:error, Error.execution_error("Chain completed but result was not received")}
-          end
-
-        {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
-          TaskHelper.demonitor_flush(monitor_ref)
-          {:error, Error.execution_error("Server error in async chain: #{inspect(reason)}")}
-      after
-        timeout ->
-          shutdown_process(pid, monitor_ref)
-          flush_messages(ref, pid, monitor_ref, @max_flush_messages)
-
-          {:error,
-           Error.timeout_error("Async chain timed out after #{timeout}ms", %{timeout: timeout})}
-      end
-
-    flush_messages(ref, pid, monitor_ref, @max_flush_messages)
-    result
-  end
+  def await(%AsyncRef{} = async_ref, timeout),
+    do:
+      AsyncLifecycle.await(
+        async_ref,
+        timeout,
+        result_tag: @result_tag,
+        down_grace_period_ms: Config.chain_down_grace_period_ms(),
+        shutdown_grace_period_ms: Config.chain_shutdown_grace_period_ms(),
+        flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
+        max_flush_messages: Config.mailbox_flush_max_messages(),
+        no_result_error: fn ->
+          Error.execution_error("Chain completed but result was not received")
+        end,
+        down_error: fn reason ->
+          Error.execution_error("Server error in async chain: #{inspect(reason)}")
+        end,
+        timeout_error: fn timeout_ms ->
+          Error.timeout_error("Async chain timed out after #{timeout_ms}ms", %{
+            timeout: timeout_ms
+          })
+        end
+      )
 
   def await(%{ref: ref, pid: pid} = legacy_async_ref, timeout)
       when is_reference(ref) and is_pid(pid) and not is_struct(legacy_async_ref, AsyncRef) do
@@ -164,62 +162,6 @@ defmodule Jido.Exec.Chain do
   end
 
   def cancel(async_ref_or_pid), do: Async.cancel(async_ref_or_pid)
-
-  defp monitor_ref_for_current_process(async_ref, pid) do
-    cleanup_owner_monitor(async_ref)
-    Process.monitor(pid)
-  end
-
-  defp cleanup_owner_monitor(async_ref) do
-    case {Map.get(async_ref, :owner), Map.get(async_ref, :monitor_ref)} do
-      {owner, monitor_ref}
-      when is_pid(owner) and owner == self() and is_reference(monitor_ref) ->
-        TaskHelper.demonitor_flush(monitor_ref)
-
-      _ ->
-        :ok
-    end
-  end
-
-  @dialyzer {:nowarn_function, shutdown_process: 2}
-  defp shutdown_process(pid, stale_monitor_ref) when is_pid(pid) do
-    monitor_ref = Process.monitor(pid)
-    Process.exit(pid, :shutdown)
-
-    receive do
-      {:DOWN, ^monitor_ref, :process, ^pid, _reason} ->
-        :ok
-    after
-      Config.chain_shutdown_grace_period_ms() ->
-        if Process.alive?(pid), do: Process.exit(pid, :kill)
-
-        receive do
-          {:DOWN, ^monitor_ref, :process, ^pid, _reason} -> :ok
-        after
-          Config.chain_down_grace_period_ms() -> :ok
-        end
-    end
-
-    TaskHelper.demonitor_flush(monitor_ref)
-
-    if is_reference(stale_monitor_ref) and stale_monitor_ref != monitor_ref do
-      TaskHelper.demonitor_flush(stale_monitor_ref)
-    end
-  end
-
-  defp flush_messages(_ref, _pid, _monitor_ref, 0), do: :ok
-
-  defp flush_messages(ref, pid, monitor_ref, remaining) do
-    receive do
-      {@result_tag, ^ref, _result} ->
-        flush_messages(ref, pid, monitor_ref, remaining - 1)
-
-      {:DOWN, ^monitor_ref, :process, ^pid, _reason} ->
-        flush_messages(ref, pid, monitor_ref, remaining - 1)
-    after
-      @flush_timeout_ms -> :ok
-    end
-  end
 
   @spec maybe_execute_action(
           chain_action(),

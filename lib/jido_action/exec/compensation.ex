@@ -10,6 +10,7 @@ defmodule Jido.Exec.Compensation do
 
   alias Jido.Action.Config
   alias Jido.Action.Error
+  alias Jido.Action.Util
   alias Jido.Exec.AsyncRef
   alias Jido.Exec.Supervisors
   alias Jido.Exec.TaskHelper
@@ -18,13 +19,27 @@ defmodule Jido.Exec.Compensation do
 
   require Logger
 
-  @flush_timeout_ms 0
-
   @type action :: Types.action()
   @type params :: Types.params()
   @type context :: Types.context()
   @type run_opts :: Types.run_opts()
   @type exec_result :: Types.exec_result()
+
+  defmodule ExecutionContext do
+    @moduledoc false
+
+    @enforce_keys [
+      :action,
+      :params,
+      :context,
+      :error,
+      :opts,
+      :compensation_run_opts,
+      :timeout,
+      :max_attempts
+    ]
+    defstruct @enforce_keys
+  end
 
   @doc """
   Checks if compensation is enabled for the given action.
@@ -138,7 +153,7 @@ defmodule Jido.Exec.Compensation do
       handle_task_result(result, error, directive, timeout, max_attempts)
     end
 
-    @type compensation_context :: %{
+    @type compensation_context :: %ExecutionContext{
             action: action(),
             params: params(),
             context: context(),
@@ -169,7 +184,7 @@ defmodule Jido.Exec.Compensation do
            timeout,
            max_attempts
          ) do
-      execution_context = %{
+      execution_context = %ExecutionContext{
         action: action,
         params: params,
         context: context,
@@ -188,7 +203,7 @@ defmodule Jido.Exec.Compensation do
             pos_integer()
           ) :: {:ok, any()} | {:exit, any()} | :timeout
     defp do_execute_compensation_with_retries(
-           %{max_attempts: max_attempts} = execution_context,
+           %ExecutionContext{max_attempts: max_attempts} = execution_context,
            attempt
          ) do
       case execute_compensation_once(execution_context) do
@@ -210,7 +225,7 @@ defmodule Jido.Exec.Compensation do
 
     @spec execute_compensation_once(compensation_context()) ::
             {:ok, any()} | {:exit, any()} | :timeout
-    defp execute_compensation_once(%{
+    defp execute_compensation_once(%ExecutionContext{
            action: action,
            params: params,
            context: context,
@@ -256,7 +271,8 @@ defmodule Jido.Exec.Compensation do
                 :compensation_result,
                 ref,
                 down_grace_period_ms: Config.compensation_down_grace_period_ms(),
-                flush_timeout_ms: @flush_timeout_ms
+                flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
+                max_flush_messages: Config.mailbox_flush_max_messages()
               )
 
               :timeout
@@ -269,18 +285,24 @@ defmodule Jido.Exec.Compensation do
 
     @spec get_compensation_timeout(run_opts(), keyword() | map()) :: non_neg_integer()
     defp get_compensation_timeout(opts, compensation_opts) do
-      Keyword.get(opts, :compensation_timeout) ||
-        extract_timeout_from_compensation_opts(compensation_opts) ||
-        Keyword.get(opts, :timeout) ||
+      Util.first_present([
+        Keyword.get(opts, :compensation_timeout),
+        extract_timeout_from_compensation_opts(compensation_opts),
+        Keyword.get(opts, :timeout)
+      ]) ||
         Config.compensation_timeout()
     end
 
     @spec get_compensation_max_attempts(run_opts(), keyword() | map()) :: pos_integer()
     defp get_compensation_max_attempts(opts, compensation_opts) do
       retries =
-        Keyword.get(opts, :compensation_max_retries) ||
-          extract_max_retries_from_compensation_opts(compensation_opts) ||
+        Util.first_present(
+          [
+            Keyword.get(opts, :compensation_max_retries),
+            extract_max_retries_from_compensation_opts(compensation_opts)
+          ],
           1
+        )
 
       retries
       |> normalize_retries()
@@ -416,7 +438,7 @@ defmodule Jido.Exec.Compensation do
         %{
           compensated: false,
           compensation_result: nil,
-          compensation_error: ensure_error_struct(comp_error),
+          compensation_error: Error.ensure_error(comp_error, "Compensation failed"),
           original_error: original_error
         }
       )
@@ -437,12 +459,5 @@ defmodule Jido.Exec.Compensation do
     @spec wrap_error_with_directive(Exception.t(), any()) :: exec_result
     defp wrap_error_with_directive(error, nil), do: {:error, error}
     defp wrap_error_with_directive(error, directive), do: {:error, error, directive}
-
-    defp ensure_error_struct(%_{} = error) when is_exception(error), do: error
-    defp ensure_error_struct(reason) when is_binary(reason), do: Error.execution_error(reason)
-
-    defp ensure_error_struct(reason) do
-      Error.execution_error("Compensation failed", %{reason: reason})
-    end
   end
 end

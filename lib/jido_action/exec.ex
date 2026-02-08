@@ -55,6 +55,8 @@ defmodule Jido.Exec do
 
   require Logger
 
+  @execute_action_result_tag :execute_action_result
+
   @type action :: Types.action()
   @type params :: Types.params()
   @type context :: Types.context()
@@ -192,11 +194,8 @@ defmodule Jido.Exec do
 
   ## Returns
 
-  A `%Jido.Exec.AsyncRef{}` struct containing:
-  - `:ref` - A unique reference for this async action.
-  - `:pid` - The PID of the process executing the Action.
-  - `:monitor_ref` - Monitor reference used by the owner process.
-  - `:owner` - PID that created the async operation.
+  - `%Jido.Exec.AsyncRef{}` when the task starts successfully.
+  - `{:error, exception}` if the async task could not be started.
 
   ## Examples
 
@@ -211,9 +210,21 @@ defmodule Jido.Exec do
       iex> result = Jido.Exec.await(async_ref)
       {:ok, %{result: "processed value"}}
   """
-  @spec run_async(action(), params(), context(), run_opts()) :: async_ref()
+  @spec run_async(action(), params(), context(), run_opts()) ::
+          async_ref() | {:error, Exception.t()}
   def run_async(action, params \\ %{}, context \\ %{}, opts \\ []) do
     Async.start(action, params, context, opts)
+  end
+
+  @doc """
+  Same as `run_async/4`, but raises if the async task cannot be started.
+  """
+  @spec run_async!(action(), params(), context(), run_opts()) :: async_ref()
+  def run_async!(action, params \\ %{}, context \\ %{}, opts \\ []) do
+    case run_async(action, params, context, opts) do
+      %AsyncRef{} = async_ref -> async_ref
+      {:error, %_{} = error} when is_exception(error) -> raise error
+    end
   end
 
   @doc """
@@ -240,7 +251,8 @@ defmodule Jido.Exec do
       iex> Jido.Exec.await(async_ref, 100)
       {:error, %Jido.Action.Error{type: :timeout, message: "Async action timed out after 100ms"}}
   """
-  @spec await(async_ref_input()) :: exec_result
+  @spec await(async_ref_input() | {:error, Exception.t()}) :: exec_result
+  def await({:error, %_{} = error}) when is_exception(error), do: {:error, error}
   def await(async_ref), do: Async.await(async_ref)
 
   @doc """
@@ -257,7 +269,8 @@ defmodule Jido.Exec do
   - `{:ok, result}` if the Action completes successfully.
   - `{:error, reason}` if an error occurs or timeout is reached.
   """
-  @spec await(async_ref_input(), timeout()) :: exec_result
+  @spec await(async_ref_input() | {:error, Exception.t()}, timeout()) :: exec_result
+  def await({:error, %_{} = error}, _timeout) when is_exception(error), do: {:error, error}
   def await(async_ref, timeout), do: Async.await(async_ref, timeout)
 
   @doc """
@@ -282,7 +295,8 @@ defmodule Jido.Exec do
       iex> Jido.Exec.cancel("invalid")
       {:error, %Jido.Action.Error{type: :invalid_async_ref, message: "Invalid async ref for cancellation"}}
   """
-  @spec cancel(cancel_async_ref_input() | pid()) :: :ok | exec_error
+  @spec cancel(cancel_async_ref_input() | pid() | {:error, Exception.t()}) :: :ok | exec_error
+  def cancel({:error, %_{} = error}) when is_exception(error), do: {:error, error}
   def cancel(async_ref_or_pid), do: Async.cancel(async_ref_or_pid)
 
   # Private functions are exposed to the test suite
@@ -448,14 +462,14 @@ defmodule Jido.Exec do
     defp execute_action_with_timeout(action, params, context, timeout, opts)
          when is_integer(timeout) and timeout > 0 do
       # Get the current process's group leader for IO routing
-      case TaskHelper.spawn_monitored(opts, :execute_action_result, fn ->
+      case TaskHelper.spawn_monitored(opts, @execute_action_result_tag, fn ->
              execute_action(action, params, context, opts)
            end) do
         {:ok, %AsyncRef{ref: ref, pid: pid, monitor_ref: monitor_ref}} ->
           # Wait for completion, crash, or timeout.
           result =
             receive do
-              {:execute_action_result, ^ref, result} ->
+              {@execute_action_result_tag, ^ref, result} ->
                 TaskHelper.demonitor_flush(monitor_ref)
                 {:ok, result}
 
@@ -464,12 +478,22 @@ defmodule Jido.Exec do
                 case reason do
                   :normal ->
                     receive do
-                      {:execute_action_result, ^ref, result} ->
+                      {@execute_action_result_tag, ^ref, result} ->
                         TaskHelper.demonitor_flush(monitor_ref)
                         {:ok, result}
                     after
-                      0 ->
+                      Config.exec_down_grace_period_ms() ->
                         TaskHelper.demonitor_flush(monitor_ref)
+
+                        TaskHelper.flush_messages(
+                          @execute_action_result_tag,
+                          ref,
+                          pid,
+                          monitor_ref,
+                          flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
+                          max_flush_messages: Config.mailbox_flush_max_messages()
+                        )
+
                         {:exit, reason}
                     end
 
@@ -485,8 +509,11 @@ defmodule Jido.Exec do
                   task_sup,
                   pid,
                   monitor_ref,
-                  :execute_action_result,
-                  ref
+                  @execute_action_result_tag,
+                  ref,
+                  down_grace_period_ms: Config.exec_down_grace_period_ms(),
+                  flush_timeout_ms: Config.mailbox_flush_timeout_ms(),
+                  max_flush_messages: Config.mailbox_flush_max_messages()
                 )
 
                 :timeout
@@ -609,12 +636,7 @@ defmodule Jido.Exec do
       {:error, validation_error, other}
     end
 
-    defp ensure_error_struct(%_{} = error) when is_exception(error), do: error
-    defp ensure_error_struct(reason) when is_binary(reason), do: Error.execution_error(reason)
-
-    defp ensure_error_struct(reason) do
-      Error.execution_error("Action failed", %{reason: reason})
-    end
+    defp ensure_error_struct(reason), do: Error.ensure_error(reason, "Action failed")
 
     # Handle exceptions raised during action execution
     defp handle_action_exception(e, stacktrace, action, opts) do

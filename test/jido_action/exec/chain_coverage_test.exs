@@ -134,6 +134,32 @@ defmodule JidoTest.Exec.ChainCoverageTest do
     end
   end
 
+  describe "chain async startup errors" do
+    test "returns error tuple when async chain supervisor is missing" do
+      result =
+        Chain.chain(
+          [Add, Multiply],
+          %{value: 5, amount: 2},
+          async: true,
+          jido: Missing.Chain.Supervisor
+        )
+
+      assert {:error, %ArgumentError{} = error} = result
+      assert error.message =~ "Instance task supervisor"
+    end
+
+    test "chain!/3 raises when async chain supervisor is missing" do
+      assert_raise ArgumentError, ~r/Instance task supervisor.*is not running/, fn ->
+        Chain.chain!(
+          [Add, Multiply],
+          %{value: 5, amount: 2},
+          async: true,
+          jido: Missing.Chain.Supervisor
+        )
+      end
+    end
+  end
+
   describe "chain/3 with map action params" do
     test "validates map action params with string keys" do
       capture_log(fn ->

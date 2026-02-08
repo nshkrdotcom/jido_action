@@ -8,7 +8,9 @@ defmodule JidoTest.ConfigGracePeriodsTest do
     {:async_shutdown_grace_period_ms, :async_shutdown_grace_period_ms, 1_000},
     {:chain_down_grace_period_ms, :chain_down_grace_period_ms, 100},
     {:chain_shutdown_grace_period_ms, :chain_shutdown_grace_period_ms, 1_000},
-    {:compensation_down_grace_period_ms, :compensation_down_grace_period_ms, 100}
+    {:compensation_down_grace_period_ms, :compensation_down_grace_period_ms, 100},
+    {:exec_down_grace_period_ms, :exec_down_grace_period_ms, 100},
+    {:mailbox_flush_timeout_ms, :mailbox_flush_timeout_ms, 0}
   ]
 
   setup do
@@ -44,5 +46,23 @@ defmodule JidoTest.ConfigGracePeriodsTest do
       Application.put_env(:jido_action, env_key, override)
       assert apply(Config, getter, []) == override
     end)
+  end
+
+  test "mailbox flush max messages supports integer and :infinity" do
+    original = Application.get_env(:jido_action, :mailbox_flush_max_messages)
+
+    on_exit(fn ->
+      if is_nil(original) do
+        Application.delete_env(:jido_action, :mailbox_flush_max_messages)
+      else
+        Application.put_env(:jido_action, :mailbox_flush_max_messages, original)
+      end
+    end)
+
+    Application.delete_env(:jido_action, :mailbox_flush_max_messages)
+    assert Config.mailbox_flush_max_messages() == :infinity
+
+    Application.put_env(:jido_action, :mailbox_flush_max_messages, 25)
+    assert Config.mailbox_flush_max_messages() == 25
   end
 end

@@ -17,6 +17,13 @@ defmodule JidoTest.ExecAsyncTest do
       assert is_pid(result.pid)
       assert is_reference(result.ref)
     end
+
+    test "returns error tuple when async task cannot be started" do
+      assert {:error, %ArgumentError{} = error} =
+               Exec.run_async(BasicAction, %{value: 5}, %{}, jido: Missing.Async.Supervisor)
+
+      assert error.message =~ "Instance task supervisor"
+    end
   end
 
   describe "await/2" do
@@ -85,5 +92,13 @@ defmodule JidoTest.ExecAsyncTest do
     Process.sleep(50)
     assert :ok = Exec.cancel(async_ref)
     refute Process.alive?(async_ref.pid)
+  end
+
+  test "await and cancel pass through async startup errors" do
+    startup_result = Exec.run_async(BasicAction, %{value: 5}, %{}, jido: Missing.Async.Supervisor)
+    assert {:error, %ArgumentError{} = startup_error} = startup_result
+
+    assert {:error, ^startup_error} = Exec.await(startup_result)
+    assert {:error, ^startup_error} = Exec.cancel(startup_result)
   end
 end

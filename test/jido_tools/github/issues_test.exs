@@ -79,6 +79,25 @@ defmodule Jido.Tools.Github.IssuesTest do
       assert result.status == "success"
       assert result.data == @mock_issue_response
     end
+
+    test "returns normalized error when Tentacat returns error tuple" do
+      expect(Tentacat.Issues, :create, fn _client, _owner, _repo, _body ->
+        {:error, :unauthorized}
+      end)
+
+      params = %{
+        client: @mock_client,
+        owner: "test-owner",
+        repo: "test-repo",
+        title: "Test Issue",
+        body: "Test Body"
+      }
+
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
+               Issues.Create.run(params, %{})
+
+      assert message =~ "GitHub issues create failed"
+    end
   end
 
   describe "Filter" do
@@ -217,6 +236,24 @@ defmodule Jido.Tools.Github.IssuesTest do
 
       assert {:ok, result} = Issues.Find.run(params, %{})
       assert result.status == "success"
+    end
+
+    test "returns error for unexpected Tentacat response shape" do
+      expect(Tentacat.Issues, :find, fn _client, _owner, _repo, _number ->
+        :unexpected
+      end)
+
+      params = %{
+        client: @mock_client,
+        owner: "test-owner",
+        repo: "test-repo",
+        number: 1
+      }
+
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
+               Issues.Find.run(params, %{})
+
+      assert message =~ "Unexpected GitHub issues find response"
     end
   end
 

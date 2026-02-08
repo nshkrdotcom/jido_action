@@ -50,6 +50,24 @@ defmodule Jido.Action.ToolTest do
     end
   end
 
+  describe "execute_action_raw/3" do
+    test "returns normalized success tuple" do
+      params = %{"value" => 42}
+      context = %{}
+
+      assert {:ok, %{value: 42}} =
+               Tool.execute_action_raw(TestActions.BasicAction, params, context)
+    end
+
+    test "returns normalized error struct" do
+      params = %{"invalid" => "params"}
+      context = %{}
+
+      assert {:error, %Jido.Action.Error.InvalidInputError{}} =
+               Tool.execute_action_raw(TestActions.BasicAction, params, context)
+    end
+  end
+
   describe "convert_params_using_schema/2" do
     test "converts string parameters to correct types based on schema" do
       params = %{
