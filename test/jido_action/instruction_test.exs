@@ -120,6 +120,11 @@ defmodule Jido.InstructionTest do
       assert instruction.context == %{}
     end
 
+    test "handles nil opts gracefully" do
+      assert {:ok, [instruction]} = Instruction.normalize(BasicAction, %{}, nil)
+      assert instruction.opts == []
+    end
+
     test "handles empty list" do
       assert {:ok, []} = Instruction.normalize([])
     end
@@ -223,6 +228,15 @@ defmodule Jido.InstructionTest do
       assert {:ok, instruction} = Instruction.new(action: BasicAction, params: %{value: 1})
       assert instruction.action == BasicAction
       assert instruction.params == %{value: 1}
+    end
+
+    test "normalizes nil params, context, and opts to defaults" do
+      assert {:ok, instruction} =
+               Instruction.new(%{action: BasicAction, params: nil, context: nil, opts: nil})
+
+      assert instruction.params == %{}
+      assert instruction.context == %{}
+      assert instruction.opts == []
     end
 
     test "returns error for missing action" do
@@ -338,6 +352,12 @@ defmodule Jido.InstructionTest do
     test "handles nil context in normalize_single" do
       assert {:ok, instruction} = Instruction.normalize_single(BasicAction, nil)
       assert instruction.context == %{}
+    end
+
+    test "handles nil context and opts in normalize_single" do
+      assert {:ok, instruction} = Instruction.normalize_single({BasicAction, nil}, nil, nil)
+      assert instruction.context == %{}
+      assert instruction.opts == []
     end
 
     test "handles non-atom action in tuple" do

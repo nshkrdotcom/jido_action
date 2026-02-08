@@ -43,6 +43,7 @@ defmodule Jido.Exec do
   alias Jido.Action.Error
   alias Jido.Action.Params
   alias Jido.Exec.Async
+  alias Jido.Exec.AsyncRef
   alias Jido.Exec.Compensation
   alias Jido.Exec.Retry
   alias Jido.Exec.Supervisors
@@ -59,6 +60,8 @@ defmodule Jido.Exec do
   @type context :: Types.context()
   @type run_opts :: Types.run_opts()
   @type async_ref :: Types.async_ref()
+  @type async_ref_input :: Types.async_ref_input()
+  @type cancel_async_ref_input :: Types.cancel_async_ref_input()
   @type exec_error :: Types.exec_error()
   @type exec_result :: Types.exec_result()
 
@@ -189,14 +192,21 @@ defmodule Jido.Exec do
 
   ## Returns
 
-  An `async_ref` map containing:
+  A `%Jido.Exec.AsyncRef{}` struct containing:
   - `:ref` - A unique reference for this async action.
   - `:pid` - The PID of the process executing the Action.
+  - `:monitor_ref` - Monitor reference used by the owner process.
+  - `:owner` - PID that created the async operation.
 
   ## Examples
 
       iex> async_ref = Jido.Exec.run_async(MyAction, %{input: "value"}, %{user_id: 123})
-      %{ref: #Reference<0.1234.5678>, pid: #PID<0.234.0>}
+      %Jido.Exec.AsyncRef{
+        ref: #Reference<0.1234.5678>,
+        pid: #PID<0.234.0>,
+        monitor_ref: #Reference<0.1111.2222>,
+        owner: #PID<0.123.0>
+      }
 
       iex> result = Jido.Exec.await(async_ref)
       {:ok, %{result: "processed value"}}
@@ -212,6 +222,7 @@ defmodule Jido.Exec do
   ## Parameters
 
   - `async_ref`: The reference returned by `run_async/4`.
+    Legacy map refs are still accepted for one release cycle and emit a deprecation warning.
   - `timeout`: Maximum time (in ms) to wait for the result (default: 5000).
 
   ## Returns
@@ -229,7 +240,7 @@ defmodule Jido.Exec do
       iex> Jido.Exec.await(async_ref, 100)
       {:error, %Jido.Action.Error{type: :timeout, message: "Async action timed out after 100ms"}}
   """
-  @spec await(async_ref()) :: exec_result
+  @spec await(async_ref_input()) :: exec_result
   def await(async_ref), do: Async.await(async_ref)
 
   @doc """
@@ -238,6 +249,7 @@ defmodule Jido.Exec do
   ## Parameters
 
   - `async_ref`: The async reference returned by `run_async/4`.
+    Legacy map refs are still accepted for one release cycle and emit a deprecation warning.
   - `timeout`: Maximum time to wait in milliseconds.
 
   ## Returns
@@ -245,7 +257,7 @@ defmodule Jido.Exec do
   - `{:ok, result}` if the Action completes successfully.
   - `{:error, reason}` if an error occurs or timeout is reached.
   """
-  @spec await(async_ref(), timeout()) :: exec_result
+  @spec await(async_ref_input(), timeout()) :: exec_result
   def await(async_ref, timeout), do: Async.await(async_ref, timeout)
 
   @doc """
@@ -254,6 +266,7 @@ defmodule Jido.Exec do
   ## Parameters
 
   - `async_ref`: The reference returned by `run_async/4`, or just the PID of the process to cancel.
+    Legacy map refs are still accepted for one release cycle and emit a deprecation warning.
 
   ## Returns
 
@@ -269,7 +282,7 @@ defmodule Jido.Exec do
       iex> Jido.Exec.cancel("invalid")
       {:error, %Jido.Action.Error{type: :invalid_async_ref, message: "Invalid async ref for cancellation"}}
   """
-  @spec cancel(async_ref() | pid()) :: :ok | exec_error
+  @spec cancel(cancel_async_ref_input() | pid()) :: :ok | exec_error
   def cancel(async_ref_or_pid), do: Async.cancel(async_ref_or_pid)
 
   # Private functions are exposed to the test suite
@@ -438,7 +451,7 @@ defmodule Jido.Exec do
       case TaskHelper.spawn_monitored(opts, :execute_action_result, fn ->
              execute_action(action, params, context, opts)
            end) do
-        {:ok, %{ref: ref, pid: pid, monitor_ref: monitor_ref}} ->
+        {:ok, %AsyncRef{ref: ref, pid: pid, monitor_ref: monitor_ref}} ->
           # Wait for completion, crash, or timeout.
           result =
             receive do

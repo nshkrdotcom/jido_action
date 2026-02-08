@@ -3,17 +3,18 @@ defmodule Jido.Exec.Types do
   Shared type definitions for the `Jido.Exec` execution modules.
   """
 
+  alias Jido.Exec.AsyncRef
+
   @type action :: module()
   @type params :: map()
   @type context :: map()
   @type run_opts :: keyword()
 
-  @type async_ref :: %{
-          required(:ref) => reference(),
-          required(:pid) => pid(),
-          optional(:monitor_ref) => reference(),
-          optional(:owner) => pid()
-        }
+  @type async_ref :: AsyncRef.t()
+  @type legacy_async_ref :: AsyncRef.legacy_await_map()
+  @type legacy_cancel_async_ref :: AsyncRef.legacy_cancel_map()
+  @type async_ref_input :: async_ref() | legacy_async_ref()
+  @type cancel_async_ref_input :: async_ref() | legacy_cancel_async_ref()
 
   @type exec_success :: {:ok, map()}
   @type exec_success_dir :: {:ok, map(), any()}

@@ -10,6 +10,7 @@ defmodule Jido.Exec.Compensation do
 
   alias Jido.Action.Config
   alias Jido.Action.Error
+  alias Jido.Exec.AsyncRef
   alias Jido.Exec.Supervisors
   alias Jido.Exec.TaskHelper
   alias Jido.Exec.Telemetry
@@ -221,7 +222,7 @@ defmodule Jido.Exec.Compensation do
       case TaskHelper.spawn_monitored(opts, :compensation_result, fn ->
              action.on_error(params, error, context, compensation_run_opts)
            end) do
-        {:ok, %{ref: ref, pid: pid, monitor_ref: monitor_ref}} ->
+        {:ok, %AsyncRef{ref: ref, pid: pid, monitor_ref: monitor_ref}} ->
           receive do
             {:compensation_result, ^ref, result} ->
               TaskHelper.demonitor_flush(monitor_ref)

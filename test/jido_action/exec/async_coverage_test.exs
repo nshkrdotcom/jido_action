@@ -4,8 +4,11 @@ defmodule JidoTest.Exec.AsyncCoverageTest do
   """
   use JidoTest.ActionCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias Jido.Exec.Async
   alias JidoTest.TestActions.Add
+  alias JidoTest.TestActions.DelayAction
 
   @moduletag :capture_log
 
@@ -33,6 +36,18 @@ defmodule JidoTest.Exec.AsyncCoverageTest do
     test "cancels with just a pid" do
       async_ref = Async.start(Add, %{value: 5, amount: 1})
       assert :ok = Async.cancel(async_ref.pid)
+    end
+
+    test "warns when cancelling with legacy map async_ref" do
+      async_ref = Async.start(DelayAction, %{delay: 2_000})
+      legacy_ref = Map.from_struct(async_ref)
+
+      log =
+        capture_log(fn ->
+          assert :ok = Async.cancel(legacy_ref)
+        end)
+
+      assert log =~ "Jido.Exec.Async.cancel/1 received a legacy map async_ref"
     end
 
     test "returns error for invalid cancel argument" do
@@ -66,6 +81,18 @@ defmodule JidoTest.Exec.AsyncCoverageTest do
     test "returns result using default timeout" do
       async_ref = Async.start(Add, %{value: 10, amount: 5})
       assert {:ok, %{value: 15}} = Async.await(async_ref)
+    end
+
+    test "warns when awaiting with legacy map async_ref" do
+      async_ref = Async.start(Add, %{value: 10, amount: 5})
+      legacy_ref = Map.from_struct(async_ref)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, %{value: 15}} = Async.await(legacy_ref, 5_000)
+        end)
+
+      assert log =~ "Jido.Exec.Async.await/2 received a legacy map async_ref"
     end
 
     test "handles DOWN normal and then receives result in grace window" do

@@ -135,6 +135,44 @@ defmodule JidoTest.ExecCompensateTest do
     end
   end
 
+  describe "compensation retry precedence" do
+    test "uses action metadata compensation.max_retries when runtime override is not provided" do
+      params = %{should_fail: true, delay: 20}
+
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
+               Exec.run(CompensateAction, params, %{},
+                 compensation_timeout: 5,
+                 timeout: 200,
+                 backoff: 10
+               )
+
+      assert error.details.compensation_attempts == 3
+    end
+
+    test "prefers opts[:compensation_max_retries] over action metadata compensation.max_retries" do
+      params = %{should_fail: true, delay: 20}
+
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
+               Exec.run(CompensateAction, params, %{},
+                 compensation_timeout: 5,
+                 compensation_max_retries: 2,
+                 timeout: 200,
+                 backoff: 10
+               )
+
+      assert error.details.compensation_attempts == 2
+    end
+
+    test "falls back to default compensation retries when no override is provided" do
+      params = %{should_fail: true, crash_type: :badarith}
+
+      assert {:error, %Jido.Action.Error.ExecutionFailureError{} = error} =
+               Exec.run(CrashingCompensateAction, params, %{}, timeout: 200)
+
+      assert error.details.compensation_attempts == 1
+    end
+  end
+
   describe "supervised compensation execution" do
     test "compensation uses Task.Supervisor.async_nolink (crash doesn't affect caller)" do
       params = %{should_fail: true, crash_type: :raise}

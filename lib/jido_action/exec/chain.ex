@@ -22,6 +22,7 @@ defmodule Jido.Exec.Chain do
   alias Jido.Action.Params
   alias Jido.Exec
   alias Jido.Exec.Async
+  alias Jido.Exec.AsyncRef
   alias Jido.Exec.TaskHelper
   alias Jido.Exec.Types
 
@@ -32,6 +33,8 @@ defmodule Jido.Exec.Chain do
   @type chain_error :: {:error, Error.t()} | {:error, Error.t(), any()}
   @type ok_t :: chain_ok() | chain_error()
   @type chain_async_ref :: Types.async_ref()
+  @type chain_async_ref_input :: Types.async_ref_input()
+  @type chain_cancel_input :: Types.cancel_async_ref_input()
   @type chain_sync_result :: chain_ok() | chain_error() | {:interrupted, map()}
   @type chain_result :: chain_sync_result() | chain_async_ref()
   @type interrupt_check :: (-> boolean())
@@ -63,7 +66,7 @@ defmodule Jido.Exec.Chain do
   - `{:error, error}` if any action in the chain fails.
   - `{:error, error, directive}` if a failing action returns an error directive.
   - `{:interrupted, result}` if the chain was interrupted, containing the last successful result.
-  - Async reference map (`%{ref, pid, monitor_ref, owner}`) if the `:async` option is set to `true`.
+  - `%Jido.Exec.AsyncRef{}` if the `:async` option is set to `true`.
   """
   @spec chain([chain_action()], map(), keyword()) :: chain_result()
   def chain(actions, initial_params \\ %{}, opts \\ []) do
@@ -92,15 +95,19 @@ defmodule Jido.Exec.Chain do
 
   @doc """
   Waits for the result of an asynchronous chain execution.
+
+  Legacy map refs are still accepted for one release cycle and emit a deprecation warning.
   """
-  @spec await(chain_async_ref()) :: chain_sync_result()
+  @spec await(chain_async_ref_input()) :: chain_sync_result()
   def await(async_ref), do: await(async_ref, Config.await_timeout())
 
   @doc """
   Waits for the result of an asynchronous chain execution with a custom timeout.
+
+  Legacy map refs are still accepted for one release cycle and emit a deprecation warning.
   """
-  @spec await(chain_async_ref(), timeout()) :: chain_sync_result()
-  def await(%{ref: ref, pid: pid} = async_ref, timeout) do
+  @spec await(chain_async_ref_input(), timeout()) :: chain_sync_result()
+  def await(%AsyncRef{ref: ref, pid: pid} = async_ref, timeout) do
     monitor_ref = monitor_ref_for_current_process(async_ref, pid)
 
     result =
@@ -136,10 +143,26 @@ defmodule Jido.Exec.Chain do
     result
   end
 
+  def await(%{ref: ref, pid: pid} = legacy_async_ref, timeout)
+      when is_reference(ref) and is_pid(pid) and not is_struct(legacy_async_ref, AsyncRef) do
+    legacy_async_ref
+    |> AsyncRef.from_legacy_await_map(__MODULE__)
+    |> await(timeout)
+  end
+
   @doc """
   Cancels a running asynchronous chain execution.
+
+  Legacy map refs are still accepted for one release cycle and emit a deprecation warning.
   """
-  @spec cancel(chain_async_ref() | pid()) :: :ok | {:error, Exception.t()}
+  @spec cancel(chain_cancel_input() | pid()) :: :ok | {:error, Exception.t()}
+  def cancel(%{pid: pid} = legacy_async_ref)
+      when is_pid(pid) and not is_struct(legacy_async_ref, AsyncRef) do
+    legacy_async_ref
+    |> AsyncRef.from_legacy_cancel_map(__MODULE__)
+    |> Async.cancel()
+  end
+
   def cancel(async_ref_or_pid), do: Async.cancel(async_ref_or_pid)
 
   defp monitor_ref_for_current_process(async_ref, pid) do

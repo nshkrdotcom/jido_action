@@ -285,7 +285,7 @@ Configure compensation in your action's `use` options:
 defmodule MyApp.Actions.TransferFunds do
   use Jido.Action,
     name: "transfer_funds",
-    compensation: [enabled: true, timeout: 5_000],
+    compensation: [enabled: true, max_retries: 2, timeout: 5_000],
     schema: [
       from_account: [type: :string, required: true],
       to_account: [type: :string, required: true],
@@ -335,7 +335,13 @@ end
 ### Compensation Configuration Options
 
 - `enabled: true` - Enable compensation for the action (default: `false`)
+- `max_retries: 1` - Compensation retry attempts (default: `1`)
 - `timeout: 5_000` - Timeout for compensation execution in milliseconds (default: `5000`)
+
+Compensation retry precedence:
+1. Execution option `:compensation_max_retries` passed to `Jido.Exec.run/4`
+2. Action metadata `compensation.max_retries`
+3. Default (`1`)
 
 ### Compensation Patterns
 

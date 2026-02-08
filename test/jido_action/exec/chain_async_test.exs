@@ -4,6 +4,8 @@ defmodule JidoTest.Exec.ChainAsyncTest do
   """
   use JidoTest.ActionCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias Jido.Exec.Chain
   alias JidoTest.TestActions.Add
   alias JidoTest.TestActions.DelayAction
@@ -72,6 +74,44 @@ defmodule JidoTest.Exec.ChainAsyncTest do
       assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} = await_result
       assert message =~ "Server error in async chain: :noproc"
       assert elapsed_us < 200_000
+    end
+  end
+
+  describe "legacy map compatibility" do
+    test "warns when awaiting with legacy map async_ref" do
+      async_ref =
+        Chain.chain(
+          [Add, Multiply],
+          %{value: 5, amount: 2},
+          async: true
+        )
+
+      legacy_ref = Map.from_struct(async_ref)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, %{value: 14}} = Chain.await(legacy_ref, 5_000)
+        end)
+
+      assert log =~ "Jido.Exec.Chain.await/2 received a legacy map async_ref"
+    end
+
+    test "warns when cancelling with legacy map async_ref" do
+      async_ref =
+        Chain.chain(
+          [{DelayAction, %{delay: 5_000}}],
+          %{},
+          async: true
+        )
+
+      legacy_ref = Map.from_struct(async_ref)
+
+      log =
+        capture_log(fn ->
+          assert :ok = Chain.cancel(legacy_ref)
+        end)
+
+      assert log =~ "Jido.Exec.Chain.cancel/1 received a legacy map async_ref"
     end
   end
 end

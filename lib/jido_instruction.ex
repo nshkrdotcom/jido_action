@@ -417,7 +417,7 @@ defmodule Jido.Instruction do
   # Handle lists by recursively normalizing each element
   def normalize(instructions, context, opts) when is_list(instructions) do
     with :ok <- validate_no_nested_lists(instructions) do
-      normalize_instruction_list(instructions, context || %{}, opts)
+      normalize_instruction_list(instructions, normalize_context(context), opts)
     end
   end
 
@@ -526,7 +526,16 @@ defmodule Jido.Instruction do
 
   defp apply_defaults(attrs) do
     attrs
-    |> Map.put_new_lazy(:id, &Uniq.UUID.uuid7/0)
+    |> assign_default_id()
+    |> normalize_optional_fields()
+  end
+
+  defp assign_default_id(attrs) do
+    Map.put_new_lazy(attrs, :id, &Uniq.UUID.uuid7/0)
+  end
+
+  defp normalize_optional_fields(attrs) do
+    attrs
     |> Map.update(:params, %{}, &Params.nil_to_default(&1, %{}))
     |> Map.update(:context, %{}, &Params.nil_to_default(&1, %{}))
     |> Map.update(:opts, [], &Params.nil_to_default(&1, []))

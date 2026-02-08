@@ -197,6 +197,21 @@ defmodule JidoTest.Tools.Workflow.ExecutionCoverageTest do
 
       assert length(results) == 2
     end
+
+    test "supports instance context for parallel execution supervisor resolution" do
+      instructions = [
+        {:step, [name: "p1"], [{OkAction, []}]},
+        {:step, [name: "p2"], [{OkAction, []}]}
+      ]
+
+      step = {:parallel, [name: "par_jido", max_concurrency: 1], instructions}
+      context = %{__jido__: Jido.Action}
+
+      assert {:ok, %{parallel_results: results}} =
+               Execution.execute_step(step, %{}, context, TestWorkflow)
+
+      assert length(results) == 2
+    end
   end
 
   describe "execute_step/4 with branch" do

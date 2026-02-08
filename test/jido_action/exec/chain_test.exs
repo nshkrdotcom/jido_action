@@ -3,6 +3,7 @@ defmodule JidoTest.Exec.ChainTest do
 
   import ExUnit.CaptureLog
 
+  alias Jido.Exec.AsyncRef
   alias Jido.Exec.Chain
   alias JidoTest.TestActions.Add
   alias JidoTest.TestActions.ContextAwareMultiply
@@ -84,6 +85,7 @@ defmodule JidoTest.Exec.ChainTest do
 
     test "executes chain asynchronously" do
       async_ref = Chain.chain([Add, Multiply], %{value: 5}, async: true)
+      assert %AsyncRef{} = async_ref
       assert is_map(async_ref)
       assert is_pid(async_ref.pid)
       assert is_reference(async_ref.ref)

@@ -2,18 +2,14 @@ defmodule Jido.Exec.TaskHelper do
   @moduledoc false
 
   alias Jido.Action.Error
+  alias Jido.Exec.AsyncRef
   alias Jido.Exec.Supervisors
 
   @default_down_grace_period_ms 10
   @default_flush_timeout_ms 0
   @default_max_flush_messages 10
 
-  @type monitored_task_ref :: %{
-          ref: reference(),
-          pid: pid(),
-          monitor_ref: reference(),
-          owner: pid()
-        }
+  @type monitored_task_ref :: AsyncRef.t()
 
   @type timeout_cleanup_opts :: [
           {:down_grace_period_ms, non_neg_integer()}
@@ -35,13 +31,7 @@ defmodule Jido.Exec.TaskHelper do
            send(parent, {result_tag, ref, result})
          end) do
       {:ok, pid} ->
-        {:ok,
-         %{
-           ref: ref,
-           pid: pid,
-           monitor_ref: Process.monitor(pid),
-           owner: parent
-         }}
+        {:ok, AsyncRef.new(ref, pid, Process.monitor(pid), parent)}
 
       {:error, error} ->
         {:error, error}

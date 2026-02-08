@@ -90,6 +90,7 @@ Override settings when executing actions:
   timeout: 60_000,           # 60 second timeout
   max_retries: 5,            # 5 retries
   backoff: 500,              # 500ms initial backoff (doubles each retry)
+  compensation_max_retries: 2, # Override compensation retry attempts for this call
   log_level: :debug,         # Override log level
   telemetry: :silent         # Disable telemetry for this call
 )
@@ -99,8 +100,14 @@ Override settings when executing actions:
 - `:timeout` - Maximum time in ms for the action to complete (default: 30000)
 - `:max_retries` - Maximum retry attempts on failure (default: 1)
 - `:backoff` - Initial backoff time in ms, doubles with each retry (default: 250, capped at 30s)
+- `:compensation_max_retries` - Override compensation retry attempts for this execution
 - `:log_level` - Override Logger level (`:debug`, `:info`, `:warning`, `:error`)
 - `:telemetry` - Telemetry mode: `:full` (default) or `:silent`
+
+Compensation retry precedence:
+1. `opts[:compensation_max_retries]`
+2. Action metadata `compensation.max_retries`
+3. Default (`1`)
 
 ### Configuration Access
 
@@ -389,7 +396,7 @@ Defined at compile time in `use Jido.Action`:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `:enabled` | boolean | false | Enable compensation on error |
-| `:max_retries` | integer | 1 | Compensation retry attempts |
+| `:max_retries` | integer | 1 | Compensation retry attempts when no runtime override is provided |
 | `:timeout` | integer | 5000 | Compensation timeout in ms |
 
 ### Execution Options
@@ -401,6 +408,7 @@ Passed to `Jido.Exec.run/4`:
 | `:timeout` | integer | 30000 | Action timeout in milliseconds |
 | `:max_retries` | integer | 1 | Number of retry attempts |
 | `:backoff` | integer | 250 | Initial backoff in ms |
+| `:compensation_max_retries` | integer | nil | Overrides action compensation retry attempts |
 | `:log_level` | atom | :info | Logger level override |
 | `:telemetry` | atom | :full | `:full` or `:silent` |
 | `:jido` | atom | nil | Instance name for multi-tenant isolation |

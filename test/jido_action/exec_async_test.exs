@@ -2,6 +2,7 @@ defmodule JidoTest.ExecAsyncTest do
   use JidoTest.ActionCase, async: false
 
   alias Jido.Exec
+  alias Jido.Exec.AsyncRef
   alias JidoTest.TestActions.BasicAction
   alias JidoTest.TestActions.DelayAction
   alias JidoTest.TestActions.ErrorAction
@@ -11,6 +12,7 @@ defmodule JidoTest.ExecAsyncTest do
   describe "run_async/4" do
     test "returns an async_ref with pid and ref" do
       result = Exec.run_async(BasicAction, %{value: 5})
+      assert %AsyncRef{} = result
       assert is_map(result)
       assert is_pid(result.pid)
       assert is_reference(result.ref)
@@ -70,31 +72,18 @@ defmodule JidoTest.ExecAsyncTest do
   end
 
   test "integration of run_async, await, and cancel" do
-    test_pid = self()
     async_ref = Exec.run_async(DelayAction, %{delay: 500}, %{}, timeout: 500)
 
-    spawn(fn ->
-      result = Exec.await(async_ref, 100)
-      send(test_pid, {:await_result, result})
+    assert {:error, error} = Exec.await(async_ref, 100)
 
-      Process.sleep(50)
-      Exec.cancel(async_ref)
+    assert match?(%Jido.Action.Error.TimeoutError{}, error) or
+             match?(%Jido.Action.Error.ExecutionFailureError{}, error)
 
-      receive do
-        {:await_result, result} ->
-          assert {:error, error} = result
+    assert Exception.message(error) =~ "Async action timed out after 100ms" or
+             Exception.message(error) =~ "Server error in async action: :shutdown"
 
-          assert match?(%Jido.Action.Error.TimeoutError{}, error) or
-                   match?(%Jido.Action.Error.ExecutionFailureError{}, error)
-
-          assert Exception.message(error) =~ "Async action timed out after 100ms" or
-                   Exception.message(error) =~ "Server error in async action: :shutdown"
-      after
-        2000 ->
-          flunk("Await did not complete in time")
-      end
-
-      refute Process.alive?(async_ref.pid)
-    end)
+    Process.sleep(50)
+    assert :ok = Exec.cancel(async_ref)
+    refute Process.alive?(async_ref.pid)
   end
 end

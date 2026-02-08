@@ -9,6 +9,11 @@ defmodule JidoTest.Exec.ClosureTest do
   alias JidoTest.TestActions.ContextAction
   alias JidoTest.TestActions.ErrorAction
 
+  setup do
+    Mimic.copy(Exec)
+    :ok
+  end
+
   setup :set_mimic_global
 
   describe "closure/3" do

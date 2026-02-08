@@ -9,6 +9,7 @@ defmodule Jido.Exec.Async do
 
   alias Jido.Action.Config
   alias Jido.Action.Error
+  alias Jido.Exec.AsyncRef
   alias Jido.Exec.TaskHelper
   alias Jido.Exec.Types
 
@@ -20,6 +21,8 @@ defmodule Jido.Exec.Async do
   @type context :: Types.context()
   @type run_opts :: Types.run_opts()
   @type async_ref :: Types.async_ref()
+  @type async_ref_input :: Types.async_ref_input()
+  @type cancel_async_ref_input :: Types.cancel_async_ref_input()
   @type exec_error :: Types.exec_error()
   @type exec_result :: Types.exec_result()
 
@@ -39,7 +42,7 @@ defmodule Jido.Exec.Async do
 
   ## Returns
 
-  An `async_ref` map containing:
+  A `%Jido.Exec.AsyncRef{}` struct containing:
   - `:ref` - A unique reference for this async action.
   - `:pid` - The PID of the process executing the Action.
   - `:monitor_ref` - Monitor reference used by the owner process.
@@ -64,6 +67,7 @@ defmodule Jido.Exec.Async do
   ## Parameters
 
   - `async_ref`: The reference returned by `start/4`.
+    Legacy map refs are still accepted for one release cycle and emit a deprecation warning.
   - `timeout`: Maximum time (in ms) to wait for the result (default: configured await timeout).
 
   ## Returns
@@ -72,7 +76,7 @@ defmodule Jido.Exec.Async do
   - `{:error, %Jido.Action.Error.TimeoutError{}}` if the action times out.
   - `{:error, %Jido.Action.Error.ExecutionFailureError{}}` if the process crashes or no result is received.
   """
-  @spec await(async_ref()) :: exec_result
+  @spec await(async_ref_input()) :: exec_result
   def await(async_ref), do: await(async_ref, Config.await_timeout())
 
   @doc """
@@ -81,6 +85,7 @@ defmodule Jido.Exec.Async do
   ## Parameters
 
   - `async_ref`: The async reference returned by `start/4`.
+    Legacy map refs are still accepted for one release cycle and emit a deprecation warning.
   - `timeout`: Maximum time to wait in milliseconds.
 
   ## Returns
@@ -89,8 +94,8 @@ defmodule Jido.Exec.Async do
   - `{:error, %Jido.Action.Error.TimeoutError{}}` if timeout is reached.
   - `{:error, %Jido.Action.Error.ExecutionFailureError{}}` if an execution failure occurs.
   """
-  @spec await(async_ref(), timeout()) :: exec_result
-  def await(%{ref: ref, pid: pid} = async_ref, timeout) do
+  @spec await(async_ref_input(), timeout()) :: exec_result
+  def await(%AsyncRef{ref: ref, pid: pid} = async_ref, timeout) do
     monitor_ref = monitor_ref_for_current_process(async_ref, pid)
 
     result =
@@ -127,22 +132,37 @@ defmodule Jido.Exec.Async do
     result
   end
 
+  def await(%{ref: ref, pid: pid} = legacy_async_ref, timeout)
+      when is_reference(ref) and is_pid(pid) and not is_struct(legacy_async_ref, AsyncRef) do
+    legacy_async_ref
+    |> AsyncRef.from_legacy_await_map(__MODULE__)
+    |> await(timeout)
+  end
+
   @doc """
   Cancels a running asynchronous Action execution.
 
   ## Parameters
 
   - `async_ref`: The reference returned by `start/4`, or just the PID of the process to cancel.
+    Legacy map refs are still accepted for one release cycle and emit a deprecation warning.
 
   ## Returns
 
   - `:ok` if the cancellation was successful.
   - `{:error, reason}` if the cancellation failed or the input was invalid.
   """
-  @spec cancel(async_ref() | pid()) :: :ok | exec_error
-  def cancel(%{pid: pid} = async_ref) when is_pid(pid) do
-    shutdown_process(pid, Map.get(async_ref, :monitor_ref))
+  @spec cancel(cancel_async_ref_input() | pid()) :: :ok | exec_error
+  def cancel(%AsyncRef{pid: pid, monitor_ref: monitor_ref}) when is_pid(pid) do
+    shutdown_process(pid, monitor_ref)
     :ok
+  end
+
+  def cancel(%{pid: pid} = legacy_async_ref)
+      when is_pid(pid) and not is_struct(legacy_async_ref, AsyncRef) do
+    legacy_async_ref
+    |> AsyncRef.from_legacy_cancel_map(__MODULE__)
+    |> cancel()
   end
 
   def cancel(pid) when is_pid(pid) do

@@ -52,6 +52,7 @@ defmodule Jido.Tools.LuaEval do
   """
 
   alias Jido.Action.Error
+  alias Jido.Exec.AsyncRef
   alias Jido.Exec.TaskHelper
 
   @down_grace_period_ms 100
@@ -121,7 +122,7 @@ defmodule Jido.Tools.LuaEval do
     end
   end
 
-  defp await_lua_result(%{ref: ref, pid: pid, monitor_ref: monitor_ref}, timeout_ms) do
+  defp await_lua_result(%AsyncRef{ref: ref, pid: pid, monitor_ref: monitor_ref}, timeout_ms) do
     receive do
       {:lua_eval_result, ^ref, result} ->
         TaskHelper.demonitor_flush(monitor_ref)
