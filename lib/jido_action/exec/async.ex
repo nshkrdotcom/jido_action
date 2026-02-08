@@ -11,8 +11,8 @@ defmodule Jido.Exec.Async do
   alias Jido.Action.Error
   alias Jido.Exec.AsyncLifecycle
   alias Jido.Exec.AsyncRef
-  alias Jido.Exec.TaskLifecycle
   alias Jido.Exec.TaskHelper
+  alias Jido.Exec.TaskLifecycle
   alias Jido.Exec.Types
 
   @result_tag :action_async_result

@@ -51,8 +51,8 @@ defmodule Jido.Tools.LuaEval do
       {:error, %Jido.Action.Error.TimeoutError{}}
   """
 
-  alias Jido.Action.Error
   alias Jido.Action.Config
+  alias Jido.Action.Error
   alias Jido.Exec.TaskLifecycle
 
   @lua_eval_result_tag :lua_eval_result

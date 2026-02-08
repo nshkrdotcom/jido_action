@@ -236,35 +236,78 @@ defmodule Jido.Tools.Workflow.Execution do
       {:error, workflow_timeout_error(0)}
     else
       with_parallel_task_supervisor(metadata, context, fn task_sup ->
-        scoped_context = Map.put(context, @workflow_task_supervisor_key, task_sup)
-
-        stream_opts = [
-          ordered: ordered,
+        execute_parallel_with_supervisor(
+          task_sup,
+          instructions,
+          params,
+          context,
+          module,
           max_concurrency: max_concurrency,
           timeout: timeout,
-          on_timeout: :kill_task
-        ]
-
-        results =
-          Task.Supervisor.async_stream_nolink(
-            task_sup,
-            instructions,
-            fn instruction ->
-              execute_parallel_instruction_with_owner_watchdog(
-                instruction,
-                params,
-                scoped_context,
-                module,
-                owner
-              )
-            end,
-            stream_opts
-          )
-          |> Enum.map(&handle_stream_result/1)
-
-        {:ok, %{parallel_results: results}}
+          ordered: ordered,
+          owner: owner
+        )
       end)
     end
+  end
+
+  defp execute_parallel_with_supervisor(
+         task_sup,
+         instructions,
+         params,
+         context,
+         module,
+         opts
+       ) do
+    scoped_context = Map.put(context, @workflow_task_supervisor_key, task_sup)
+
+    stream_opts = [
+      ordered: Keyword.fetch!(opts, :ordered),
+      max_concurrency: Keyword.fetch!(opts, :max_concurrency),
+      timeout: Keyword.fetch!(opts, :timeout),
+      on_timeout: :kill_task
+    ]
+
+    owner = Keyword.fetch!(opts, :owner)
+
+    results =
+      stream_parallel_instructions(
+        task_sup,
+        instructions,
+        params,
+        scoped_context,
+        module,
+        owner,
+        stream_opts
+      )
+
+    {:ok, %{parallel_results: results}}
+  end
+
+  defp stream_parallel_instructions(
+         task_sup,
+         instructions,
+         params,
+         scoped_context,
+         module,
+         owner,
+         stream_opts
+       ) do
+    Task.Supervisor.async_stream_nolink(
+      task_sup,
+      instructions,
+      fn instruction ->
+        execute_parallel_instruction_with_owner_watchdog(
+          instruction,
+          params,
+          scoped_context,
+          module,
+          owner
+        )
+      end,
+      stream_opts
+    )
+    |> Enum.map(&handle_stream_result/1)
   end
 
   defp handle_stream_result({:ok, value}), do: value
@@ -382,11 +425,9 @@ defmodule Jido.Tools.Workflow.Execution do
   end
 
   defp resolve_task_supervisor(opts) when is_list(opts) do
-    try do
-      {:ok, Supervisors.task_supervisor(opts)}
-    rescue
-      e in ArgumentError -> {:error, e}
-    end
+    {:ok, Supervisors.task_supervisor(opts)}
+  rescue
+    e in ArgumentError -> {:error, e}
   end
 
   defp stop_parallel_supervisor(task_sup) when is_pid(task_sup) do
