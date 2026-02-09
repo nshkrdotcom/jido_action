@@ -2,8 +2,12 @@ defmodule Jido.Action.Application do
   @moduledoc false
   use Application
 
+  alias Jido.Exec.ConfigValidator
+
   @impl true
   def start(_type, _args) do
+    :ok = ConfigValidator.validate_runtime_config()
+
     children = [
       {Task.Supervisor, name: Jido.Action.TaskSupervisor}
     ]

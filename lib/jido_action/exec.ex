@@ -44,6 +44,7 @@ defmodule Jido.Exec do
   alias Jido.Exec.Compensation
   alias Jido.Exec.Retry
   alias Jido.Exec.Supervisors
+  alias Jido.Exec.TaskHelper
   alias Jido.Exec.Telemetry
   alias Jido.Exec.Validator
   alias Jido.Instruction
@@ -53,8 +54,12 @@ defmodule Jido.Exec do
   @default_timeout 30_000
 
   # Helper functions to get configuration values with fallbacks
-  defp get_default_timeout,
-    do: Application.get_env(:jido_action, :default_timeout, @default_timeout)
+  defp get_default_timeout do
+    case Application.get_env(:jido_action, :default_timeout, @default_timeout) do
+      timeout when is_integer(timeout) and timeout >= 0 -> timeout
+      _ -> @default_timeout
+    end
+  end
 
   @type action :: module()
   @type params :: map()
@@ -454,83 +459,50 @@ defmodule Jido.Exec do
     @dialyzer {:nowarn_function, execute_action_with_timeout: 5}
     defp execute_action_with_timeout(action, params, context, timeout, opts)
          when is_integer(timeout) and timeout > 0 do
-      # Get the current process's group leader for IO routing
-      current_gl = Process.group_leader()
-
       # Resolve supervisor based on jido: option (defaults to global)
       task_sup = Supervisors.task_supervisor(opts)
 
-      parent = self()
-      ref = make_ref()
+      {:ok, task_ref} =
+        TaskHelper.spawn_monitored(
+          task_sup,
+          fn ->
+            execute_action(action, params, context, opts)
+          end,
+          :execute_action_result,
+          preserve_group_leader: true
+        )
 
-      # Spawn process under the supervisor and send the result back explicitly.
-      # This avoids relying on Task.yield/2 behavior/typing (Elixir 1.18+).
-      {:ok, pid} =
-        Task.Supervisor.start_child(task_sup, fn ->
-          # Use the parent's group leader to ensure IO is properly captured
-          Process.group_leader(self(), current_gl)
-
-          result = execute_action(action, params, context, opts)
-          send(parent, {:execute_action_result, ref, result})
-        end)
-
-      monitor_ref = Process.monitor(pid)
-
-      # Wait for completion, crash, or timeout.
       result =
-        receive do
-          {:execute_action_result, ^ref, result} ->
-            Process.demonitor(monitor_ref, [:flush])
-            {:ok, result}
-
-          {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
-            # If the process exited normally, a result message may still be in flight.
-            case reason do
-              :normal ->
-                receive do
-                  {:execute_action_result, ^ref, result} -> {:ok, result}
-                after
-                  0 -> {:exit, reason}
-                end
-
-              _ ->
-                {:exit, reason}
-            end
-        after
-          timeout ->
-            _ = Task.Supervisor.terminate_child(task_sup, pid)
-
-            # Best-effort wait for termination to avoid leaking processes in slow CI runners.
-            receive do
-              {:DOWN, ^monitor_ref, :process, ^pid, _reason} -> :ok
-            after
-              100 -> :ok
-            end
-
-            Process.demonitor(monitor_ref, [:flush])
-
-            # Flush any late result message (race with timeout).
-            receive do
-              {:execute_action_result, ^ref, _result} -> :ok
-            after
-              0 -> :ok
-            end
-
-            :timeout
-        end
+        TaskHelper.await_result(
+          task_ref,
+          :execute_action_result,
+          timeout,
+          shutdown_grace_ms: 100,
+          down_grace_ms: 0,
+          normal_exit_result_grace_ms: 50,
+          max_flush_messages: 1000,
+          flush_timeout_ms: 0
+        )
 
       case result do
         {:ok, result} ->
           result
 
-        {:exit, reason} ->
+        {:error, :missing_result} ->
+          {:error,
+           Error.execution_error("Task exited: :normal", %{
+             reason: :normal,
+             action: action
+           })}
+
+        {:error, {:exit, reason}} ->
           {:error,
            Error.execution_error("Task exited: #{inspect(reason)}", %{
              reason: reason,
              action: action
            })}
 
-        :timeout ->
+        {:error, :timeout} ->
           {:error,
            Error.timeout_error(
              "Action #{inspect(action)} timed out after #{timeout}ms",

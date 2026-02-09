@@ -10,6 +10,7 @@ defmodule Jido.Exec.Compensation do
 
   alias Jido.Action.Error
   alias Jido.Exec.Supervisors
+  alias Jido.Exec.TaskHelper
   alias Jido.Exec.Telemetry
 
   require Logger
@@ -107,46 +108,44 @@ defmodule Jido.Exec.Compensation do
       compensation_opts = metadata[:compensation] || []
       timeout = get_compensation_timeout(opts, compensation_opts)
 
-      current_gl = Process.group_leader()
       task_sup = Supervisors.task_supervisor(opts)
-      parent = self()
-      ref = make_ref()
 
       compensation_run_opts =
         opts
         |> Keyword.take([:timeout, :backoff, :telemetry, :jido])
         |> Keyword.put(:compensation_timeout, timeout)
 
-      {:ok, pid} =
-        Task.Supervisor.start_child(task_sup, fn ->
-          Process.group_leader(self(), current_gl)
-          result = action.on_error(params, error, context, compensation_run_opts)
-          send(parent, {:compensation_result, ref, result})
-        end)
-
-      monitor_ref = Process.monitor(pid)
+      {:ok, task_ref} =
+        TaskHelper.spawn_monitored(
+          task_sup,
+          fn ->
+            action.on_error(params, error, context, compensation_run_opts)
+          end,
+          :compensation_result,
+          preserve_group_leader: true
+        )
 
       result =
-        receive do
-          {:compensation_result, ^ref, result} ->
-            Process.demonitor(monitor_ref, [:flush])
-            {:ok, result}
+        case TaskHelper.await_result(
+               task_ref,
+               :compensation_result,
+               timeout,
+               shutdown_grace_ms: 100,
+               down_grace_ms: 0,
+               normal_exit_result_grace_ms: 50,
+               max_flush_messages: 1000,
+               flush_timeout_ms: 0
+             ) do
+          {:ok, task_result} ->
+            {:ok, task_result}
 
-          {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
-            case reason do
-              :normal ->
-                receive do
-                  {:compensation_result, ^ref, result} -> {:ok, result}
-                after
-                  0 -> {:exit, reason}
-                end
+          {:error, :missing_result} ->
+            {:exit, :normal}
 
-              _ ->
-                {:exit, reason}
-            end
-        after
-          timeout ->
-            _ = Task.Supervisor.terminate_child(task_sup, pid)
+          {:error, {:exit, reason}} ->
+            {:exit, reason}
+
+          {:error, :timeout} ->
             :timeout
         end
 

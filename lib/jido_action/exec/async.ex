@@ -9,14 +9,17 @@ defmodule Jido.Exec.Async do
 
   alias Jido.Action.Error
   alias Jido.Exec.Supervisors
-
-  require Logger
+  alias Jido.Exec.TaskHelper
 
   @default_timeout 5000
 
   # Helper functions to get configuration values with fallbacks
-  defp get_default_timeout,
-    do: Application.get_env(:jido_action, :default_timeout, @default_timeout)
+  defp get_default_timeout do
+    case Application.get_env(:jido_action, :default_timeout, @default_timeout) do
+      timeout when is_integer(timeout) and timeout >= 0 -> timeout
+      _ -> @default_timeout
+    end
+  end
 
   @type action :: module()
   @type params :: map()
@@ -35,6 +38,9 @@ defmodule Jido.Exec.Async do
           | exec_success_dir
           | exec_error
           | exec_error_dir
+
+  @monitor_key_prefix {__MODULE__, :monitor_ref}
+  @pid_monitor_key_prefix {__MODULE__, :pid_monitor_ref}
 
   @doc """
   Starts an asynchronous Action execution.
@@ -58,25 +64,19 @@ defmodule Jido.Exec.Async do
   """
   @spec start(action(), params(), context(), run_opts()) :: async_ref()
   def start(action, params \\ %{}, context \\ %{}, opts \\ []) do
-    ref = make_ref()
-    parent = self()
-
     # Resolve supervisor based on jido: option (defaults to global)
     task_sup = Supervisors.task_supervisor(opts)
 
-    # Start the task under the resolved TaskSupervisor.
-    # If the supervisor is not running, this will raise an error.
-    {:ok, pid} =
-      Task.Supervisor.start_child(task_sup, fn ->
-        result = Jido.Exec.run(action, params, context, opts)
-        send(parent, {:action_async_result, ref, result})
-        result
-      end)
+    {:ok, %{pid: pid, ref: ref, monitor_ref: monitor_ref}} =
+      TaskHelper.spawn_monitored(
+        task_sup,
+        fn -> Jido.Exec.run(action, params, context, opts) end,
+        :action_async_result
+      )
 
-    # We monitor the newly created Task so we can handle :DOWN messages in `await`.
-    Process.monitor(pid)
+    put_monitor_ref(ref, pid, monitor_ref)
 
-    %{ref: ref, pid: pid}
+    %{pid: pid, ref: ref}
   end
 
   @doc """
@@ -110,57 +110,30 @@ defmodule Jido.Exec.Async do
   """
   @spec await(async_ref(), timeout()) :: exec_result
   def await(%{ref: ref, pid: pid}, timeout) do
-    result =
-      receive do
-        {:action_async_result, ^ref, result} ->
-          result
+    monitor_ref = pop_monitor_ref(ref, pid)
 
-        {:DOWN, _monitor_ref, :process, ^pid, :normal} ->
-          # Process completed normally, but we might still receive the result
-          receive do
-            {:action_async_result, ^ref, result} ->
-              result
-          after
-            100 ->
-              # Flush any stray result message to prevent mailbox leak
-              receive do
-                {:action_async_result, ^ref, _} -> :ok
-              after
-                0 -> :ok
-              end
+    case TaskHelper.await_result(
+           %{pid: pid, ref: ref, monitor_ref: monitor_ref},
+           :action_async_result,
+           timeout,
+           shutdown_grace_ms: 0,
+           down_grace_ms: 0,
+           normal_exit_result_grace_ms: 50,
+           max_flush_messages: 1000,
+           flush_timeout_ms: 0
+         ) do
+      {:ok, result} ->
+        result
 
-              {:error, Error.execution_error("Process completed but result was not received")}
-          end
+      {:error, :missing_result} ->
+        {:error, Error.execution_error("Process completed but result was not received")}
 
-        {:DOWN, _monitor_ref, :process, ^pid, reason} ->
-          {:error, Error.execution_error("Server error in async action: #{inspect(reason)}")}
-      after
-        timeout ->
-          Process.exit(pid, :kill)
+      {:error, {:exit, reason}} ->
+        {:error, Error.execution_error("Server error in async action: #{inspect(reason)}")}
 
-          receive do
-            {:DOWN, _, :process, ^pid, _} -> :ok
-          after
-            0 -> :ok
-          end
-
-          {:error,
-           Error.timeout_error("Async action timed out after #{timeout}ms", %{timeout: timeout})}
-      end
-
-    # Flush any remaining messages for this ref/pid to prevent mailbox leaks
-    flush_messages(ref, pid)
-
-    result
-  end
-
-  # Flush any stray messages related to this async operation
-  defp flush_messages(ref, pid) do
-    receive do
-      {:action_async_result, ^ref, _} -> flush_messages(ref, pid)
-      {:DOWN, _, :process, ^pid, _} -> flush_messages(ref, pid)
-    after
-      0 -> :ok
+      {:error, :timeout} ->
+        {:error,
+         Error.timeout_error("Async action timed out after #{timeout}ms", %{timeout: timeout})}
     end
   end
 
@@ -177,13 +150,61 @@ defmodule Jido.Exec.Async do
   - `{:error, reason}` if the cancellation failed or the input was invalid.
   """
   @spec cancel(async_ref() | pid()) :: :ok | exec_error
-  def cancel(%{ref: _ref, pid: pid}), do: cancel(pid)
+  def cancel(%{ref: ref, pid: pid}) do
+    monitor_ref = pop_monitor_ref(ref, pid)
+
+    _ =
+      TaskHelper.await_result(
+        %{pid: pid, ref: ref, monitor_ref: monitor_ref},
+        :action_async_result,
+        0,
+        shutdown_grace_ms: 0,
+        down_grace_ms: 0,
+        normal_exit_result_grace_ms: 0,
+        max_flush_messages: 1000,
+        flush_timeout_ms: 0
+      )
+
+    :ok
+  end
+
   def cancel(%{pid: pid}), do: cancel(pid)
 
   def cancel(pid) when is_pid(pid) do
-    Process.exit(pid, :shutdown)
+    monitor_ref = pop_monitor_ref(pid)
+
+    TaskHelper.timeout_cleanup(
+      %{pid: pid, ref: make_ref(), monitor_ref: monitor_ref},
+      :action_async_result,
+      shutdown_grace_ms: 0,
+      down_grace_ms: 0,
+      max_flush_messages: 0,
+      flush_timeout_ms: 0
+    )
+
     :ok
   end
 
   def cancel(_), do: {:error, Error.validation_error("Invalid async ref for cancellation")}
+
+  defp put_monitor_ref(ref, pid, monitor_ref) do
+    Process.put(monitor_key(ref, pid), monitor_ref)
+    Process.put(pid_monitor_key(pid), monitor_ref)
+  end
+
+  defp pop_monitor_ref(ref, pid) do
+    monitor_ref = Process.get(monitor_key(ref, pid), :any)
+    Process.delete(monitor_key(ref, pid))
+    Process.delete(pid_monitor_key(pid))
+    monitor_ref
+  end
+
+  defp pop_monitor_ref(pid) do
+    monitor_ref = Process.get(pid_monitor_key(pid), :any)
+    Process.delete(pid_monitor_key(pid))
+    monitor_ref
+  end
+
+  defp monitor_key(ref, pid), do: {@monitor_key_prefix, ref, pid}
+  defp pid_monitor_key(pid), do: {@pid_monitor_key_prefix, pid}
 end
