@@ -68,6 +68,22 @@ defmodule JidoTest.ExecReturnShapeTest do
       end)
     end
 
+    test "accepts {:error, non-binary} and normalizes message/details" do
+      defmodule ValidErrorMapAction do
+        use Jido.Action, name: "valid_error_map"
+
+        def run(_params, _context), do: {:error, %{type: :invalid_step, message: "failed"}}
+      end
+
+      capture_log(fn ->
+        assert {:error, %Error.ExecutionFailureError{} = error} =
+                 Exec.run(ValidErrorMapAction, %{}, %{})
+
+        assert Exception.message(error) =~ "Action returned error"
+        assert error.details.reason == %{type: :invalid_step, message: "failed"}
+      end)
+    end
+
     test "rejects :ok atom - unexpected shape" do
       defmodule AtomOkAction do
         use Jido.Action, name: "atom_ok"

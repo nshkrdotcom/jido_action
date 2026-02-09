@@ -46,7 +46,11 @@ defmodule JidoTest.ExecRunTest do
           assert {:ok, %{value: 5}} = Exec.run(BasicAction, %{value: 5})
         end)
 
-      assert log =~ "Executing JidoTest.TestActions.BasicAction with params: %{value: 5}"
+      assert log =~
+               "Executing JidoTest.TestActions.BasicAction with params keys: [:value] (size=1)"
+
+      assert log =~ "context keys: [:action_metadata] (size=1)"
+      refute log =~ "params: %{value: 5}"
       verify!()
     end
 
@@ -98,7 +102,8 @@ defmodule JidoTest.ExecRunTest do
           assert is_exception(error)
         end)
 
-      assert log =~ "Executing JidoTest.TestActions.ErrorAction with params: %{}"
+      assert log =~ "Executing JidoTest.TestActions.ErrorAction with params keys: [] (size=0)"
+      assert log =~ "context keys: [:action_metadata] (size=1)"
       assert log =~ "Action JidoTest.TestActions.ErrorAction failed"
       verify!()
     end
@@ -213,6 +218,16 @@ defmodule JidoTest.ExecRunTest do
 
       assert {:error, %Jido.Action.Error.InvalidInputError{}} =
                Exec.normalize_params(params)
+    end
+
+    test "handles {:error, non-binary reason} and preserves details" do
+      params = {:error, %{bad: :shape}}
+
+      assert {:error, %Jido.Action.Error.InvalidInputError{} = error} =
+               Exec.normalize_params(params)
+
+      assert Exception.message(error) =~ "%{bad: :shape}"
+      assert error.details.reason == %{bad: :shape}
     end
 
     test "passes through exception errors" do

@@ -52,9 +52,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec log_execution_start(module(), map(), map()) :: :ok
   def log_execution_start(action, params, context) do
-    Logger.notice(
-      "Executing #{inspect(action)} with params: #{inspect(params)} and context: #{inspect(context)}"
-    )
+    Logger.info(start_log_message(action, params, context))
   end
 
   @doc """
@@ -116,11 +114,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_start(atom(), module(), map(), map()) :: :ok
   def cond_log_start(log_level, action, params, context) do
-    cond_log(
-      log_level,
-      :notice,
-      "Executing #{inspect(action)} with params: #{inspect(params)} and context: #{inspect(context)}"
-    )
+    cond_log(log_level, :info, start_log_message(action, params, context))
   end
 
   @doc """
@@ -258,4 +252,14 @@ defmodule Jido.Exec.Telemetry do
   def cond_log_failure(log_level, message) do
     cond_log(log_level, :debug, "Action Execution failed: #{message}")
   end
+
+  defp start_log_message(action, params, context) do
+    "Executing #{inspect(action)} with params keys: #{summarize_map_keys(params)} and context keys: #{summarize_map_keys(context)}"
+  end
+
+  defp summarize_map_keys(value) when is_map(value) do
+    "#{inspect(value |> Map.keys() |> Enum.sort())} (size=#{map_size(value)})"
+  end
+
+  defp summarize_map_keys(value), do: "#{inspect(value)} (size=unknown)"
 end

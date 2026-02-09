@@ -56,7 +56,8 @@ defmodule JidoTest.ExecIntegrationTest do
         end)
 
       assert log =~ "Executing JidoTest.TestActions.BasicAction"
-      assert log =~ "params: %{value: 42}"
+      assert log =~ "params keys: [:value] (size=1)"
+      refute log =~ "params: %{value: 42}"
       verify!()
     end
 

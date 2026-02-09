@@ -95,6 +95,22 @@ defmodule Jido.Tools.LuaEvalTest do
       params = %{code: "return 42", timeout_ms: 1000}
       assert {:ok, %{results: [42]}} = LuaEval.run(params, @context)
     end
+
+    test "returns an error when lua task exits unexpectedly without crashing caller" do
+      parent = self()
+
+      worker =
+        spawn(fn ->
+          result = LuaEval.run(%{code: "return 1", max_heap_bytes: 1}, @context)
+          send(parent, {:lua_eval_result, result})
+        end)
+
+      worker_ref = Process.monitor(worker)
+
+      assert_receive {:lua_eval_result, {:error, %{type: :lua_error, message: message}}}, 1_000
+      assert is_binary(message)
+      assert_receive {:DOWN, ^worker_ref, :process, ^worker, :normal}, 1_000
+    end
   end
 
   describe "sandbox security" do

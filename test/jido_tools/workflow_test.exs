@@ -91,6 +91,21 @@ defmodule JidoTest.Tools.WorkflowTest do
       ]
   end
 
+  defmodule TimeoutParallelWorkflow do
+    use Jido.Tools.Workflow,
+      name: "timeout_parallel_workflow",
+      description: "A workflow with parallel timeout behavior",
+      schema: [
+        input: [type: :string, required: true]
+      ],
+      workflow: [
+        {:parallel, [name: "parallel_timeout_step"],
+         [
+           {:step, [name: "slow_parallel"], [{JidoTest.TestActions.DelayAction, delay: 200}]}
+         ]}
+      ]
+  end
+
   defmodule ConvergeWorkflow do
     use Jido.Tools.Workflow,
       name: "converge_workflow",
@@ -210,6 +225,23 @@ defmodule JidoTest.Tools.WorkflowTest do
       assert result.logged == "Finished parallel workflow"
       assert Map.has_key?(result, :parallel_results)
       assert length(result.parallel_results) == 3
+    end
+
+    test "supports configurable timeout for parallel workflow steps" do
+      original_timeout = Application.get_env(:jido_action, :workflow_parallel_timeout)
+
+      try do
+        Application.put_env(:jido_action, :workflow_parallel_timeout, 20)
+
+        assert {:ok, result} = TimeoutParallelWorkflow.run(%{input: "test input"}, %{})
+        assert [%{error: %Error.ExecutionFailureError{}}] = result.parallel_results
+      after
+        if original_timeout == nil do
+          Application.delete_env(:jido_action, :workflow_parallel_timeout)
+        else
+          Application.put_env(:jido_action, :workflow_parallel_timeout, original_timeout)
+        end
+      end
     end
 
     test "executes a workflow with converge steps" do

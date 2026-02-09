@@ -6,6 +6,7 @@ defmodule JidoTest.Exec.ChainTest do
   alias Jido.Exec.Chain
   alias JidoTest.TestActions.Add
   alias JidoTest.TestActions.ContextAwareMultiply
+  alias JidoTest.TestActions.DelayAction
   alias JidoTest.TestActions.ErrorAction
   alias JidoTest.TestActions.Multiply
   alias JidoTest.TestActions.Square
@@ -107,6 +108,44 @@ defmodule JidoTest.Exec.ChainTest do
         task = Chain.chain([Add, Multiply], %{value: 5}, async: true)
         assert %Task{} = task
         assert {:ok, %{value: 12}} = Task.await(task)
+      end)
+    end
+
+    test "async chain tasks run under the configured task supervisor" do
+      capture_log(fn ->
+        task = Chain.chain([DelayAction], %{delay: 100}, async: true)
+        assert %Task{} = task
+
+        children = Task.Supervisor.children(Jido.Action.TaskSupervisor)
+        assert task.pid in children
+
+        assert {:ok, %{delay: 100, result: "Async action completed"}} = Task.await(task, 1_000)
+      end)
+    end
+
+    test "async chain task crashes do not exit the caller process" do
+      capture_log(fn ->
+        parent = self()
+
+        worker =
+          spawn(fn ->
+            task =
+              Chain.chain([Add], %{value: 1},
+                async: true,
+                interrupt_check: fn -> raise "interrupt check failed" end
+              )
+
+            send(parent, {:chain_task_started, self(), task.pid})
+            Process.sleep(100)
+            send(parent, {:chain_worker_survived, self()})
+          end)
+
+        worker_ref = Process.monitor(worker)
+
+        assert_receive {:chain_task_started, ^worker, task_pid}, 1_000
+        assert is_pid(task_pid)
+        assert_receive {:chain_worker_survived, ^worker}, 1_000
+        assert_receive {:DOWN, ^worker_ref, :process, ^worker, :normal}, 1_000
       end)
     end
 

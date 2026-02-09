@@ -124,11 +124,12 @@ defmodule Jido.Tools.Workflow.Execution do
 
     # Resolve supervisor based on jido: option (defaults to global)
     task_sup = Supervisors.task_supervisor(jido_opts)
+    parallel_timeout = resolve_parallel_timeout(metadata)
 
     stream_opts = [
       ordered: true,
       max_concurrency: max_concurrency,
-      timeout: :infinity,
+      timeout: parallel_timeout,
       on_timeout: :kill_task
     ]
 
@@ -163,5 +164,18 @@ defmodule Jido.Tools.Workflow.Execution do
   catch
     kind, reason ->
       %{error: Error.execution_error("Parallel step caught", %{kind: kind, reason: reason})}
+  end
+
+  defp resolve_parallel_timeout(metadata) do
+    metadata_timeout = Keyword.get(metadata, :timeout)
+
+    timeout =
+      metadata_timeout || Application.get_env(:jido_action, :workflow_parallel_timeout, :infinity)
+
+    case timeout do
+      :infinity -> :infinity
+      value when is_integer(value) and value >= 0 -> value
+      _ -> :infinity
+    end
   end
 end

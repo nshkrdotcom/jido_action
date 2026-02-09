@@ -55,8 +55,9 @@ defmodule Jido.Exec.TaskHelper do
         demonitor_flush(monitor_ref)
         {:ok, result}
 
-      {:DOWN, down_ref, :process, ^pid, :normal}
-      when (is_reference(monitor_ref) and down_ref == monitor_ref) or monitor_ref == :any ->
+      {:DOWN, down_ref, :process, ^pid, reason}
+      when ((is_reference(monitor_ref) and down_ref == monitor_ref) or monitor_ref == :any) and
+             reason in [:normal, :noproc] ->
         normal_exit_grace_ms =
           resolve_non_neg_integer(
             opts,

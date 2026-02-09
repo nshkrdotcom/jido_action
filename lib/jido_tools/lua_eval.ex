@@ -51,6 +51,8 @@ defmodule Jido.Tools.LuaEval do
       {:error, %{type: :timeout, timeout_ms: 50}}
   """
 
+  alias Jido.Exec.TaskHelper
+
   use Jido.Action,
     name: "lua_eval",
     description: "Execute a Lua code string in a sandboxed VM and return the values.",
@@ -94,26 +96,53 @@ defmodule Jido.Tools.LuaEval do
   @impl true
   def run(params, _context) do
     if Code.ensure_loaded?(Lua) do
-      timeout_ms = Map.get(params, :timeout_ms, 1000)
-
-      task =
-        Task.async(fn ->
-          do_run(params)
-        end)
-
-      case Task.yield(task, timeout_ms) do
-        {:ok, res} ->
-          res
-
-        nil ->
-          Task.shutdown(task, :brutal_kill)
-          {:error, %{type: :timeout, timeout_ms: timeout_ms}}
-      end
+      execute_lua(params)
     else
       msg =
         "Lua library (:lua) is not available. Add {:lua, \"~> 0.3\"} to your deps and run mix deps.get"
 
       return_error(:dependency_error, msg)
+    end
+  end
+
+  defp execute_lua(params) do
+    timeout_ms = Map.get(params, :timeout_ms, 1000)
+
+    case TaskHelper.spawn_monitored(
+           Jido.Action.TaskSupervisor,
+           fn -> do_run(params) end,
+           :lua_eval_result
+         ) do
+      {:ok, task_ref} ->
+        await_lua_result(task_ref, timeout_ms)
+
+      {:error, reason} ->
+        return_error(:lua_error, "Failed to start Lua task: #{inspect(reason)}")
+    end
+  end
+
+  defp await_lua_result(task_ref, timeout_ms) do
+    case TaskHelper.await_result(
+           task_ref,
+           :lua_eval_result,
+           timeout_ms,
+           shutdown_grace_ms: 0,
+           down_grace_ms: 0,
+           normal_exit_result_grace_ms: 50,
+           max_flush_messages: 1000,
+           flush_timeout_ms: 0
+         ) do
+      {:ok, res} ->
+        res
+
+      {:error, {:exit, reason}} ->
+        return_error(:lua_error, "Lua task exited: #{inspect(reason)}")
+
+      {:error, :missing_result} ->
+        return_error(:lua_error, "Lua task completed but result was not received")
+
+      {:error, :timeout} ->
+        {:error, %{type: :timeout, timeout_ms: timeout_ms}}
     end
   end
 

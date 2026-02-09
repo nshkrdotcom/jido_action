@@ -67,16 +67,19 @@ defmodule Jido.Exec.Async do
     # Resolve supervisor based on jido: option (defaults to global)
     task_sup = Supervisors.task_supervisor(opts)
 
-    {:ok, %{pid: pid, ref: ref, monitor_ref: monitor_ref}} =
-      TaskHelper.spawn_monitored(
-        task_sup,
-        fn -> Jido.Exec.run(action, params, context, opts) end,
-        :action_async_result
-      )
+    case TaskHelper.spawn_monitored(
+           task_sup,
+           fn -> Jido.Exec.run(action, params, context, opts) end,
+           :action_async_result
+         ) do
+      {:ok, %{pid: pid, ref: ref, monitor_ref: monitor_ref}} ->
+        put_monitor_ref(ref, pid, monitor_ref)
+        %{pid: pid, ref: ref}
 
-    put_monitor_ref(ref, pid, monitor_ref)
-
-    %{pid: pid, ref: ref}
+      {:error, reason} ->
+        raise ArgumentError,
+              "Failed to start async task under #{inspect(task_sup)}: #{inspect(reason)}"
+    end
   end
 
   @doc """

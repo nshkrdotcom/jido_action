@@ -297,7 +297,11 @@ defmodule Jido.Exec do
     defp normalize_params(params) when is_list(params), do: {:ok, Map.new(params)}
     defp normalize_params({:ok, params}) when is_map(params), do: {:ok, params}
     defp normalize_params({:ok, params}) when is_list(params), do: {:ok, Map.new(params)}
-    defp normalize_params({:error, reason}), do: {:error, Error.validation_error(reason)}
+
+    defp normalize_params({:error, reason}) do
+      message = if is_binary(reason), do: reason, else: inspect(reason)
+      {:error, Error.validation_error(message, %{reason: reason})}
+    end
 
     defp normalize_params(params),
       do: {:error, Error.validation_error("Invalid params type: #{inspect(params)}")}
@@ -542,8 +546,9 @@ defmodule Jido.Exec do
 
     # Handle errors with extra data
     defp handle_action_result({:error, reason, other}, action, log_level, _opts) do
-      Telemetry.cond_log_error(log_level, action, reason)
-      {:error, reason, other}
+      normalized_reason = normalize_error_reason(reason)
+      Telemetry.cond_log_error(log_level, action, normalized_reason)
+      {:error, normalized_reason, other}
     end
 
     # Handle exception errors
@@ -555,8 +560,9 @@ defmodule Jido.Exec do
 
     # Handle generic errors
     defp handle_action_result({:error, reason}, action, log_level, _opts) do
-      Telemetry.cond_log_error(log_level, action, reason)
-      {:error, Error.execution_error(reason)}
+      error = normalize_error_reason(reason)
+      Telemetry.cond_log_error(log_level, action, error)
+      {:error, error}
     end
 
     # Handle unexpected return shapes
@@ -622,6 +628,13 @@ defmodule Jido.Exec do
 
     defp build_exception_message(e, action) do
       "An unexpected error occurred during execution of #{inspect(action)}: #{inspect(e)}"
+    end
+
+    defp normalize_error_reason(%_{} = reason) when is_exception(reason), do: reason
+    defp normalize_error_reason(reason) when is_binary(reason), do: Error.execution_error(reason)
+
+    defp normalize_error_reason(reason) do
+      Error.execution_error("Action returned error: #{inspect(reason)}", %{reason: reason})
     end
   end
 end
