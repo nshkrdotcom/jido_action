@@ -62,3 +62,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive testing framework
 - AI tool conversion capabilities
 - Error handling and compensation system
+
+<!-- changelog -->
+
+## [v2.0.0-rc.5](https://github.com/agentjido/jido_action/compare/v2.0.0-rc.4...v2.0.0-rc.5) (2026-02-16)
+
+
+
+
+### Features:
+
+* tools: add github pulls comments and webhooks actions by mikehostetler
+
+### Bug Fixes:
+
+* timeout: propagate execution deadlines across nested tools (#99) by mikehostetler
+
+* retry: harden retry policy and suppress nested retries (#96) by mikehostetler
+
+* telemetry: sanitize metadata and logs (#98) by mikehostetler
+
+* async: enforce owner-only await and cancel (#97) by mikehostetler
+
+* error: normalize workflow/action-plan/lua/weather leaf error contracts (#95) by mikehostetler
+
+* exec: align changelog with base branch by mikehostetler
+
+* tools: remove changelog edit from luaeval supervision PR by mikehostetler
+
+* exec: remove changelog edit from async cancel PR by mikehostetler
+
+* exec: format config fallback test and drop changelog delta by mikehostetler
+
+* exec: guard invalid runtime timeout and retry defaults with safe fallbacks by mikehostetler
+
+* tools: run lua eval tasks under Task.Supervisor without caller linkage by mikehostetler
+
+* exec: cleanup async cancel monitor and mailbox residue by mikehostetler
+
+* workflow: add parallel timeout and strict failure policy controls by mikehostetler
+
+* exec: cleanup compensation monitor and timeout race leakage by mikehostetler
+
+* exec: eliminate async await monitor and mailbox leakage by mikehostetler
+
+* exec: run async chains under Task.Supervisor without caller linkage by mikehostetler
+
+* plan: reject undefined dependency steps during normalization by mikehostetler
+
+### Refactoring:
+
+* tools: centralize github client and response helpers by mikehostetler
