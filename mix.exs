@@ -223,7 +223,7 @@ defmodule JidoAction.MixProject do
       {:telemetry, "~> 1.3"},
       {:telemetry_metrics, "~> 1.1"},
       {:uniq, "~> 0.6.1"},
-      {:zoi, "~> 0.16"},
+      {:zoi, "~> 0.17"},
       {:splode, "~> 0.3.0"},
 
       # Skill & Action Dependencies for examples

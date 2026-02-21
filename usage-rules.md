@@ -52,22 +52,28 @@ Execute actions with retry, timeout, and error handling:
 {:ok, final} = Jido.Exec.Chain.chain([
   MyAction1,
   MyAction2
-], %{input: "data"}, %{})
+], %{input: "data"}, context: %{})
 ```
 
 ### Plans & Workflows
 Execute DAG-based workflows with dependencies:
 
 ```elixir
-plan = Jido.Plan.new()
-|> Jido.Plan.add("step1", Action1, %{}, [])
-|> Jido.Plan.add("step2", Action2, %{}, ["step1"])
-|> Jido.Plan.add("step3", Action3, %{}, ["step1", "step2"])
+defmodule MyApp.ProcessPlan do
+  use Jido.Tools.ActionPlan,
+    name: "process_plan",
+    description: "Runs a multi-step plan"
 
-{:ok, results} = Jido.Tools.ActionPlan.run(%{
-  plan: plan,
-  initial_data: %{input: "data"}
-}, %{})
+  @impl Jido.Tools.ActionPlan
+  def build(%{input: input}, _context) do
+    Jido.Plan.new()
+    |> Jido.Plan.add(:step1, {Action1, %{input: input}})
+    |> Jido.Plan.add(:step2, Action2, depends_on: :step1)
+    |> Jido.Plan.add(:step3, Action3, depends_on: [:step1, :step2])
+  end
+end
+
+{:ok, results} = Jido.Exec.run(MyApp.ProcessPlan, %{input: "data"})
 ```
 
 ## Built-in Tools (25+)
@@ -87,36 +93,37 @@ plan = Jido.Plan.new()
 
 ### HTTP Requests
 ```elixir
-# Simple HTTP
-{:ok, response} = Jido.Tools.Req.run(%{
-  method: :get,
-  url: "https://api.example.com/data"
-}, %{})
+defmodule MyApp.GetData do
+  use Jido.Tools.ReqTool,
+    name: "get_data",
+    description: "Fetch paged data from an API",
+    url: "https://api.example.com/data",
+    method: :get
+end
 
-# Custom HTTP action
-GetUser = Jido.Tools.ReqTool.new(
-  url: "https://api.example.com/users/:id",
-  method: :get
-)
-{:ok, user} = GetUser.run(%{id: "123"}, %{})
+{:ok, response} = MyApp.GetData.run(%{page: 1}, %{})
 ```
 
 ### GitHub Tools
 ```elixir
+client = Tentacat.Client.new(%{access_token: token})
+
 # List issues
 {:ok, issues} = Jido.Tools.Github.Issues.List.run(%{
+  client: client,
   owner: "octocat",
   repo: "Hello-World",
   state: "open"
-}, %{github_token: token})
+}, %{})
 
 # Create issue
 {:ok, issue} = Jido.Tools.Github.Issues.Create.run(%{
+  client: client,
   owner: "octocat",
   repo: "Hello-World",
   title: "Bug Report",
   body: "Description..."
-}, %{github_token: token})
+}, %{})
 ```
 
 ### Arithmetic
@@ -128,8 +135,9 @@ GetUser = Jido.Tools.ReqTool.new(
 ### Weather
 ```elixir
 {:ok, weather} = Jido.Tools.Weather.run(%{
-  location: "San Francisco, CA",
-  units: "metric"
+  location: "37.7749,-122.4194",
+  periods: 3,
+  format: :map
 }, %{})
 ```
 
