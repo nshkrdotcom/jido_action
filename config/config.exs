@@ -28,6 +28,7 @@ if config_env() == :dev do
       refactor: [header: "Refactoring"],
       docs: [hidden?: true],
       test: [hidden?: true],
+      deps: [hidden?: true],
       chore: [hidden?: true],
       ci: [hidden?: true]
     ]
