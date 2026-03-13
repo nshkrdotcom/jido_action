@@ -306,6 +306,10 @@ defmodule Jido.Exec.Telemetry do
     summarize_truncated(value)
   end
 
+  defp do_sanitize(%_{} = struct, depth) when depth + 1 >= @max_depth do
+    summarize_truncated_struct(struct)
+  end
+
   defp do_sanitize(%_{} = struct, depth) do
     struct
     |> Map.from_struct()
@@ -405,6 +409,8 @@ defmodule Jido.Exec.Telemetry do
   defp strip_struct_tags(list) when is_list(list), do: Enum.map(list, &strip_struct_tags/1)
   defp strip_struct_tags(value), do: value
 
+  defp summarize_truncated(%_{} = struct), do: summarize_truncated_struct(struct)
+
   defp summarize_truncated(value) when is_map(value) do
     %{__truncated_depth__: @max_depth, type: :map, size: map_size(value)}
   end
@@ -419,4 +425,13 @@ defmodule Jido.Exec.Telemetry do
 
   defp summarize_truncated(value) when is_binary(value), do: do_sanitize(value, @max_depth - 1)
   defp summarize_truncated(value), do: value
+
+  defp summarize_truncated_struct(struct) do
+    %{
+      __truncated_depth__: @max_depth,
+      type: :struct,
+      module: inspect(struct.__struct__),
+      size: map_size(struct)
+    }
+  end
 end
