@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- changelog -->
 
+## [2.1.0](https://github.com/agentjido/jido_action/compare/v2.0.0...2.1.0) (2026-03-14)
+
+
+
+
+### Features:
+
+* schema: support plain JSON Schema maps as action schemas (#108) by Danila Poyarkov
+
+* schema: support plain JSON Schema maps as action schemas by Danila Poyarkov
+
+### Bug Fixes:
+
+* lockfile: remove unused dependencies by mikehostetler
+
+* prevent struct corruption during telemetry depth truncation (#120) by Edgar Gomes
+
+* prevent struct corruption during telemetry sanitization depth truncation by Edgar Gomes
+
+* preserve sanitization for deep telemetry structs by Edgar Gomes
+
+* release: hide deps commits from git_ops changelog by mikehostetler
+
+* sanitize telemetry struct map keys (#117) by mikehostetler
+
+* telemetry: sanitize non-scalar map keys by mikehostetler
+
+* ci: isolate beam cache per toolchain by mikehostetler
+
+* schema: harden json-schema key handling and add parity coverage by Danila Poyarkov
+
+* ci: clear changelog guard and dialyzer warnings by Danila Poyarkov
+
+* safe inspect struct truncation (#107) by roeeyn
+
+* sanitize struct truncation by roeeyn
+
+* preserve telemetry __struct__ compatibility by roeeyn
+
+* exec: keep sanitized structs inspect-safe (#103) by pcharbon70
+
+### Refactoring:
+
+* tools: remove api-specific tool packs from core (#118) by mikehostetler
+
+* tools: remove api-specific tool packs from jido_action by mikehostetler
+
 ## [v2.0.0](https://github.com/agentjido/jido_action/compare/v2.0.0-rc.5...v2.0.0) (2026-02-22)
 
 ### Release Notes:
