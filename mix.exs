@@ -138,10 +138,20 @@ defmodule JidoAction.MixProject do
           Jido.Action.Tool,
           Jido.Action.Util
         ],
+        "Schemas & Validation": [
+          Jido.Action.Runtime,
+          Jido.Action.Schema
+        ],
         "Execution Engine": [
           Jido.Exec,
+          Jido.Exec.Async,
           Jido.Exec.Chain,
-          Jido.Exec.Closure
+          Jido.Exec.Closure,
+          Jido.Exec.Compensation,
+          Jido.Exec.Retry,
+          Jido.Exec.Supervisors,
+          Jido.Exec.Telemetry,
+          Jido.Exec.Validator
         ],
         "Planning & Workflows": [
           Jido.Plan,
@@ -158,7 +168,8 @@ defmodule JidoAction.MixProject do
           Jido.Tools.ReqTool
         ],
         "Actions: Advanced": [
-          Jido.Tools.ActionPlan
+          Jido.Tools.ActionPlan,
+          Jido.Tools.LuaEval
         ],
         Examples: [
           Jido.Examples.ZoiExample
