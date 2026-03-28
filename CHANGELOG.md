@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- changelog -->
 
+## [v2.2.0](https://github.com/agentjido/jido_action/compare/v2.1.1...v2.2.0) (2026-03-28)
+
+
+
+
+### Features:
+
+* complete spec-led migration (#127) by mikehostetler
+
+* add AI error envelope helpers by mikehostetler
+
+### Refactoring:
+
+* make action error maps generic (#126) by mikehostetler
+
+* make action error maps generic by mikehostetler
+
 ## [v2.1.1](https://github.com/agentjido/jido_action/compare/v2.1.0...v2.1.1) (2026-03-14)
 
 
