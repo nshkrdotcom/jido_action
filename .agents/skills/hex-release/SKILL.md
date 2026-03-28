@@ -83,7 +83,14 @@ If any check fails, **STOP** and show the issues.
 ```bash
 mix hex.publish --dry-run
 ```
-Verify the package metadata and file list look correct. If this fails, **STOP**.
+Verify the package metadata and file list look correct.
+
+If this fails only because no local Hex user is authenticated, treat that as a **local environment limitation**, not a package configuration failure:
+- Show the package metadata/file list output to the user
+- Note that CI still requires a configured `HEX_API_KEY` secret to perform the real publish
+- Continue if everything else in the dry run looks correct
+
+If it fails for any other reason, **STOP**.
 
 **SHOW USER**: Summary of all pre-flight results and current version.
 
@@ -94,6 +101,7 @@ Verify the package metadata and file list look correct. If this fails, **STOP**.
 ## Path A: Automated Release (GitHub Actions)
 
 The AgentJido repos have a reusable release workflow triggered via `workflow_dispatch`.
+Many repos are already configured, so prefer verifying the existing workflow before proposing file changes.
 
 ### Step 1: Confirm Workflow Exists
 
@@ -101,6 +109,14 @@ Check that `.github/workflows/release.yml` exists and calls:
 ```yaml
 uses: agentjido/github-actions/.github/workflows/elixir-release.yml@main
 ```
+
+If that wrapper already exists, treat the repo as **configured**. Do not rewrite it just to match another repo byte-for-byte if it already delegates to the shared workflow and only adds compatible inputs.
+
+Also verify the repo can actually publish:
+- Confirm `git_ops` is present and configured locally
+- Confirm the release workflow uses `secrets: inherit`
+- Confirm a `HEX_API_KEY` secret is available in GitHub Actions, or ask the user to verify it if you cannot inspect secrets directly
+- Warn if the user is not preparing to release from `main`
 
 ### Step 2: Explain Dispatch Options
 
@@ -111,6 +127,7 @@ The release workflow supports these options:
   • dry_run: true     — Full dry run (no git push, no tag, no Hex publish)
   • hex_dry_run: true — Runs git_ops release + push, but skips actual Hex publish
   • skip_tests: true  — Skip test step (use if CI already passed)
+  • version_override: X.Y.Z — Force a specific bare SemVer version when the workflow supports it
 
 Recommended first run: dry_run: true
 ```
@@ -125,6 +142,11 @@ gh workflow run release.yml -f dry_run=true
 # Watch the run
 gh run list --workflow=release.yml --limit=1
 gh run watch
+```
+
+If the repo supports explicit version override:
+```bash
+gh workflow run release.yml -f dry_run=true -f version_override=1.2.3
 ```
 
 **Option 2 — GitHub UI**:
@@ -157,6 +179,11 @@ Review the workflow summary for:
 gh workflow run release.yml
 # Or with skip_tests if CI already passed:
 gh workflow run release.yml -f skip_tests=true
+```
+
+If the repo supports explicit version override:
+```bash
+gh workflow run release.yml -f version_override=1.2.3
 ```
 
 ### Step 6: Verify
@@ -297,4 +324,5 @@ mix hex.retire {PACKAGE} {VERSION} invalid --message "Released in error"
 - The `quality` mix alias varies per repo — check `mix.exs` aliases section
 - `git_ops` is a dev-only dependency — release commands run in `MIX_ENV=dev`
 - The automated workflow uses `GITHUB_TOKEN` for git push and `HEX_API_KEY` (org secret) for Hex publish
+- If a repo already has the standard reusable `release.yml`, prefer validating it with `mix test`, `mix git_ops.release --yes --dry-run`, and `mix hex.publish --dry-run` before changing workflow files
 - Repos with runtime git dependencies (e.g., `jido_runic`) cannot publish to Hex — use manual path for git tag/release only, skip Hex publish step
