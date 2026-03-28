@@ -251,28 +251,33 @@ defmodule Jido.ExecTimeoutTaskSupervisorTest do
         end
       end
 
-      initial_count = length(Process.list())
+      initial_count = task_supervisor_active_count()
 
       # Run several actions that timeout
       for _ <- 1..10 do
         Exec.execute_action_with_timeout(LeakTestAction, %{}, %{}, 50, log_level: :info)
       end
 
-      final_count = wait_for_process_count(initial_count, 5, 10)
+      final_count = wait_for_task_supervisor_count(initial_count, 10)
 
-      # Should be roughly the same (allow small variance for system processes)
-      assert_in_delta initial_count, final_count, 5
+      assert final_count == initial_count
     end
   end
 
-  defp wait_for_process_count(initial_count, tolerance, attempts_left) do
-    current_count = length(Process.list())
+  defp task_supervisor_active_count do
+    Jido.Action.TaskSupervisor
+    |> DynamicSupervisor.count_children()
+    |> Map.fetch!(:active)
+  end
 
-    if abs(current_count - initial_count) <= tolerance or attempts_left == 0 do
+  defp wait_for_task_supervisor_count(expected_count, attempts_left) do
+    current_count = task_supervisor_active_count()
+
+    if current_count == expected_count or attempts_left == 0 do
       current_count
     else
       Process.sleep(50)
-      wait_for_process_count(initial_count, tolerance, attempts_left - 1)
+      wait_for_task_supervisor_count(expected_count, attempts_left - 1)
     end
   end
 end
