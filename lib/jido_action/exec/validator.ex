@@ -6,8 +6,6 @@ defmodule Jido.Exec.Validator do
   that has been extracted from the main Exec module for better separation of concerns.
   """
 
-  import Jido.Action.Util, only: [cond_log: 3]
-
   alias Jido.Action.Error
 
   @doc """
@@ -72,14 +70,14 @@ defmodule Jido.Exec.Validator do
     if function_exported?(action, :validate_output, 1) do
       case action.validate_output(output) do
         {:ok, validated_output} ->
-          cond_log(log_level, :debug, fn ->
+          maybe_log(log_level, :debug, fn ->
             "Output validation succeeded for #{inspect(action)}"
           end)
 
           {:ok, validated_output}
 
         {:error, reason} ->
-          cond_log(
+          maybe_log(
             log_level,
             :debug,
             fn -> "Output validation failed for #{inspect(action)}: #{inspect(reason)}" end
@@ -88,7 +86,7 @@ defmodule Jido.Exec.Validator do
           {:error, reason}
 
         _ ->
-          cond_log(log_level, :debug, fn ->
+          maybe_log(log_level, :debug, fn ->
             "Invalid return from action.validate_output/1"
           end)
 
@@ -96,13 +94,24 @@ defmodule Jido.Exec.Validator do
       end
     else
       # If action doesn't have validate_output/1, skip output validation
-      cond_log(
+      maybe_log(
         log_level,
         :debug,
         fn -> "No output validation function found for #{inspect(action)}, skipping" end
       )
 
       {:ok, output}
+    end
+  end
+
+  defp maybe_log(threshold_level, message_level, message, metadata \\ []) do
+    valid_levels = Logger.levels()
+
+    if threshold_level in valid_levels and message_level in valid_levels and
+         Logger.compare_levels(threshold_level, message_level) in [:lt, :eq] do
+      Logger.log(message_level, message, metadata)
+    else
+      :ok
     end
   end
 end

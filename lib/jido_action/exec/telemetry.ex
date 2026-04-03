@@ -9,7 +9,6 @@ defmodule Jido.Exec.Telemetry do
   import Jido.Action.Util, only: [cond_log: 3]
 
   alias Jido.Action.Sanitizer
-
   require Logger
 
   @inspect_opts [charlists: :as_lists, printable_limit: :infinity, limit: :infinity]
@@ -128,7 +127,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_start(atom(), module(), map(), map()) :: :ok
   def cond_log_start(log_level, action, params, context) do
-    cond_log(
+    maybe_log(
       log_level,
       :notice,
       fn ->
@@ -144,7 +143,7 @@ defmodule Jido.Exec.Telemetry do
   def cond_log_end(log_level, action, result) do
     case result do
       {:ok, result_data} ->
-        cond_log(
+        maybe_log(
           log_level,
           :debug,
           fn ->
@@ -153,7 +152,7 @@ defmodule Jido.Exec.Telemetry do
         )
 
       {:ok, result_data, directive} ->
-        cond_log(
+        maybe_log(
           log_level,
           :debug,
           fn ->
@@ -162,12 +161,12 @@ defmodule Jido.Exec.Telemetry do
         )
 
       {:error, error} ->
-        cond_log(log_level, :error, fn ->
+        maybe_log(log_level, :error, fn ->
           "Action #{inspect(action)} failed: #{safe_inspect(error)}"
         end)
 
       {:error, error, directive} ->
-        cond_log(
+        maybe_log(
           log_level,
           :error,
           fn ->
@@ -176,7 +175,7 @@ defmodule Jido.Exec.Telemetry do
         )
 
       other ->
-        cond_log(
+        maybe_log(
           log_level,
           :debug,
           fn ->
@@ -191,7 +190,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_error(atom(), module(), any()) :: :ok
   def cond_log_error(log_level, action, error) do
-    cond_log(log_level, :error, fn ->
+    maybe_log(log_level, :error, fn ->
       "Action #{inspect(action)} failed: #{safe_inspect(error)}"
     end)
   end
@@ -202,7 +201,7 @@ defmodule Jido.Exec.Telemetry do
   @spec cond_log_retry(atom(), module(), non_neg_integer(), non_neg_integer(), non_neg_integer()) ::
           :ok
   def cond_log_retry(log_level, action, retry_count, max_retries, backoff) do
-    cond_log(
+    maybe_log(
       log_level,
       :info,
       fn ->
@@ -216,7 +215,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_message(atom(), atom(), String.t()) :: :ok
   def cond_log_message(log_level, level, message) do
-    cond_log(log_level, level, message)
+    maybe_log(log_level, level, message)
   end
 
   @doc """
@@ -224,7 +223,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_function_error(atom(), any()) :: :ok
   def cond_log_function_error(log_level, error) do
-    cond_log(
+    maybe_log(
       log_level,
       :warning,
       fn ->
@@ -238,7 +237,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_unexpected_error(atom(), any()) :: :ok
   def cond_log_unexpected_error(log_level, error) do
-    cond_log(
+    maybe_log(
       log_level,
       :error,
       fn -> "Unexpected error in action: #{extract_safe_error_message(error)}" end
@@ -250,7 +249,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_caught_error(atom(), any()) :: :ok
   def cond_log_caught_error(log_level, reason) do
-    cond_log(
+    maybe_log(
       log_level,
       :warning,
       fn ->
@@ -264,7 +263,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_execution_debug(atom(), module(), map(), map()) :: :ok
   def cond_log_execution_debug(log_level, action, params, context) do
-    cond_log(
+    maybe_log(
       log_level,
       :debug,
       fn ->
@@ -278,7 +277,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_validation_failure(atom(), module(), any()) :: :ok
   def cond_log_validation_failure(log_level, action, validation_error) do
-    cond_log(
+    maybe_log(
       log_level,
       :error,
       fn ->
@@ -292,7 +291,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_failure(atom(), any()) :: :ok
   def cond_log_failure(log_level, reason) do
-    cond_log(log_level, :debug, fn ->
+    maybe_log(log_level, :debug, fn ->
       "Action execution failed: #{safe_inspect(reason)}"
     end)
   end
@@ -312,5 +311,16 @@ defmodule Jido.Exec.Telemetry do
     inspect(Sanitizer.sanitize(value), @inspect_opts)
   rescue
     _ -> "[uninspectable value]"
+  end
+
+  defp maybe_log(threshold_level, message_level, message, metadata \\ []) do
+    valid_levels = Logger.levels()
+
+    if threshold_level in valid_levels and message_level in valid_levels and
+         Logger.compare_levels(threshold_level, message_level) in [:lt, :eq] do
+      Logger.log(message_level, message, metadata)
+    else
+      :ok
+    end
   end
 end
