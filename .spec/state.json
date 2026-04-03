@@ -3,6 +3,19 @@
     "items": [
       {
         "affects": [
+          "jido_action.action",
+          "jido_action.exec",
+          "jido_action.package",
+          "jido_action.tools"
+        ],
+        "date": "2026-04-02",
+        "file": ".spec/decisions/jido_action.execution_logging_hygiene.md",
+        "id": "jido_action.execution_logging_hygiene",
+        "status": "accepted",
+        "title": "Centralize execution logging hygiene"
+      },
+      {
+        "affects": [
           "repo.governance"
         ],
         "date": "2026-03-28",
@@ -42,6 +55,14 @@
         "subject_id": "jido_action.action"
       },
       {
+        "file": ".spec/specs/action.spec.md",
+        "id": "jido_action.action.utility_logging",
+        "priority": "should",
+        "stability": "evolving",
+        "statement": "Shared action utility helpers shall compare logger levels and defer message evaluation through a package logger facade so action and tool helpers can avoid eager logging work when the selected level is disabled.",
+        "subject_id": "jido_action.action"
+      },
+      {
         "file": ".spec/specs/error_handling.spec.md",
         "id": "jido_action.error_handling.normalized_errors",
         "priority": "must",
@@ -59,10 +80,18 @@
       },
       {
         "file": ".spec/specs/exec.spec.md",
+        "id": "jido_action.exec.logging_hygiene",
+        "priority": "should",
+        "stability": "evolving",
+        "statement": "Execution logging shall sanitize inspected runtime values, keep routine start and success traces behind an explicit debug-level opt-in, and preserve warning or error visibility for invalid configuration and runtime failures.",
+        "subject_id": "jido_action.exec"
+      },
+      {
+        "file": ".spec/specs/exec.spec.md",
         "id": "jido_action.exec.reliability_controls",
         "priority": "must",
         "stability": "stable",
-        "statement": "The execution engine shall apply retries, timeout handling, cancellation cleanup, compensation, telemetry, and instance-scoped supervisor/config behavior where those policies are configured.",
+        "statement": "The execution engine shall apply retries, timeout handling, cancellation cleanup, compensation, sanitized telemetry, and instance-scoped supervisor/config behavior where those policies are configured.",
         "subject_id": "jido_action.exec"
       },
       {
@@ -95,6 +124,14 @@
         "priority": "should",
         "stability": "evolving",
         "statement": "The package-level execution surface shall expose runtime failures as normalized exception structs with string messages and structured details suitable for downstream handling.",
+        "subject_id": "jido_action.package"
+      },
+      {
+        "file": ".spec/specs/package.spec.md",
+        "id": "jido_action.package.execution_logging_defaults",
+        "priority": "should",
+        "stability": "evolving",
+        "statement": "The package-level execution surface shall keep routine execution traces quiet by default, require explicit `:log_level` opt-in for debug traces, and route shared runtime logging through sanitized helper functions.",
         "subject_id": "jido_action.package"
       },
       {
@@ -158,7 +195,7 @@
         "id": "jido_action.tools.policy_integration",
         "priority": "should",
         "stability": "evolving",
-        "statement": "Built-in tool actions shall cooperate with execution-policy concerns such as deadline propagation and Lua supervision where the tests exercise those boundaries.",
+        "statement": "Built-in tool actions shall cooperate with execution-policy concerns such as deadline propagation, shared logger helpers, and Lua supervision and timeout cleanup where the tests exercise those boundaries.",
         "subject_id": "jido_action.tools"
       },
       {
@@ -225,14 +262,16 @@
         "id": "jido_action.action",
         "meta": {
           "decisions": [
-            "jido_action.spec_migration"
+            "jido_action.spec_migration",
+            "jido_action.execution_logging_hygiene"
           ],
           "id": "jido_action.action",
           "kind": "module",
           "status": "active",
-          "summary": "Action definition contract for metadata, schema-backed validation, and tool conversion.",
+          "summary": "Action definition contract for metadata, schema-backed validation, tool conversion, and shared action utility helpers.",
           "surface": [
             "lib/jido_action.ex",
+            "lib/jido_action/log.ex",
             "lib/jido_action/tool.ex",
             "lib/jido_action/util.ex",
             "guides/actions-guide.md",
@@ -272,12 +311,13 @@
         "id": "jido_action.exec",
         "meta": {
           "decisions": [
-            "jido_action.spec_migration"
+            "jido_action.spec_migration",
+            "jido_action.execution_logging_hygiene"
           ],
           "id": "jido_action.exec",
           "kind": "workflow",
           "status": "active",
-          "summary": "Execution engine for action normalization, retries, timeouts, cancellation, compensation, telemetry, and instance-scoped supervision.",
+          "summary": "Execution engine for action normalization, retries, timeouts, cancellation, compensation, sanitized telemetry, and instance-scoped supervision.",
           "surface": [
             "lib/jido_action/application.ex",
             "lib/jido_action/runtime.ex",
@@ -298,12 +338,13 @@
         "id": "jido_action.package",
         "meta": {
           "decisions": [
-            "jido_action.spec_migration"
+            "jido_action.spec_migration",
+            "jido_action.execution_logging_hygiene"
           ],
           "id": "jido_action.package",
           "kind": "package",
           "status": "active",
-          "summary": "Package-level contract for action definition, execution, workflow normalization, planning, and AI tool integration.",
+          "summary": "Package-level contract for action definition, execution, workflow normalization, planning, AI tool integration, and shared runtime logging defaults.",
           "surface": [
             ".github/workflows/specs.yml",
             "CHANGELOG.md",
@@ -396,12 +437,13 @@
         "id": "jido_action.tools",
         "meta": {
           "decisions": [
-            "jido_action.spec_migration"
+            "jido_action.spec_migration",
+            "jido_action.execution_logging_hygiene"
           ],
           "id": "jido_action.tools",
           "kind": "module",
           "status": "active",
-          "summary": "Built-in Jido tool actions for basic utilities, arithmetic, files, HTTP requests, and Lua execution.",
+          "summary": "Built-in Jido tool actions for basic utilities, arithmetic, files, HTTP requests, and policy-aware Lua execution.",
           "surface": [
             "lib/jido_tools/arithmetic.ex",
             "lib/jido_tools/basic.ex",
@@ -467,6 +509,16 @@
       },
       {
         "covers": [
+          "jido_action.action.utility_logging"
+        ],
+        "execute": true,
+        "file": ".spec/specs/action.spec.md",
+        "kind": "command",
+        "subject_id": "jido_action.action",
+        "target": "mix test test/jido_action/util_test.exs test/jido_tools/basic_test.exs"
+      },
+      {
+        "covers": [
           "jido_action.error_handling.normalized_errors"
         ],
         "execute": true,
@@ -500,6 +552,16 @@
       },
       {
         "covers": [
+          "jido_action.exec.logging_hygiene"
+        ],
+        "execute": true,
+        "file": ".spec/specs/exec.spec.md",
+        "kind": "command",
+        "subject_id": "jido_action.exec",
+        "target": "mix test test/jido_action/exec/telemetry_sanitization_test.exs test/jido_action/exec_integration_test.exs test/jido_action/exec/chain_test.exs test/jido_action/exec_config_test.exs"
+      },
+      {
+        "covers": [
           "jido_action.package.core_surface"
         ],
         "execute": true,
@@ -517,6 +579,16 @@
         "kind": "command",
         "subject_id": "jido_action.package",
         "target": "mix test test/jido_action/exec_return_shape_test.exs test/jido_action/exec_coverage_test.exs test/jido_action/error_test.exs"
+      },
+      {
+        "covers": [
+          "jido_action.package.execution_logging_defaults"
+        ],
+        "execute": true,
+        "file": ".spec/specs/package.spec.md",
+        "kind": "command",
+        "subject_id": "jido_action.package",
+        "target": "mix test test/jido_action/exec_integration_test.exs test/jido_action/exec/telemetry_sanitization_test.exs test/jido_action/exec/chain_test.exs test/jido_tools/basic_test.exs"
       },
       {
         "covers": [
@@ -704,13 +776,13 @@
   "specification_version": "1.0",
   "summary": {
     "decision_parse_errors": 0,
-    "decisions": 1,
+    "decisions": 2,
     "exceptions": 0,
     "findings": 0,
-    "requirements": 25,
+    "requirements": 28,
     "scenarios": 0,
     "subjects": 9,
-    "verifications": 25
+    "verifications": 28
   },
   "verification": {
     "claims": [
@@ -746,6 +818,17 @@
         "subject_id": "jido_action.action",
         "target": "mix test test/jido_action/action_test.exs test/jido_action/on_after_run_test.exs test/jido_action/exec_tool_test.exs test/jido_action/util_test.exs",
         "verification_index": 0
+      },
+      {
+        "cover_id": "jido_action.action.utility_logging",
+        "file": ".spec/specs/action.spec.md",
+        "kind": "command",
+        "meets_minimum": true,
+        "required_strength": "claimed",
+        "strength": "executed",
+        "subject_id": "jido_action.action",
+        "target": "mix test test/jido_action/util_test.exs test/jido_tools/basic_test.exs",
+        "verification_index": 1
       },
       {
         "cover_id": "jido_action.error_handling.normalized_errors",
@@ -814,6 +897,17 @@
         "verification_index": 1
       },
       {
+        "cover_id": "jido_action.exec.logging_hygiene",
+        "file": ".spec/specs/exec.spec.md",
+        "kind": "command",
+        "meets_minimum": true,
+        "required_strength": "claimed",
+        "strength": "executed",
+        "subject_id": "jido_action.exec",
+        "target": "mix test test/jido_action/exec/telemetry_sanitization_test.exs test/jido_action/exec_integration_test.exs test/jido_action/exec/chain_test.exs test/jido_action/exec_config_test.exs",
+        "verification_index": 2
+      },
+      {
         "cover_id": "jido_action.package.core_surface",
         "file": ".spec/specs/package.spec.md",
         "kind": "command",
@@ -836,6 +930,17 @@
         "verification_index": 1
       },
       {
+        "cover_id": "jido_action.package.execution_logging_defaults",
+        "file": ".spec/specs/package.spec.md",
+        "kind": "command",
+        "meets_minimum": true,
+        "required_strength": "claimed",
+        "strength": "executed",
+        "subject_id": "jido_action.package",
+        "target": "mix test test/jido_action/exec_integration_test.exs test/jido_action/exec/telemetry_sanitization_test.exs test/jido_action/exec/chain_test.exs test/jido_tools/basic_test.exs",
+        "verification_index": 2
+      },
+      {
         "cover_id": "jido_action.package.readme_onboarding",
         "file": ".spec/specs/package.spec.md",
         "kind": "readme_file",
@@ -844,7 +949,7 @@
         "strength": "linked",
         "subject_id": "jido_action.package",
         "target": "README.md",
-        "verification_index": 2
+        "verification_index": 3
       },
       {
         "cover_id": "jido_action.package.spec_pr_gate",
@@ -855,7 +960,7 @@
         "strength": "linked",
         "subject_id": "jido_action.package",
         "target": ".github/workflows/specs.yml",
-        "verification_index": 3
+        "verification_index": 4
       },
       {
         "cover_id": "jido_action.package.contributor_spec_workflow",
@@ -866,7 +971,7 @@
         "strength": "linked",
         "subject_id": "jido_action.package",
         "target": "CONTRIBUTING.md",
-        "verification_index": 4
+        "verification_index": 5
       },
       {
         "cover_id": "jido_action.scaffolding.install_and_generators",
@@ -1104,13 +1209,13 @@
     "default_minimum_strength": "claimed",
     "strength_summary": {
       "claimed": 2,
-      "executed": 20,
+      "executed": 23,
       "linked": 13
     },
     "threshold_failures": 0
   },
   "workspace": {
-    "decision_count": 1,
+    "decision_count": 2,
     "spec_count": 9
   }
 }

@@ -10,7 +10,7 @@ Describe the execution semantics that sit between authored actions and runtime p
 id: jido_action.exec
 kind: workflow
 status: active
-summary: Execution engine for action normalization, retries, timeouts, cancellation, compensation, telemetry, and instance-scoped supervision.
+summary: Execution engine for action normalization, retries, timeouts, cancellation, compensation, sanitized telemetry, and instance-scoped supervision.
 surface:
   - lib/jido_action/application.ex
   - lib/jido_action/runtime.ex
@@ -23,6 +23,7 @@ surface:
   - test/jido_action/exec/*.exs
 decisions:
   - jido_action.spec_migration
+  - jido_action.execution_logging_hygiene
 ```
 
 ## Requirements
@@ -34,7 +35,7 @@ decisions:
   stability: stable
 
 - id: jido_action.exec.reliability_controls
-  statement: The execution engine shall apply retries, timeout handling, cancellation cleanup, compensation, telemetry, and instance-scoped supervisor/config behavior where those policies are configured.
+  statement: The execution engine shall apply retries, timeout handling, cancellation cleanup, compensation, sanitized telemetry, and instance-scoped supervisor/config behavior where those policies are configured.
   priority: must
   stability: stable
 
@@ -42,6 +43,11 @@ decisions:
   statement: When an action returns `{:error, reason}` without an exception struct, Jido.Exec shall return an `ExecutionFailureError` with a string message and preserve structured map details for downstream handling.
   priority: must
   stability: stable
+
+- id: jido_action.exec.logging_hygiene
+  statement: Execution logging shall sanitize inspected runtime values, keep routine start and success traces behind an explicit debug-level opt-in, and preserve warning or error visibility for invalid configuration and runtime failures.
+  priority: should
+  stability: evolving
 ```
 
 ## Verification
@@ -61,4 +67,10 @@ decisions:
   covers:
     - jido_action.exec.sync_async_engine
     - jido_action.exec.reliability_controls
+
+- kind: command
+  target: mix test test/jido_action/exec/telemetry_sanitization_test.exs test/jido_action/exec_integration_test.exs test/jido_action/exec/chain_test.exs test/jido_action/exec_config_test.exs
+  execute: true
+  covers:
+    - jido_action.exec.logging_hygiene
 ```

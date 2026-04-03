@@ -10,7 +10,7 @@ Describe the tool modules the package ships for direct use and AI-facing composi
 id: jido_action.tools
 kind: module
 status: active
-summary: Built-in Jido tool actions for basic utilities, arithmetic, files, HTTP requests, and Lua execution.
+summary: Built-in Jido tool actions for basic utilities, arithmetic, files, HTTP requests, and policy-aware Lua execution.
 surface:
   - lib/jido_tools/arithmetic.ex
   - lib/jido_tools/basic.ex
@@ -29,6 +29,7 @@ surface:
   - test/jido_tools/req_test.exs
 decisions:
   - jido_action.spec_migration
+  - jido_action.execution_logging_hygiene
 ```
 
 ## Requirements
@@ -40,7 +41,7 @@ decisions:
   stability: stable
 
 - id: jido_action.tools.policy_integration
-  statement: Built-in tool actions shall cooperate with execution-policy concerns such as deadline propagation and Lua supervision where the tests exercise those boundaries.
+  statement: Built-in tool actions shall cooperate with execution-policy concerns such as deadline propagation, shared logger helpers, and Lua supervision and timeout cleanup where the tests exercise those boundaries.
   priority: should
   stability: evolving
 ```

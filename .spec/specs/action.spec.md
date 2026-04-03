@@ -10,9 +10,10 @@ Describe the contract for defining actions with `use Jido.Action` and executing 
 id: jido_action.action
 kind: module
 status: active
-summary: Action definition contract for metadata, schema-backed validation, and tool conversion.
+summary: Action definition contract for metadata, schema-backed validation, tool conversion, and shared action utility helpers.
 surface:
   - lib/jido_action.ex
+  - lib/jido_action/log.ex
   - lib/jido_action/tool.ex
   - lib/jido_action/util.ex
   - guides/actions-guide.md
@@ -24,6 +25,7 @@ surface:
   - test/jido_action/util_test.exs
 decisions:
   - jido_action.spec_migration
+  - jido_action.execution_logging_hygiene
 ```
 
 ## Requirements
@@ -43,6 +45,11 @@ decisions:
   statement: Actions shall convert declared schemas into AI tool parameter schemas and coerce known tool inputs without discarding unknown keys.
   priority: should
   stability: evolving
+
+- id: jido_action.action.utility_logging
+  statement: Shared action utility helpers shall compare logger levels and defer message evaluation through a package logger facade so action and tool helpers can avoid eager logging work when the selected level is disabled.
+  priority: should
+  stability: evolving
 ```
 
 ## Verification
@@ -55,4 +62,10 @@ decisions:
     - jido_action.action.metadata_contract
     - jido_action.action.schema_validation
     - jido_action.action.tool_bridge
+
+- kind: command
+  target: mix test test/jido_action/util_test.exs test/jido_tools/basic_test.exs
+  execute: true
+  covers:
+    - jido_action.action.utility_logging
 ```

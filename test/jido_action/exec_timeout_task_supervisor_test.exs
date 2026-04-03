@@ -251,14 +251,14 @@ defmodule Jido.ExecTimeoutTaskSupervisorTest do
         end
       end
 
-      initial_count = task_supervisor_active_count()
+      initial_count = wait_for_stable_task_supervisor_count(3, 20)
 
       # Run several actions that timeout
       for _ <- 1..10 do
         Exec.execute_action_with_timeout(LeakTestAction, %{}, %{}, 50, log_level: :info)
       end
 
-      final_count = wait_for_task_supervisor_count(initial_count, 10)
+      final_count = wait_for_task_supervisor_count(initial_count, 20)
 
       assert final_count == initial_count
     end
@@ -278,6 +278,26 @@ defmodule Jido.ExecTimeoutTaskSupervisorTest do
     else
       Process.sleep(50)
       wait_for_task_supervisor_count(expected_count, attempts_left - 1)
+    end
+  end
+
+  defp wait_for_stable_task_supervisor_count(required_matches, attempts_left) do
+    current_count = task_supervisor_active_count()
+    wait_for_stable_task_supervisor_count(current_count, required_matches - 1, attempts_left - 1)
+  end
+
+  defp wait_for_stable_task_supervisor_count(current_count, matches_left, attempts_left)
+       when matches_left <= 0 or attempts_left <= 0,
+       do: current_count
+
+  defp wait_for_stable_task_supervisor_count(previous_count, matches_left, attempts_left) do
+    Process.sleep(50)
+    current_count = task_supervisor_active_count()
+
+    if current_count == previous_count do
+      wait_for_stable_task_supervisor_count(current_count, matches_left - 1, attempts_left - 1)
+    else
+      wait_for_stable_task_supervisor_count(current_count, 2, attempts_left - 1)
     end
   end
 end

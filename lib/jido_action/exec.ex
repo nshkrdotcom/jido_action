@@ -528,22 +528,7 @@ defmodule Jido.Exec do
         after
           timeout ->
             _ = Task.Supervisor.terminate_child(task_sup, pid)
-
-            # Best-effort wait for termination to avoid leaking processes in slow CI runners.
-            receive do
-              {:DOWN, ^monitor_ref, :process, ^pid, _reason} -> :ok
-            after
-              100 -> :ok
-            end
-
-            Process.demonitor(monitor_ref, [:flush])
-
-            # Flush any late result message (race with timeout).
-            receive do
-              {:execute_action_result, ^ref, _result} -> :ok
-            after
-              0 -> :ok
-            end
+            cleanup_timeout_task(ref, monitor_ref, pid)
 
             :timeout
         end
@@ -579,6 +564,38 @@ defmodule Jido.Exec do
             exec_result
     defp execute_action_with_timeout(action, params, context, timeout) do
       execute_action_with_timeout(action, params, context, timeout, [])
+    end
+
+    defp cleanup_timeout_task(ref, monitor_ref, pid) do
+      wait_for_task_down(monitor_ref, pid, 100)
+      Process.demonitor(monitor_ref, [:flush])
+      flush_execute_action_results(ref)
+    end
+
+    defp wait_for_task_down(monitor_ref, pid, wait_ms) do
+      receive do
+        {:DOWN, ^monitor_ref, :process, ^pid, _reason} ->
+          :ok
+      after
+        wait_ms ->
+          if Process.alive?(pid), do: Process.exit(pid, :kill)
+
+          receive do
+            {:DOWN, ^monitor_ref, :process, ^pid, _reason} -> :ok
+          after
+            wait_ms -> :ok
+          end
+      end
+    end
+
+    defp flush_execute_action_results(ref) do
+      receive do
+        {:execute_action_result, ^ref, _result} ->
+          flush_execute_action_results(ref)
+      after
+        0 ->
+          :ok
+      end
     end
 
     defp resolve_timeout_budget(context, opts) do
