@@ -72,20 +72,26 @@ defmodule Jido.Exec.Validator do
     if function_exported?(action, :validate_output, 1) do
       case action.validate_output(output) do
         {:ok, validated_output} ->
-          cond_log(log_level, :debug, "Output validation succeeded for #{inspect(action)}")
+          cond_log(log_level, :debug, fn ->
+            "Output validation succeeded for #{inspect(action)}"
+          end)
+
           {:ok, validated_output}
 
         {:error, reason} ->
           cond_log(
             log_level,
             :debug,
-            "Output validation failed for #{inspect(action)}: #{inspect(reason)}"
+            fn -> "Output validation failed for #{inspect(action)}: #{inspect(reason)}" end
           )
 
           {:error, reason}
 
         _ ->
-          cond_log(log_level, :debug, "Invalid return from action.validate_output/1")
+          cond_log(log_level, :debug, fn ->
+            "Invalid return from action.validate_output/1"
+          end)
+
           {:error, Error.validation_error("Invalid return from action.validate_output/1")}
       end
     else
@@ -93,7 +99,7 @@ defmodule Jido.Exec.Validator do
       cond_log(
         log_level,
         :debug,
-        "No output validation function found for #{inspect(action)}, skipping"
+        fn -> "No output validation function found for #{inspect(action)}, skipping" end
       )
 
       {:ok, output}
