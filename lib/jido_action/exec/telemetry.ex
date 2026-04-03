@@ -8,7 +8,7 @@ defmodule Jido.Exec.Telemetry do
 
   import Jido.Action.Util, only: [cond_log: 3]
 
-  require Logger
+  alias Jido.Action.Log
 
   @redacted_value "[REDACTED]"
   @max_depth 4
@@ -77,9 +77,9 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec log_execution_start(module(), map(), map()) :: :ok
   def log_execution_start(action, params, context) do
-    Logger.notice(
+    Log.notice(fn ->
       "Executing #{inspect(action)} with params: #{safe_inspect(params)} and context: #{safe_inspect(context)}"
-    )
+    end)
   end
 
   @doc """
@@ -89,25 +89,27 @@ defmodule Jido.Exec.Telemetry do
   def log_execution_end(action, _params, _context, result) do
     case result do
       {:ok, result_data} ->
-        Logger.debug(
+        Log.debug(fn ->
           "Finished execution of #{inspect(action)}, result: #{safe_inspect(result_data)}"
-        )
+        end)
 
       {:ok, result_data, directive} ->
-        Logger.debug(
+        Log.debug(fn ->
           "Finished execution of #{inspect(action)}, result: #{safe_inspect(result_data)}, directive: #{safe_inspect(directive)}"
-        )
+        end)
 
       {:error, error} ->
-        Logger.error("Action #{inspect(action)} failed: #{safe_inspect(error)}")
+        Log.error(fn -> "Action #{inspect(action)} failed: #{safe_inspect(error)}" end)
 
       {:error, error, directive} ->
-        Logger.error(
+        Log.error(fn ->
           "Action #{inspect(action)} failed: #{safe_inspect(error)}, directive: #{safe_inspect(directive)}"
-        )
+        end)
 
       other ->
-        Logger.debug("Finished execution of #{inspect(action)}, result: #{safe_inspect(other)}")
+        Log.debug(fn ->
+          "Finished execution of #{inspect(action)}, result: #{safe_inspect(other)}"
+        end)
     end
   end
 
@@ -146,7 +148,9 @@ defmodule Jido.Exec.Telemetry do
     cond_log(
       log_level,
       :notice,
-      "Executing #{inspect(action)} with params: #{safe_inspect(params)} and context: #{safe_inspect(context)}"
+      fn ->
+        "Executing #{inspect(action)} with params: #{safe_inspect(params)} and context: #{safe_inspect(context)}"
+      end
     )
   end
 
@@ -160,31 +164,41 @@ defmodule Jido.Exec.Telemetry do
         cond_log(
           log_level,
           :debug,
-          "Finished execution of #{inspect(action)}, result: #{safe_inspect(result_data)}"
+          fn ->
+            "Finished execution of #{inspect(action)}, result: #{safe_inspect(result_data)}"
+          end
         )
 
       {:ok, result_data, directive} ->
         cond_log(
           log_level,
           :debug,
-          "Finished execution of #{inspect(action)}, result: #{safe_inspect(result_data)}, directive: #{safe_inspect(directive)}"
+          fn ->
+            "Finished execution of #{inspect(action)}, result: #{safe_inspect(result_data)}, directive: #{safe_inspect(directive)}"
+          end
         )
 
       {:error, error} ->
-        cond_log(log_level, :error, "Action #{inspect(action)} failed: #{safe_inspect(error)}")
+        cond_log(log_level, :error, fn ->
+          "Action #{inspect(action)} failed: #{safe_inspect(error)}"
+        end)
 
       {:error, error, directive} ->
         cond_log(
           log_level,
           :error,
-          "Action #{inspect(action)} failed: #{safe_inspect(error)}, directive: #{safe_inspect(directive)}"
+          fn ->
+            "Action #{inspect(action)} failed: #{safe_inspect(error)}, directive: #{safe_inspect(directive)}"
+          end
         )
 
       other ->
         cond_log(
           log_level,
           :debug,
-          "Finished execution of #{inspect(action)}, result: #{safe_inspect(other)}"
+          fn ->
+            "Finished execution of #{inspect(action)}, result: #{safe_inspect(other)}"
+          end
         )
     end
   end
@@ -194,7 +208,9 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_error(atom(), module(), any()) :: :ok
   def cond_log_error(log_level, action, error) do
-    cond_log(log_level, :error, "Action #{inspect(action)} failed: #{safe_inspect(error)}")
+    cond_log(log_level, :error, fn ->
+      "Action #{inspect(action)} failed: #{safe_inspect(error)}"
+    end)
   end
 
   @doc """
@@ -206,7 +222,9 @@ defmodule Jido.Exec.Telemetry do
     cond_log(
       log_level,
       :info,
-      "Retrying #{inspect(action)} (attempt #{retry_count + 1}/#{max_retries}) after #{backoff}ms backoff"
+      fn ->
+        "Retrying #{inspect(action)} (attempt #{retry_count + 1}/#{max_retries}) after #{backoff}ms backoff"
+      end
     )
   end
 
@@ -226,7 +244,9 @@ defmodule Jido.Exec.Telemetry do
     cond_log(
       log_level,
       :warning,
-      "Function invocation error in action: #{extract_safe_error_message(error)}"
+      fn ->
+        "Function invocation error in action: #{extract_safe_error_message(error)}"
+      end
     )
   end
 
@@ -238,7 +258,7 @@ defmodule Jido.Exec.Telemetry do
     cond_log(
       log_level,
       :error,
-      "Unexpected error in action: #{extract_safe_error_message(error)}"
+      fn -> "Unexpected error in action: #{extract_safe_error_message(error)}" end
     )
   end
 
@@ -250,7 +270,9 @@ defmodule Jido.Exec.Telemetry do
     cond_log(
       log_level,
       :warning,
-      "Caught unexpected throw/exit in action: #{extract_safe_error_message(reason)}"
+      fn ->
+        "Caught unexpected throw/exit in action: #{extract_safe_error_message(reason)}"
+      end
     )
   end
 
@@ -262,7 +284,9 @@ defmodule Jido.Exec.Telemetry do
     cond_log(
       log_level,
       :debug,
-      "Starting execution of #{inspect(action)}, params: #{safe_inspect(params)}, context: #{safe_inspect(context)}"
+      fn ->
+        "Starting execution of #{inspect(action)}, params: #{safe_inspect(params)}, context: #{safe_inspect(context)}"
+      end
     )
   end
 
@@ -274,16 +298,20 @@ defmodule Jido.Exec.Telemetry do
     cond_log(
       log_level,
       :error,
-      "Action #{inspect(action)} output validation failed: #{safe_inspect(validation_error)}"
+      fn ->
+        "Action #{inspect(action)} output validation failed: #{safe_inspect(validation_error)}"
+      end
     )
   end
 
   @doc """
   Conditional logging wrapper for general failures.
   """
-  @spec cond_log_failure(atom(), String.t()) :: :ok
-  def cond_log_failure(log_level, message) do
-    cond_log(log_level, :debug, "Action Execution failed: #{message}")
+  @spec cond_log_failure(atom(), any()) :: :ok
+  def cond_log_failure(log_level, reason) do
+    cond_log(log_level, :debug, fn ->
+      "Action execution failed: #{safe_inspect(reason)}"
+    end)
   end
 
   @doc false

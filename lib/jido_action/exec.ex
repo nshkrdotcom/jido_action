@@ -40,6 +40,7 @@ defmodule Jido.Exec do
   use Private
 
   alias Jido.Action.Error
+  alias Jido.Action.Log
   alias Jido.Exec.Async
   alias Jido.Exec.Compensation
   alias Jido.Exec.Retry
@@ -47,9 +48,6 @@ defmodule Jido.Exec do
   alias Jido.Exec.Telemetry
   alias Jido.Exec.Validator
   alias Jido.Instruction
-
-  require Logger
-
   @default_timeout 30_000
   @deadline_key :__jido_deadline_ms__
 
@@ -63,10 +61,10 @@ defmodule Jido.Exec do
         value
 
       invalid ->
-        Logger.warning(
-          "Invalid :jido_action config for #{inspect(key)}: #{inspect(invalid)}. " <>
-            "Expected a non-negative integer; using fallback #{fallback}."
-        )
+        Log.warning(fn ->
+          "Invalid :jido_action config for #{Log.safe_inspect(key)}: " <>
+            "#{Log.safe_inspect(invalid)}. Expected a non-negative integer; using fallback #{fallback}."
+        end)
 
         fallback
     end
@@ -159,7 +157,7 @@ defmodule Jido.Exec do
   def run(action, params \\ %{}, context \\ %{}, opts \\ [])
 
   def run(action, params, context, opts) when is_atom(action) and is_list(opts) do
-    log_level = Keyword.get(opts, :log_level, :info)
+    log_level = Keyword.get(opts, :log_level, :warning)
 
     with {:ok, normalized_params} <- normalize_params(params),
          {:ok, normalized_context} <- normalize_context(context),
@@ -173,19 +171,19 @@ defmodule Jido.Exec do
       do_run_with_retry(action, validated_params, enhanced_context, opts)
     else
       {:error, reason} ->
-        Telemetry.cond_log_failure(log_level, inspect(reason))
+        Telemetry.cond_log_failure(log_level, reason)
         {:error, reason}
     end
   rescue
     e in [FunctionClauseError, BadArityError, BadFunctionError] ->
-      log_level = Keyword.get(opts, :log_level, :info)
+      log_level = Keyword.get(opts, :log_level, :warning)
       Telemetry.cond_log_function_error(log_level, e)
 
       {:error,
        Error.validation_error("Invalid action module: #{Telemetry.extract_safe_error_message(e)}")}
 
     e ->
-      log_level = Keyword.get(opts, :log_level, :info)
+      log_level = Keyword.get(opts, :log_level, :warning)
       Telemetry.cond_log_unexpected_error(log_level, e)
 
       {:error,
@@ -194,7 +192,7 @@ defmodule Jido.Exec do
        )}
   catch
     kind, reason ->
-      log_level = Keyword.get(opts, :log_level, :info)
+      log_level = Keyword.get(opts, :log_level, :warning)
       Telemetry.cond_log_caught_error(log_level, reason)
 
       {:error, Error.internal_error("Caught #{kind}: #{inspect(reason)}")}
@@ -637,7 +635,7 @@ defmodule Jido.Exec do
 
     @spec execute_action(action(), params(), context(), run_opts()) :: exec_result
     defp execute_action(action, params, context, opts) do
-      log_level = Keyword.get(opts, :log_level, :info)
+      log_level = Keyword.get(opts, :log_level, :warning)
       Telemetry.cond_log_execution_debug(log_level, action, params, context)
 
       action.run(params, context)
@@ -731,7 +729,7 @@ defmodule Jido.Exec do
 
     # Handle exceptions raised during action execution
     defp handle_action_exception(e, stacktrace, action, opts) do
-      log_level = Keyword.get(opts, :log_level, :info)
+      log_level = Keyword.get(opts, :log_level, :warning)
       Telemetry.cond_log_error(log_level, action, e)
 
       error_message = build_exception_message(e, action)

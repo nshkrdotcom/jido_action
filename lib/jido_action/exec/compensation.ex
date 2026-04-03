@@ -9,10 +9,9 @@ defmodule Jido.Exec.Compensation do
   use Private
 
   alias Jido.Action.Error
+  alias Jido.Action.Log
   alias Jido.Exec.Supervisors
   alias Jido.Exec.Telemetry
-
-  require Logger
 
   @type action :: module()
   @type params :: map()
@@ -83,7 +82,8 @@ defmodule Jido.Exec.Compensation do
           run_opts()
         ) :: exec_result
   def handle_error(action, params, context, error_or_tuple, opts) do
-    Logger.debug("Handle Action Error in handle_error: #{inspect(opts)}")
+    Log.debug(fn -> "Handle action error in handle_error: #{Log.safe_inspect(opts)}" end)
+
     # Extract error and directive if present
     {error, directive} =
       case error_or_tuple do

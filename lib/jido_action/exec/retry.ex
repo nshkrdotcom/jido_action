@@ -9,9 +9,8 @@ defmodule Jido.Exec.Retry do
   """
 
   alias Jido.Action.Error
+  alias Jido.Action.Log
   alias Jido.Exec.Telemetry
-
-  require Logger
 
   @doc """
   Calculate exponential backoff time for a retry attempt.
@@ -111,7 +110,7 @@ defmodule Jido.Exec.Retry do
     backoff = calculate_backoff(retry_count, initial_backoff)
 
     Telemetry.cond_log_retry(
-      Keyword.get(opts, :log_level, :info),
+      Keyword.get(opts, :log_level, :warning),
       action,
       retry_count,
       max_retries,
@@ -166,10 +165,10 @@ defmodule Jido.Exec.Retry do
         value
 
       invalid ->
-        Logger.warning(
-          "Invalid :jido_action config for #{inspect(key)}: #{inspect(invalid)}. " <>
-            "Expected a non-negative integer; using fallback #{fallback}."
-        )
+        Log.warning(fn ->
+          "Invalid :jido_action config for #{Log.safe_inspect(key)}: " <>
+            "#{Log.safe_inspect(invalid)}. Expected a non-negative integer; using fallback #{fallback}."
+        end)
 
         fallback
     end

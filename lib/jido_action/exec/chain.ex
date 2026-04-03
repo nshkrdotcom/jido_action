@@ -18,10 +18,9 @@ defmodule Jido.Exec.Chain do
   """
 
   alias Jido.Action.Error
+  alias Jido.Action.Log
   alias Jido.Exec
   alias Jido.Exec.Supervisors
-
-  require Logger
 
   @type chain_action :: module() | {module(), keyword()}
   @type ok_t :: {:ok, any()} | {:error, any()}
@@ -86,7 +85,7 @@ defmodule Jido.Exec.Chain do
   end
 
   defp handle_interruption(action, params) do
-    Logger.info("Chain interrupted before action: #{inspect(action)}")
+    Log.info(fn -> "Chain interrupted before action: #{Log.safe_inspect(action)}" end)
     {:halt, {:interrupted, params}}
   end
 
@@ -143,11 +142,17 @@ defmodule Jido.Exec.Chain do
         {:cont, {:ok, Map.merge(params, result)}}
 
       {:error, error} ->
-        Logger.warning("Exec in chain failed: #{inspect(action)} #{inspect(error)}")
+        Log.warning(fn ->
+          "Exec in chain failed: #{Log.safe_inspect(action)} #{Log.safe_inspect(error)}"
+        end)
+
         {:halt, {:error, error}}
 
       {:error, error, _directive} ->
-        Logger.warning("Exec in chain failed: #{inspect(action)} #{inspect(error)}")
+        Log.warning(fn ->
+          "Exec in chain failed: #{Log.safe_inspect(action)} #{Log.safe_inspect(error)}"
+        end)
+
         {:halt, {:error, error}}
     end
   end

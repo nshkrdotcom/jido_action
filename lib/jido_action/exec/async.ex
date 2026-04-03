@@ -8,9 +8,8 @@ defmodule Jido.Exec.Async do
   use Private
 
   alias Jido.Action.Error
+  alias Jido.Action.Log
   alias Jido.Exec.Supervisors
-
-  require Logger
 
   @default_timeout 5000
   @cancel_wait_ms 100
@@ -26,10 +25,10 @@ defmodule Jido.Exec.Async do
         value
 
       invalid ->
-        Logger.warning(
-          "Invalid :jido_action config for #{inspect(key)}: #{inspect(invalid)}. " <>
-            "Expected a non-negative integer; using fallback #{fallback}."
-        )
+        Log.warning(fn ->
+          "Invalid :jido_action config for #{Log.safe_inspect(key)}: " <>
+            "#{Log.safe_inspect(invalid)}. Expected a non-negative integer; using fallback #{fallback}."
+        end)
 
         fallback
     end
