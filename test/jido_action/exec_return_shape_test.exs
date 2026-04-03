@@ -68,6 +68,46 @@ defmodule JidoTest.ExecReturnShapeTest do
       end)
     end
 
+    test "preserves retry hints for retryable atom errors" do
+      defmodule RetryableAtomErrorAction do
+        use Jido.Action, name: "retryable_atom_error"
+
+        def run(_params, _context), do: {:error, :transient_error}
+      end
+
+      capture_log(fn ->
+        assert {:error, %Error.ExecutionFailureError{} = error} =
+                 Exec.run(RetryableAtomErrorAction, %{}, %{})
+
+        assert Error.to_map(error) == %{
+                 type: :execution_error,
+                 message: "transient_error",
+                 details: %{reason: :transient_error, retry: true},
+                 retryable?: true
+               }
+      end)
+    end
+
+    test "preserves retry hints for non-retryable atom errors" do
+      defmodule NonRetryableAtomErrorAction do
+        use Jido.Action, name: "non_retryable_atom_error"
+
+        def run(_params, _context), do: {:error, :badarg}
+      end
+
+      capture_log(fn ->
+        assert {:error, %Error.ExecutionFailureError{} = error} =
+                 Exec.run(NonRetryableAtomErrorAction, %{}, %{})
+
+        assert Error.to_map(error) == %{
+                 type: :execution_error,
+                 message: "badarg",
+                 details: %{reason: :badarg, retry: false},
+                 retryable?: false
+               }
+      end)
+    end
+
     test "rejects :ok atom - unexpected shape" do
       defmodule AtomOkAction do
         use Jido.Action, name: "atom_ok"

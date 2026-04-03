@@ -709,9 +709,19 @@ defmodule Jido.Exec do
     end
 
     defp extract_error_fields(reason) when is_binary(reason), do: {reason, %{}}
-    defp extract_error_fields(reason) when is_atom(reason), do: {Atom.to_string(reason), %{}}
+
+    defp extract_error_fields(reason) when is_atom(reason) do
+      {Atom.to_string(reason), %{reason: reason, retry: raw_atom_reason_retryable?(reason)}}
+    end
+
     defp extract_error_fields(reason) when is_map(reason), do: {inspect(reason), reason}
     defp extract_error_fields(reason), do: {inspect(reason), %{}}
+
+    defp raw_atom_reason_retryable?(reason)
+         when reason in [:timeout, :transient, :transient_error, :rate_limited],
+         do: true
+
+    defp raw_atom_reason_retryable?(_reason), do: false
 
     # Validate output and log success, with optional extra data
     defp validate_and_log_success(action, result, log_level, opts, other) do
