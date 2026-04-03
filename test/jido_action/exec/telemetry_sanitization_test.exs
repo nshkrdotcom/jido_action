@@ -164,8 +164,8 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
       }
 
     log =
-      capture_log(fn ->
-        Telemetry.cond_log_start(:notice, __MODULE__, deep_struct, %{})
+      capture_log([level: :debug], fn ->
+        Telemetry.cond_log_start(:debug, __MODULE__, deep_struct, %{})
       end)
 
     refute log =~ "Inspect.Error"
@@ -177,8 +177,8 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
     deep_struct = %{l1: %{l2: %{l3: %Zoi.Types.Map{fields: [foo: %Zoi.Types.String{}]}}}}
 
     log =
-      capture_log(fn ->
-        Telemetry.cond_log_start(:notice, __MODULE__, deep_struct, %{})
+      capture_log([level: :debug], fn ->
+        Telemetry.cond_log_start(:debug, __MODULE__, deep_struct, %{})
       end)
 
     refute log =~ "Inspect.Error"
@@ -196,8 +196,8 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
     assert sanitized[sanitized_key] == :value
 
     log =
-      capture_log(fn ->
-        Telemetry.cond_log_start(:notice, __MODULE__, %{struct_key => :value}, %{})
+      capture_log([level: :debug], fn ->
+        Telemetry.cond_log_start(:debug, __MODULE__, %{struct_key => :value}, %{})
       end)
 
     refute log =~ "Inspect.Error"
@@ -233,8 +233,8 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
     assert_struct_summary(bad_summary, RaisingInspectStruct, map_size(%RaisingInspectStruct{}))
 
     log =
-      capture_log(fn ->
-        Telemetry.cond_log_start(:notice, __MODULE__, payload, %{})
+      capture_log([level: :debug], fn ->
+        Telemetry.cond_log_start(:debug, __MODULE__, payload, %{})
       end)
 
     refute log =~ "Inspect.Error"
@@ -327,8 +327,8 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
       }
 
       log =
-        capture_log(fn ->
-          Telemetry.cond_log_start(:notice, __MODULE__, deep, %{})
+        capture_log([level: :debug], fn ->
+          Telemetry.cond_log_start(:debug, __MODULE__, deep, %{})
         end)
 
       refute log =~ "Inspect.Error"
@@ -378,7 +378,7 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
     long_string = String.duplicate("a", 300)
 
     log =
-      capture_log(fn ->
+      capture_log([level: :debug], fn ->
         Telemetry.log_execution_start(
           __MODULE__,
           %{api_key: "api-secret", payload: long_string},
@@ -393,7 +393,7 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
         )
 
         Telemetry.cond_log_start(
-          :notice,
+          :debug,
           __MODULE__,
           %{authorization: "Bearer 123"},
           %{client_secret: "very-secret"}

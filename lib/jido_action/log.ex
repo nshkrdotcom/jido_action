@@ -6,6 +6,7 @@ defmodule Jido.Action.Log do
   @default_max_length 200
 
   @type metadata :: keyword()
+  @type level :: Logger.level()
 
   @spec debug(Logger.message(), metadata()) :: :ok
   def debug(message, metadata \\ []), do: Logger.debug(message, metadata)
@@ -21,6 +22,15 @@ defmodule Jido.Action.Log do
 
   @spec error(Logger.message(), metadata()) :: :ok
   def error(message, metadata \\ []), do: Logger.error(message, metadata)
+
+  @spec log(level(), Logger.message(), metadata()) :: :ok
+  def log(level, message, metadata \\ []), do: Logger.log(level, message, metadata)
+
+  @spec levels() :: [level()]
+  def levels, do: Logger.levels()
+
+  @spec compare_levels(level(), level()) :: :lt | :eq | :gt
+  def compare_levels(left, right), do: Logger.compare_levels(left, right)
 
   @spec safe_inspect(term(), keyword()) :: String.t()
   def safe_inspect(term, opts \\ []) do

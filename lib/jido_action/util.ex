@@ -3,7 +3,7 @@ defmodule Jido.Action.Util do
   Utility functions for Jido.Action.
   """
 
-  require Logger
+  alias Jido.Action.Log
 
   @name_regex ~r/^[a-zA-Z][a-zA-Z0-9_]*$/
 
@@ -19,7 +19,7 @@ defmodule Jido.Action.Util do
   - `threshold_level`: The minimum log level threshold (e.g. :debug, :info, etc)
   - `message_level`: The log level for this specific message
   - `message`: The message to potentially log
-  - `opts`: Additional options passed to Logger.log/3
+  - `opts`: Additional options passed to the logger backend
 
   ## Returns
 
@@ -41,15 +41,15 @@ defmodule Jido.Action.Util do
   """
   @spec cond_log(Logger.level(), Logger.level(), Logger.message(), keyword()) :: :ok
   def cond_log(threshold_level, message_level, message, opts \\ []) do
-    valid_levels = Logger.levels()
+    valid_levels = Log.levels()
 
     cond do
       threshold_level not in valid_levels or message_level not in valid_levels ->
         # Don't log
         :ok
 
-      Logger.compare_levels(threshold_level, message_level) in [:lt, :eq] ->
-        Logger.log(message_level, message, opts)
+      Log.compare_levels(threshold_level, message_level) in [:lt, :eq] ->
+        Log.log(message_level, message, opts)
 
       true ->
         :ok
