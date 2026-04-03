@@ -110,7 +110,7 @@ defmodule Jido.Exec.Retry do
     backoff = calculate_backoff(retry_count, initial_backoff)
 
     Telemetry.cond_log_retry(
-      Keyword.get(opts, :log_level, :warning),
+      Keyword.get(opts, :log_level, :info),
       action,
       retry_count,
       max_retries,

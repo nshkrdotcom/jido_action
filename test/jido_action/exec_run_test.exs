@@ -279,16 +279,22 @@ defmodule JidoTest.ExecRunTest do
   end
 
   describe "validate_params/2" do
+    defmodule ValidatableAction do
+      @moduledoc false
+
+      def validate_params(%{value: value}) when is_integer(value), do: {:ok, %{value: value}}
+      def validate_params(_params), do: {:error, Error.validation_error("invalid params")}
+
+      def run(params, _context), do: {:ok, params}
+    end
+
     test "returns validated params for valid params" do
-      assert {:ok, %{value: 5}} = Validator.validate_params(BasicAction, %{value: 5})
+      assert {:ok, %{value: 5}} = Validator.validate_params(ValidatableAction, %{value: 5})
     end
 
     test "returns error for invalid params" do
-      # BasicAction has validate_params/1 defined via use Action in test_actions.ex
-      # The error will be an invalid_action error because we're using function_exported? in Exec
-      # But this test is just verifying that invalid params return an error
       {:error, %_{} = error} =
-        Validator.validate_params(BasicAction, %{invalid: "params"})
+        Validator.validate_params(ValidatableAction, %{invalid: "params"})
 
       assert is_exception(error)
     end

@@ -67,7 +67,7 @@ defmodule Jido.Exec.Validator do
   """
   @spec validate_output(module(), map(), keyword()) :: {:ok, map()} | {:error, Exception.t()}
   def validate_output(action, output, opts) do
-    log_level = Keyword.get(opts, :log_level, :warning)
+    log_level = Keyword.get(opts, :log_level, :info)
 
     if function_exported?(action, :validate_output, 1) do
       case action.validate_output(output) do
