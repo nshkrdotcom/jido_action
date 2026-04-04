@@ -430,7 +430,9 @@ defmodule Jido.Exec do
                 Telemetry.span_start_metadata(action, params, budgeted_context, opts),
                 fn ->
                   result = execute_with_timeout.()
-                  {result, Telemetry.span_stop_metadata(action, params, budgeted_context, result, opts)}
+
+                  {result,
+                   Telemetry.span_stop_metadata(action, params, budgeted_context, result, opts)}
                 end
               )
           end
