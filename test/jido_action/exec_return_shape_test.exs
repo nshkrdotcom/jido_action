@@ -102,8 +102,8 @@ defmodule JidoTest.ExecReturnShapeTest do
         assert Error.to_map(error) == %{
                  type: :execution_error,
                  message: "badarg",
-                 details: %{reason: :badarg, retry: true},
-                 retryable?: true
+                 details: %{reason: :badarg, retry: false},
+                 retryable?: false
                }
       end)
     end
@@ -126,6 +126,31 @@ defmodule JidoTest.ExecReturnShapeTest do
                  retryable?: true
                }
       end)
+    end
+
+    test "accepts deprecated error_normalization option as a compatibility shim" do
+      defmodule DeprecatedErrorNormalizationAction do
+        use Jido.Action, name: "deprecated_error_normalization"
+
+        def run(_params, _context), do: {:error, :transient_error}
+      end
+
+      log =
+        capture_log(fn ->
+          assert {:error, %Error.ExecutionFailureError{} = error} =
+                   Exec.run(DeprecatedErrorNormalizationAction, %{}, %{},
+                     error_normalization: :legacy
+                   )
+
+          assert Error.to_map(error) == %{
+                   type: :execution_error,
+                   message: "transient_error",
+                   details: %{reason: :transient_error, retry: true},
+                   retryable?: true
+                 }
+        end)
+
+      assert log =~ "Execution option :error_normalization=:legacy is deprecated and ignored"
     end
 
     test "rejects :ok atom - unexpected shape" do

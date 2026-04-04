@@ -53,6 +53,8 @@ defmodule Jido.Exec do
 
   @default_timeout 30_000
   @deadline_key :__jido_deadline_ms__
+  @valid_error_normalization_modes [:legacy, :granular]
+  @deprecated_error_normalization_key :error_normalization
 
   # Helper functions to get configuration values with fallbacks
   defp get_default_timeout,
@@ -110,6 +112,7 @@ defmodule Jido.Exec do
     - `:backoff` - Initial backoff time in milliseconds, doubles with each retry (configurable via `:jido_action, :default_backoff`).
     - `:log_level` - Override the Jido execution log threshold for this specific action. Accepts #{inspect(Logger.levels())}. Global Logger config still applies.
     - `:telemetry` - `:full` (default) or `:silent` for action span emission.
+    - `:error_normalization` - Deprecated compatibility shim. Accepted and ignored; canonical structured execution error normalization is always used.
     - `:jido` - Optional instance name for isolation. Routes execution through instance-scoped supervisors (e.g., `MyApp.Jido.TaskSupervisor`).
 
   ## Action Metadata in Context
@@ -161,6 +164,7 @@ defmodule Jido.Exec do
   def run(action, params \\ %{}, context \\ %{}, opts \\ [])
 
   def run(action, params, context, opts) when is_atom(action) and is_list(opts) do
+    opts = apply_compat_opts(opts)
     log_level = Util.resolve_log_level(opts)
 
     with {:ok, normalized_params} <- normalize_params(params),
@@ -423,10 +427,10 @@ defmodule Jido.Exec do
             :full ->
               :telemetry.span(
                 [:jido, :action],
-                action_span_start_metadata(action, opts),
+                Telemetry.span_start_metadata(action, opts),
                 fn ->
                   result = execute_with_timeout.()
-                  {result, action_span_stop_metadata(result)}
+                  {result, Telemetry.span_stop_metadata(result)}
                 end
               )
           end
@@ -644,6 +648,65 @@ defmodule Jido.Exec do
       end
     end
 
+    defp apply_compat_opts(opts) do
+      maybe_warn_deprecated_error_normalization_opt(opts)
+      maybe_warn_deprecated_error_normalization_config()
+      opts
+    end
+
+    defp maybe_warn_deprecated_error_normalization_opt(opts) do
+      case Keyword.fetch(opts, @deprecated_error_normalization_key) do
+        {:ok, mode} when mode in @valid_error_normalization_modes ->
+          warn_deprecated_error_normalization_once(
+            {:opt, mode},
+            "Execution option :error_normalization=#{inspect(mode)} is deprecated and ignored. " <>
+              "Jido.Exec now uses the canonical structured execution error shape unconditionally."
+          )
+
+        {:ok, invalid} ->
+          warn_deprecated_error_normalization_once(
+            {:opt, invalid},
+            "Execution option :error_normalization=#{inspect(invalid)} is deprecated and ignored. " <>
+              "Expected one of #{@valid_error_normalization_modes |> inspect()}; canonical normalization is always used."
+          )
+
+        :error ->
+          :ok
+      end
+    end
+
+    defp maybe_warn_deprecated_error_normalization_config do
+      case Application.get_env(:jido_action, @deprecated_error_normalization_key) do
+        nil ->
+          :ok
+
+        mode when mode in @valid_error_normalization_modes ->
+          warn_deprecated_error_normalization_once(
+            {:config, mode},
+            ":jido_action config :error_normalization=#{inspect(mode)} is deprecated and ignored. " <>
+              "Jido.Exec now uses the canonical structured execution error shape unconditionally."
+          )
+
+        invalid ->
+          warn_deprecated_error_normalization_once(
+            {:config, invalid},
+            ":jido_action config :error_normalization=#{inspect(invalid)} is deprecated and ignored. " <>
+              "Expected one of #{@valid_error_normalization_modes |> inspect()}; canonical normalization is always used."
+          )
+      end
+    end
+
+    defp warn_deprecated_error_normalization_once(key, message) do
+      warning_key = {__MODULE__, @deprecated_error_normalization_key, key}
+
+      unless :persistent_term.get(warning_key, false) do
+        Logger.warning(message)
+        :persistent_term.put(warning_key, true)
+      end
+
+      :ok
+    end
+
     defp resolve_telemetry_mode(opts) do
       case Keyword.fetch(opts, :telemetry) do
         {:ok, mode} when mode in [:full, :silent] ->
@@ -661,39 +724,6 @@ defmodule Jido.Exec do
           :full
       end
     end
-
-    defp action_span_start_metadata(action, opts) do
-      %{
-        action: action
-      }
-      |> maybe_put(:jido, Keyword.get(opts, :jido))
-    end
-
-    defp action_span_stop_metadata({:ok, _result}), do: %{outcome: :ok}
-
-    defp action_span_stop_metadata({:ok, _result, _directive}) do
-      %{outcome: :ok, directive?: true}
-    end
-
-    defp action_span_stop_metadata({:error, error}) do
-      normalized = Error.to_map(error)
-
-      %{
-        outcome: :error,
-        error_type: normalized.type,
-        retryable?: normalized.retryable?
-      }
-    end
-
-    defp action_span_stop_metadata({:error, error, _directive}) do
-      action_span_stop_metadata({:error, error})
-      |> Map.put(:directive?, true)
-    end
-
-    defp action_span_stop_metadata(_result), do: %{outcome: :unknown}
-
-    defp maybe_put(map, _key, nil), do: map
-    defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
     @spec execute_action(action(), params(), context(), run_opts()) :: exec_result
     defp execute_action(action, params, context, opts) do

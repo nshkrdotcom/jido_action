@@ -21,7 +21,7 @@ defmodule Jido.Exec.Telemetry do
     :telemetry.execute(
       [:jido, :action, :start],
       %{system_time: System.system_time()},
-      event_start_metadata(action, context)
+      span_start_metadata(action, context)
     )
   end
 
@@ -37,11 +37,45 @@ defmodule Jido.Exec.Telemetry do
     }
 
     metadata =
-      event_start_metadata(action, context)
-      |> Map.merge(event_stop_metadata(result))
+      span_start_metadata(action, context)
+      |> Map.merge(span_stop_metadata(result))
 
     :telemetry.execute([:jido, :action, :stop], measurements, metadata)
   end
+
+  @doc false
+  @spec span_start_metadata(module(), keyword() | map()) :: map()
+  def span_start_metadata(action, opts_or_context) do
+    %{
+      action: action
+    }
+    |> maybe_put(:jido, extract_jido(opts_or_context))
+  end
+
+  @doc false
+  @spec span_stop_metadata(any()) :: map()
+  def span_stop_metadata({:ok, _result}), do: %{outcome: :ok}
+
+  def span_stop_metadata({:ok, _result, _directive}) do
+    %{outcome: :ok, directive?: true}
+  end
+
+  def span_stop_metadata({:error, error}) do
+    normalized = Error.to_map(error)
+
+    %{
+      outcome: :error,
+      error_type: normalized.type,
+      retryable?: normalized.retryable?
+    }
+  end
+
+  def span_stop_metadata({:error, error, _directive}) do
+    span_stop_metadata({:error, error})
+    |> Map.put(:directive?, true)
+  end
+
+  def span_stop_metadata(_result), do: %{outcome: :unknown}
 
   @doc """
   Logs the start of action execution.
@@ -296,35 +330,13 @@ defmodule Jido.Exec.Telemetry do
     _ -> "[uninspectable value]"
   end
 
-  defp event_start_metadata(action, context) do
-    %{
-      action: action
-    }
-    |> maybe_put(:jido, Map.get(context, :jido) || Map.get(context, "jido"))
-  end
+  defp extract_jido(opts_or_context) when is_list(opts_or_context),
+    do: Keyword.get(opts_or_context, :jido)
 
-  defp event_stop_metadata({:ok, _result}), do: %{outcome: :ok}
+  defp extract_jido(opts_or_context) when is_map(opts_or_context),
+    do: Map.get(opts_or_context, :jido) || Map.get(opts_or_context, "jido")
 
-  defp event_stop_metadata({:ok, _result, _directive}) do
-    %{outcome: :ok, directive?: true}
-  end
-
-  defp event_stop_metadata({:error, error}) do
-    normalized = Error.to_map(error)
-
-    %{
-      outcome: :error,
-      error_type: normalized.type,
-      retryable?: normalized.retryable?
-    }
-  end
-
-  defp event_stop_metadata({:error, error, _directive}) do
-    event_stop_metadata({:error, error})
-    |> Map.put(:directive?, true)
-  end
-
-  defp event_stop_metadata(_result), do: %{outcome: :unknown}
+  defp extract_jido(_), do: nil
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)

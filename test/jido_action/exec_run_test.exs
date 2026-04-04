@@ -394,5 +394,27 @@ defmodule JidoTest.ExecRunTest do
         end
       end
     end
+
+    test "accepts deprecated error_normalization config as a compatibility shim" do
+      original_error_normalization = Application.get_env(:jido_action, :error_normalization)
+
+      try do
+        Application.put_env(:jido_action, :error_normalization, :granular)
+
+        log =
+          capture_log(fn ->
+            assert {:ok, %{value: 5}} = Exec.run(BasicAction, %{value: 5}, %{})
+          end)
+
+        assert log =~
+                 ":jido_action config :error_normalization=:granular is deprecated and ignored"
+      after
+        if is_nil(original_error_normalization) do
+          Application.delete_env(:jido_action, :error_normalization)
+        else
+          Application.put_env(:jido_action, :error_normalization, original_error_normalization)
+        end
+      end
+    end
   end
 end
