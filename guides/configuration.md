@@ -173,7 +173,7 @@ end
 Jido Action emits telemetry events under the `[:jido, :action]` prefix using `:telemetry.span/3`:
 
 - `[:jido, :action, :start]` - Action execution begins
-- `[:jido, :action, :stop]` - Action execution completes with bounded outcome metadata
+- `[:jido, :action, :stop]` - Action execution completes with rich metadata plus outcome summary fields
 
 Regular action failures are represented as `:stop` events with `metadata.outcome == :error`.
 `[:jido, :action, :exception]` is reserved for uncaught exceptions that escape the telemetry span,
@@ -212,7 +212,12 @@ defmodule MyApp.Telemetry do
   require Logger
 
   def handle_event([:jido, :action, :start], _measurements, metadata, _config) do
-    Logger.debug("Action started", action: metadata.action, jido: metadata[:jido])
+    Logger.debug("Action started",
+      action: metadata.action,
+      jido: metadata[:jido],
+      params: metadata.params,
+      context: metadata.context
+    )
   end
 
   def handle_event([:jido, :action, :stop], measurements, metadata, _config) do
@@ -223,6 +228,9 @@ defmodule MyApp.Telemetry do
         Logger.info("Action completed",
           action: metadata.action,
           duration_ms: duration_ms,
+          params: metadata.params,
+          context: metadata.context,
+          result: metadata[:result],
           directive?: metadata[:directive?] == true
         )
 

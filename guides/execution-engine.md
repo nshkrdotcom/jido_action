@@ -318,12 +318,20 @@ The execution engine emits comprehensive telemetry events using `:telemetry.span
 def handle_telemetry(event, measurements, metadata, _config) do
   case event do
     [:jido, :action, :start] ->
-      Logger.debug("Action started", action: metadata.action, jido: metadata[:jido])
+      Logger.debug("Action started",
+        action: metadata.action,
+        jido: metadata[:jido],
+        params: metadata.params,
+        context: metadata.context
+      )
     
     [:jido, :action, :stop] ->
       Logger.info("Action completed",
         action: metadata.action,
         duration: measurements.duration,
+        params: metadata.params,
+        context: metadata.context,
+        result: metadata[:result],
         outcome: metadata.outcome,
         error_type: metadata[:error_type],
         retryable?: metadata[:retryable?]
@@ -333,8 +341,10 @@ end
 ```
 
 Normal action failures are reported as `[:jido, :action, :stop]` events with
-`metadata.outcome == :error`. The `:exception` event is reserved for uncaught exceptions that
-escape the telemetry span, which should be rare in normal `Jido.Exec` execution.
+`metadata.outcome == :error`. Existing rich execution metadata such as `params`, `context`,
+and `result` remains available alongside the normalized outcome summary fields. The `:exception`
+event is reserved for uncaught exceptions that escape the telemetry span, which should be rare
+in normal `Jido.Exec` execution.
 
 ### Disabling Telemetry
 

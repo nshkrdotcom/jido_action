@@ -17,11 +17,11 @@ defmodule Jido.Exec.Telemetry do
   Emits telemetry start event for action execution.
   """
   @spec emit_start_event(module(), map(), map()) :: :ok
-  def emit_start_event(action, _params, context) do
+  def emit_start_event(action, params, context) do
     :telemetry.execute(
       [:jido, :action, :start],
       %{system_time: System.system_time()},
-      span_start_metadata(action, context)
+      span_start_metadata(action, params, context, context)
     )
   end
 
@@ -29,7 +29,7 @@ defmodule Jido.Exec.Telemetry do
   Emits telemetry end event for action execution.
   """
   @spec emit_end_event(module(), map(), map(), any()) :: :ok
-  def emit_end_event(action, _params, context, result) do
+  def emit_end_event(action, params, context, result) do
     measurements = %{
       system_time: System.system_time(),
       # Duration would need to be calculated by caller
@@ -37,30 +37,43 @@ defmodule Jido.Exec.Telemetry do
     }
 
     metadata =
-      span_start_metadata(action, context)
-      |> Map.merge(span_stop_metadata(result))
+      span_stop_metadata(action, params, context, result, context)
 
     :telemetry.execute([:jido, :action, :stop], measurements, metadata)
   end
 
   @doc false
-  @spec span_start_metadata(module(), keyword() | map()) :: map()
-  def span_start_metadata(action, opts_or_context) do
+  @spec span_start_metadata(module(), map(), map(), keyword() | map()) :: map()
+  def span_start_metadata(action, params, context, opts_or_context) do
     %{
-      action: action
+      action: action,
+      params: params,
+      context: context
     }
     |> maybe_put(:jido, extract_jido(opts_or_context))
   end
 
   @doc false
   @spec span_stop_metadata(any()) :: map()
-  def span_stop_metadata({:ok, _result}), do: %{outcome: :ok}
+  def span_stop_metadata(result) do
+    %{result: result}
+    |> Map.merge(stop_outcome_metadata(result))
+  end
 
-  def span_stop_metadata({:ok, _result, _directive}) do
+  @doc false
+  @spec span_stop_metadata(module(), map(), map(), any(), keyword() | map()) :: map()
+  def span_stop_metadata(action, params, context, result, opts_or_context) do
+    span_start_metadata(action, params, context, opts_or_context)
+    |> Map.merge(span_stop_metadata(result))
+  end
+
+  defp stop_outcome_metadata({:ok, _result}), do: %{outcome: :ok}
+
+  defp stop_outcome_metadata({:ok, _result, _directive}) do
     %{outcome: :ok, directive?: true}
   end
 
-  def span_stop_metadata({:error, error}) do
+  defp stop_outcome_metadata({:error, error}) do
     normalized = Error.to_map(error)
 
     %{
@@ -70,12 +83,12 @@ defmodule Jido.Exec.Telemetry do
     }
   end
 
-  def span_stop_metadata({:error, error, _directive}) do
-    span_stop_metadata({:error, error})
+  defp stop_outcome_metadata({:error, error, _directive}) do
+    stop_outcome_metadata({:error, error})
     |> Map.put(:directive?, true)
   end
 
-  def span_stop_metadata(_result), do: %{outcome: :unknown}
+  defp stop_outcome_metadata(_result), do: %{outcome: :unknown}
 
   @doc """
   Logs the start of action execution.

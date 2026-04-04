@@ -427,10 +427,10 @@ defmodule Jido.Exec do
             :full ->
               :telemetry.span(
                 [:jido, :action],
-                Telemetry.span_start_metadata(action, opts),
+                Telemetry.span_start_metadata(action, params, budgeted_context, opts),
                 fn ->
                   result = execute_with_timeout.()
-                  {result, Telemetry.span_stop_metadata(result)}
+                  {result, Telemetry.span_stop_metadata(action, params, budgeted_context, result, opts)}
                 end
               )
           end
