@@ -55,7 +55,7 @@ defmodule JidoTest.ExecIntegrationTest do
           assert {:ok, %{value: 42}} = Exec.run(BasicAction, %{value: 42}, %{}, log_level: :debug)
         end)
 
-      assert log =~ "Executing JidoTest.TestActions.BasicAction"
+      assert log =~ "Starting execution of JidoTest.TestActions.BasicAction"
       assert log =~ "params: %{value: 42}"
       verify!()
     end
@@ -71,7 +71,7 @@ defmodule JidoTest.ExecIntegrationTest do
                    Exec.run(BasicAction, %{value: 100}, context, log_level: :debug)
         end)
 
-      assert log =~ "Executing JidoTest.TestActions.BasicAction"
+      assert log =~ "Starting execution of JidoTest.TestActions.BasicAction"
       verify!()
     end
 
@@ -84,7 +84,7 @@ defmodule JidoTest.ExecIntegrationTest do
                    Exec.run(BasicAction, %{value: 200}, %{}, timeout: 10_000, log_level: :debug)
         end)
 
-      assert log =~ "Executing JidoTest.TestActions.BasicAction"
+      assert log =~ "Starting execution of JidoTest.TestActions.BasicAction"
       verify!()
     end
   end

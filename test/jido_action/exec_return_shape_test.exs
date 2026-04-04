@@ -68,7 +68,7 @@ defmodule JidoTest.ExecReturnShapeTest do
       end)
     end
 
-    test "preserves legacy collapsed details for retryable atom errors by default" do
+    test "normalizes retryable atom errors with structured retry hints" do
       defmodule RetryableAtomErrorAction do
         use Jido.Action, name: "retryable_atom_error"
 
@@ -82,13 +82,13 @@ defmodule JidoTest.ExecReturnShapeTest do
         assert Error.to_map(error) == %{
                  type: :execution_error,
                  message: "transient_error",
-                 details: %{},
+                 details: %{reason: :transient_error, retry: true},
                  retryable?: true
                }
       end)
     end
 
-    test "preserves legacy collapsed details for non-retryable atom errors by default" do
+    test "normalizes arbitrary atom errors consistently" do
       defmodule NonRetryableAtomErrorAction do
         use Jido.Action, name: "non_retryable_atom_error"
 
@@ -102,52 +102,28 @@ defmodule JidoTest.ExecReturnShapeTest do
         assert Error.to_map(error) == %{
                  type: :execution_error,
                  message: "badarg",
-                 details: %{},
+                 details: %{reason: :badarg, retry: true},
                  retryable?: true
                }
       end)
     end
 
-    test "supports granular retry hints for retryable atom errors when opted in" do
-      defmodule RetryableAtomErrorGranularAction do
-        use Jido.Action, name: "retryable_atom_error_granular"
+    test "normalizes raw error tuples with directives into execution errors" do
+      defmodule RawDirectiveErrorAction do
+        use Jido.Action, name: "raw_directive_error"
 
-        def run(_params, _context), do: {:error, :transient_error}
+        def run(_params, _context), do: {:error, :transient_error, %{directive: "retry"}}
       end
 
       capture_log(fn ->
-        assert {:error, %Error.ExecutionFailureError{} = error} =
-                 Exec.run(RetryableAtomErrorGranularAction, %{}, %{},
-                   error_normalization: :granular
-                 )
+        assert {:error, %Error.ExecutionFailureError{} = error, %{directive: "retry"}} =
+                 Exec.run(RawDirectiveErrorAction, %{}, %{})
 
         assert Error.to_map(error) == %{
                  type: :execution_error,
                  message: "transient_error",
                  details: %{reason: :transient_error, retry: true},
                  retryable?: true
-               }
-      end)
-    end
-
-    test "supports granular retry hints for non-retryable atom errors when opted in" do
-      defmodule NonRetryableAtomErrorGranularAction do
-        use Jido.Action, name: "non_retryable_atom_error_granular"
-
-        def run(_params, _context), do: {:error, :badarg}
-      end
-
-      capture_log(fn ->
-        assert {:error, %Error.ExecutionFailureError{} = error} =
-                 Exec.run(NonRetryableAtomErrorGranularAction, %{}, %{},
-                   error_normalization: :granular
-                 )
-
-        assert Error.to_map(error) == %{
-                 type: :execution_error,
-                 message: "badarg",
-                 details: %{reason: :badarg, retry: false},
-                 retryable?: false
                }
       end)
     end

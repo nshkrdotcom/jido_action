@@ -40,6 +40,7 @@ defmodule Jido.Exec do
   use Private
 
   alias Jido.Action.Error
+  alias Jido.Action.Util
   alias Jido.Exec.Async
   alias Jido.Exec.Compensation
   alias Jido.Exec.Retry
@@ -52,14 +53,10 @@ defmodule Jido.Exec do
 
   @default_timeout 30_000
   @deadline_key :__jido_deadline_ms__
-  @error_normalization_modes [:legacy, :granular]
 
   # Helper functions to get configuration values with fallbacks
   defp get_default_timeout,
     do: resolve_non_neg_integer_config(:default_timeout, @default_timeout)
-
-  defp get_default_error_normalization,
-    do: resolve_config_enum(:error_normalization, :legacy, @error_normalization_modes)
 
   defp resolve_non_neg_integer_config(key, fallback) do
     case Application.get_env(:jido_action, key, fallback) do
@@ -76,26 +73,9 @@ defmodule Jido.Exec do
     end
   end
 
-  defp resolve_config_enum(key, fallback, valid_values) do
-    case Application.get_env(:jido_action, key, fallback) do
-      value ->
-        if value in valid_values do
-          value
-        else
-          Logger.warning(fn ->
-            "Invalid :jido_action config for #{inspect(key)}: #{inspect(value)}. " <>
-              "Expected one of #{inspect(valid_values)}; using fallback #{inspect(fallback)}."
-          end)
-
-          fallback
-        end
-    end
-  end
-
   @type action :: module()
   @type params :: map()
   @type context :: map()
-  @type error_normalization_mode :: :legacy | :granular
   @type run_opts :: keyword()
   @type async_ref :: %{
           required(:ref) => reference(),
@@ -128,8 +108,8 @@ defmodule Jido.Exec do
     - `:timeout` - Maximum time (in ms) allowed for the Action to complete (configurable via `:jido_action, :default_timeout`).
     - `:max_retries` - Maximum number of retry attempts (configurable via `:jido_action, :default_max_retries`).
     - `:backoff` - Initial backoff time in milliseconds, doubles with each retry (configurable via `:jido_action, :default_backoff`).
-    - `:log_level` - Override the global Logger level for this specific action. Accepts #{inspect(Logger.levels())}.
-    - `:error_normalization` - Controls how raw `{:error, atom}` results are normalized. `:legacy` preserves the historical collapsed details shape by default; `:granular` includes structured retry metadata.
+    - `:log_level` - Override the Jido execution log threshold for this specific action. Accepts #{inspect(Logger.levels())}. Global Logger config still applies.
+    - `:telemetry` - `:full` (default) or `:silent` for action span emission.
     - `:jido` - Optional instance name for isolation. Routes execution through instance-scoped supervisors (e.g., `MyApp.Jido.TaskSupervisor`).
 
   ## Action Metadata in Context
@@ -181,7 +161,7 @@ defmodule Jido.Exec do
   def run(action, params \\ %{}, context \\ %{}, opts \\ [])
 
   def run(action, params, context, opts) when is_atom(action) and is_list(opts) do
-    log_level = Keyword.get(opts, :log_level, :info)
+    log_level = Util.resolve_log_level(opts)
 
     with {:ok, normalized_params} <- normalize_params(params),
          {:ok, normalized_context} <- normalize_context(context),
@@ -189,8 +169,6 @@ defmodule Jido.Exec do
          {:ok, validated_params} <- Validator.validate_params(action, normalized_params) do
       enhanced_context =
         Map.put(normalized_context, :action_metadata, action.__action_metadata__())
-
-      Telemetry.cond_log_start(log_level, action, validated_params, enhanced_context)
 
       do_run_with_retry(action, validated_params, enhanced_context, opts)
     else
@@ -200,14 +178,14 @@ defmodule Jido.Exec do
     end
   rescue
     e in [FunctionClauseError, BadArityError, BadFunctionError] ->
-      log_level = Keyword.get(opts, :log_level, :info)
+      log_level = Util.resolve_log_level(opts)
       Telemetry.cond_log_function_error(log_level, e)
 
       {:error,
        Error.validation_error("Invalid action module: #{Telemetry.extract_safe_error_message(e)}")}
 
     e ->
-      log_level = Keyword.get(opts, :log_level, :info)
+      log_level = Util.resolve_log_level(opts)
       Telemetry.cond_log_unexpected_error(log_level, e)
 
       {:error,
@@ -216,7 +194,7 @@ defmodule Jido.Exec do
        )}
   catch
     kind, reason ->
-      log_level = Keyword.get(opts, :log_level, :info)
+      log_level = Util.resolve_log_level(opts)
       Telemetry.cond_log_caught_error(log_level, reason)
 
       {:error, Error.internal_error("Caught #{kind}: #{inspect(reason)}")}
@@ -430,33 +408,25 @@ defmodule Jido.Exec do
 
     @spec do_run(action(), params(), context(), run_opts()) :: exec_result
     defp do_run(action, params, context, opts) do
-      telemetry = Keyword.get(opts, :telemetry, :full)
+      telemetry = resolve_telemetry_mode(opts)
 
       with {:ok, timeout, budgeted_context} <- resolve_timeout_budget(context, opts) do
+        execute_with_timeout = fn ->
+          execute_action_with_timeout(action, params, budgeted_context, timeout, opts)
+        end
+
         result =
           case telemetry do
             :silent ->
-              if opts == [] do
-                execute_action_with_timeout(action, params, budgeted_context, timeout)
-              else
-                execute_action_with_timeout(action, params, budgeted_context, timeout, opts)
-              end
+              execute_with_timeout.()
 
-            _ ->
-              span_metadata = %{
-                action: action,
-                params: params,
-                context: budgeted_context
-              }
-
+            :full ->
               :telemetry.span(
                 [:jido, :action],
-                span_metadata,
+                action_span_start_metadata(action, opts),
                 fn ->
-                  result =
-                    execute_action_with_timeout(action, params, budgeted_context, timeout, opts)
-
-                  {result, %{}}
+                  result = execute_with_timeout.()
+                  {result, action_span_stop_metadata(result)}
                 end
               )
           end
@@ -674,10 +644,61 @@ defmodule Jido.Exec do
       end
     end
 
+    defp resolve_telemetry_mode(opts) do
+      case Keyword.fetch(opts, :telemetry) do
+        {:ok, mode} when mode in [:full, :silent] ->
+          mode
+
+        {:ok, invalid} ->
+          Logger.warning(fn ->
+            "Invalid execution :telemetry option: #{inspect(invalid)}. " <>
+              "Expected one of [:full, :silent]; using :full."
+          end)
+
+          :full
+
+        :error ->
+          :full
+      end
+    end
+
+    defp action_span_start_metadata(action, opts) do
+      %{
+        action: action
+      }
+      |> maybe_put(:jido, Keyword.get(opts, :jido))
+    end
+
+    defp action_span_stop_metadata({:ok, _result}), do: %{outcome: :ok}
+
+    defp action_span_stop_metadata({:ok, _result, _directive}) do
+      %{outcome: :ok, directive?: true}
+    end
+
+    defp action_span_stop_metadata({:error, error}) do
+      normalized = Error.to_map(error)
+
+      %{
+        outcome: :error,
+        error_type: normalized.type,
+        retryable?: normalized.retryable?
+      }
+    end
+
+    defp action_span_stop_metadata({:error, error, _directive}) do
+      action_span_stop_metadata({:error, error})
+      |> Map.put(:directive?, true)
+    end
+
+    defp action_span_stop_metadata(_result), do: %{outcome: :unknown}
+
+    defp maybe_put(map, _key, nil), do: map
+    defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
     @spec execute_action(action(), params(), context(), run_opts()) :: exec_result
     defp execute_action(action, params, context, opts) do
-      log_level = Keyword.get(opts, :log_level, :info)
-      Telemetry.cond_log_execution_debug(log_level, action, params, context)
+      log_level = Util.resolve_log_level(opts)
+      Telemetry.cond_log_start(log_level, action, params, context)
 
       action.run(params, context)
       |> handle_action_result(action, log_level, opts)
@@ -697,9 +718,16 @@ defmodule Jido.Exec do
     end
 
     # Handle errors with extra data
+    defp handle_action_result({:error, %_{} = error, other}, action, log_level, _opts)
+         when is_exception(error) do
+      Telemetry.cond_log_error(log_level, action, error)
+      {:error, error, other}
+    end
+
     defp handle_action_result({:error, reason, other}, action, log_level, _opts) do
       Telemetry.cond_log_error(log_level, action, reason)
-      {:error, reason, other}
+      {message, details} = extract_error_fields(reason)
+      {:error, Error.execution_error(message, details), other}
     end
 
     # Handle exception errors
@@ -711,9 +739,9 @@ defmodule Jido.Exec do
 
     # Handle generic errors — normalize reason into a well-formed
     # ExecutionFailureError with a string message and structured details.
-    defp handle_action_result({:error, reason}, action, log_level, opts) do
+    defp handle_action_result({:error, reason}, action, log_level, _opts) do
       Telemetry.cond_log_error(log_level, action, reason)
-      {message, details} = extract_error_fields(reason, opts)
+      {message, details} = extract_error_fields(reason)
       {:error, Error.execution_error(message, details)}
     end
 
@@ -737,40 +765,17 @@ defmodule Jido.Exec do
       {message, Map.delete(reason, :message)}
     end
 
-    defp extract_error_fields(%{message: message} = reason, _opts) do
+    defp extract_error_fields(%{message: message} = reason) do
       {inspect(message), Map.delete(reason, :message)}
     end
 
-    defp extract_error_fields(reason, _opts) when is_binary(reason), do: {reason, %{}}
+    defp extract_error_fields(reason) when is_binary(reason), do: {reason, %{}}
 
-    defp extract_error_fields(reason, opts) when is_atom(reason) do
-      case error_normalization_mode(opts) do
-        :granular ->
-          {Atom.to_string(reason), %{reason: reason, retry: raw_atom_reason_retryable?(reason)}}
+    defp extract_error_fields(reason) when is_atom(reason),
+      do: {Atom.to_string(reason), %{reason: reason, retry: Error.retryable?(reason)}}
 
-        :legacy ->
-          {Atom.to_string(reason), %{}}
-      end
-    end
-
-    defp extract_error_fields(reason, _opts) when is_map(reason), do: {inspect(reason), reason}
-    defp extract_error_fields(reason, _opts), do: {inspect(reason), %{}}
-
-    defp error_normalization_mode(opts) do
-      case Keyword.get(opts, :error_normalization, get_default_error_normalization()) do
-        mode when mode in @error_normalization_modes ->
-          mode
-
-        _invalid ->
-          get_default_error_normalization()
-      end
-    end
-
-    defp raw_atom_reason_retryable?(reason)
-         when reason in [:timeout, :transient, :transient_error, :rate_limited],
-         do: true
-
-    defp raw_atom_reason_retryable?(_reason), do: false
+    defp extract_error_fields(reason) when is_map(reason), do: {inspect(reason), reason}
+    defp extract_error_fields(reason), do: {inspect(reason), %{}}
 
     defp struct_error_details(reason) do
       reason
@@ -811,7 +816,7 @@ defmodule Jido.Exec do
 
     # Handle exceptions raised during action execution
     defp handle_action_exception(e, stacktrace, action, opts) do
-      log_level = Keyword.get(opts, :log_level, :info)
+      log_level = Util.resolve_log_level(opts)
       Telemetry.cond_log_error(log_level, action, e)
 
       error_message = build_exception_message(e, action)

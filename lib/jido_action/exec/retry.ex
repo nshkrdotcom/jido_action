@@ -9,6 +9,7 @@ defmodule Jido.Exec.Retry do
   """
 
   alias Jido.Action.Error
+  alias Jido.Action.Util
   alias Jido.Exec.Telemetry
 
   require Logger
@@ -111,7 +112,7 @@ defmodule Jido.Exec.Retry do
     backoff = calculate_backoff(retry_count, initial_backoff)
 
     Telemetry.cond_log_retry(
-      Keyword.get(opts, :log_level, :info),
+      Util.resolve_log_level(opts),
       action,
       retry_count,
       max_retries,

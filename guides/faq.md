@@ -505,8 +505,7 @@ end
   "production-monitoring",
   [
     [:jido, :action, :start],
-    [:jido, :action, :stop],
-    [:jido, :action, :exception]
+    [:jido, :action, :stop]
   ],
   &MyApp.Telemetry.handle_event/4,
   %{}
@@ -524,11 +523,10 @@ defmodule MyApp.Telemetry do
     )
     
     # Log slow actions
-    if duration_ms > 5000 do
+    if duration_ms > 5000 and metadata.outcome == :ok do
       Logger.warning("Slow action detected",
         action: metadata.action,
-        duration_ms: duration_ms,
-        params: sanitize_params(metadata.params)
+        duration_ms: duration_ms
       )
     end
   end

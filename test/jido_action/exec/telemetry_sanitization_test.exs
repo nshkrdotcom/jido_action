@@ -43,7 +43,7 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
     :ok
   end
 
-  test "emit_start_event redacts sensitive keys and caps payload size" do
+  test "emit_start_event emits low-cardinality metadata" do
     long_string = String.duplicate("x", 300)
 
     params = %{
@@ -63,20 +63,7 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
 
     assert_receive {:telemetry_event, [:jido, :action, :start], _measurements, metadata}
 
-    assert metadata.params.password == "[REDACTED]"
-    assert metadata.context["authorization"] == "[REDACTED]"
-    assert String.contains?(metadata.context["note"], "...(truncated 44 bytes)")
-    assert length(metadata.params.list) == 26
-    assert List.last(metadata.params.list) == %{__truncated_items__: 5}
-    assert metadata.params.data.api_key == "[REDACTED]"
-    assert metadata.params.data.nested.client_secret == "[REDACTED]"
-    assert metadata.params.data.__struct__ == inspect(CredentialsStruct)
-
-    assert get_in(metadata, [:params, :nested, :layer1, :layer2]) == %{
-             __truncated_depth__: 4,
-             type: :map,
-             size: 1
-           }
+    assert metadata == %{action: __MODULE__}
   end
 
   test "sanitize_value keeps deep structs inspect-safe" do
@@ -87,7 +74,7 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
     assert_struct_summary(sanitized_request, Req.Request, map_size(request))
   end
 
-  test "emit_end_event sanitizes result payloads" do
+  test "emit_end_event emits bounded outcome metadata" do
     long_string = String.duplicate("z", 280)
 
     assert :ok =
@@ -100,10 +87,26 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
 
     assert_receive {:telemetry_event, [:jido, :action, :stop], _measurements, metadata}
 
-    assert metadata.context.secret == "[REDACTED]"
-    assert {:ok, result_payload} = metadata.result
-    assert result_payload.token == "[REDACTED]"
-    assert String.contains?(result_payload.payload, "...(truncated 24 bytes)")
+    assert metadata == %{action: __MODULE__, outcome: :ok}
+  end
+
+  test "emit_end_event classifies error outcomes without payload dumping" do
+    assert :ok =
+             Telemetry.emit_end_event(
+               __MODULE__,
+               %{input: 1},
+               %{secret: "hidden"},
+               {:error, Jido.Action.Error.execution_error("boom", %{token: "tok-123"})}
+             )
+
+    assert_receive {:telemetry_event, [:jido, :action, :stop], _measurements, metadata}
+
+    assert metadata == %{
+             action: __MODULE__,
+             outcome: :error,
+             error_type: :execution_error,
+             retryable?: true
+           }
   end
 
   test "struct with custom Inspect at depth >= 4 does not crash safe_inspect" do

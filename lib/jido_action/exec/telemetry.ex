@@ -6,9 +6,9 @@ defmodule Jido.Exec.Telemetry do
   and error message extraction used throughout the execution system.
   """
 
-  import Jido.Action.Util, only: [cond_log: 3]
-
+  alias Jido.Action.Error
   alias Jido.Action.Sanitizer
+  alias Jido.Action.Util
   require Logger
 
   @inspect_opts [charlists: :as_lists, printable_limit: :infinity, limit: :infinity]
@@ -17,18 +17,11 @@ defmodule Jido.Exec.Telemetry do
   Emits telemetry start event for action execution.
   """
   @spec emit_start_event(module(), map(), map()) :: :ok
-  def emit_start_event(action, params, context) do
-    metadata =
-      sanitize_value(%{
-        action: action,
-        params: params,
-        context: context
-      })
-
+  def emit_start_event(action, _params, context) do
     :telemetry.execute(
       [:jido, :action, :start],
       %{system_time: System.system_time()},
-      metadata
+      event_start_metadata(action, context)
     )
   end
 
@@ -36,7 +29,7 @@ defmodule Jido.Exec.Telemetry do
   Emits telemetry end event for action execution.
   """
   @spec emit_end_event(module(), map(), map(), any()) :: :ok
-  def emit_end_event(action, params, context, result) do
+  def emit_end_event(action, _params, context, result) do
     measurements = %{
       system_time: System.system_time(),
       # Duration would need to be calculated by caller
@@ -44,12 +37,8 @@ defmodule Jido.Exec.Telemetry do
     }
 
     metadata =
-      sanitize_value(%{
-        action: action,
-        params: params,
-        context: context,
-        result: result
-      })
+      event_start_metadata(action, context)
+      |> Map.merge(event_stop_metadata(result))
 
     :telemetry.execute([:jido, :action, :stop], measurements, metadata)
   end
@@ -59,8 +48,8 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec log_execution_start(module(), map(), map()) :: :ok
   def log_execution_start(action, params, context) do
-    Logger.notice(fn ->
-      "Executing #{inspect(action)} with params: #{safe_inspect(params)} and context: #{safe_inspect(context)}"
+    Logger.debug(fn ->
+      "Starting execution of #{inspect(action)}, params: #{safe_inspect(params)}, context: #{safe_inspect(context)}"
     end)
   end
 
@@ -127,11 +116,11 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_start(atom(), module(), map(), map()) :: :ok
   def cond_log_start(log_level, action, params, context) do
-    maybe_log(
+    Util.cond_log(
       log_level,
-      :notice,
+      :debug,
       fn ->
-        "Executing #{inspect(action)} with params: #{safe_inspect(params)} and context: #{safe_inspect(context)}"
+        "Starting execution of #{inspect(action)}, params: #{safe_inspect(params)}, context: #{safe_inspect(context)}"
       end
     )
   end
@@ -143,7 +132,7 @@ defmodule Jido.Exec.Telemetry do
   def cond_log_end(log_level, action, result) do
     case result do
       {:ok, result_data} ->
-        maybe_log(
+        Util.cond_log(
           log_level,
           :debug,
           fn ->
@@ -152,7 +141,7 @@ defmodule Jido.Exec.Telemetry do
         )
 
       {:ok, result_data, directive} ->
-        maybe_log(
+        Util.cond_log(
           log_level,
           :debug,
           fn ->
@@ -161,12 +150,12 @@ defmodule Jido.Exec.Telemetry do
         )
 
       {:error, error} ->
-        maybe_log(log_level, :error, fn ->
+        Util.cond_log(log_level, :error, fn ->
           "Action #{inspect(action)} failed: #{safe_inspect(error)}"
         end)
 
       {:error, error, directive} ->
-        maybe_log(
+        Util.cond_log(
           log_level,
           :error,
           fn ->
@@ -175,7 +164,7 @@ defmodule Jido.Exec.Telemetry do
         )
 
       other ->
-        maybe_log(
+        Util.cond_log(
           log_level,
           :debug,
           fn ->
@@ -190,7 +179,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_error(atom(), module(), any()) :: :ok
   def cond_log_error(log_level, action, error) do
-    maybe_log(log_level, :error, fn ->
+    Util.cond_log(log_level, :error, fn ->
       "Action #{inspect(action)} failed: #{safe_inspect(error)}"
     end)
   end
@@ -201,7 +190,7 @@ defmodule Jido.Exec.Telemetry do
   @spec cond_log_retry(atom(), module(), non_neg_integer(), non_neg_integer(), non_neg_integer()) ::
           :ok
   def cond_log_retry(log_level, action, retry_count, max_retries, backoff) do
-    maybe_log(
+    Util.cond_log(
       log_level,
       :info,
       fn ->
@@ -215,7 +204,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_message(atom(), atom(), String.t()) :: :ok
   def cond_log_message(log_level, level, message) do
-    maybe_log(log_level, level, message)
+    Util.cond_log(log_level, level, message)
   end
 
   @doc """
@@ -223,7 +212,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_function_error(atom(), any()) :: :ok
   def cond_log_function_error(log_level, error) do
-    maybe_log(
+    Util.cond_log(
       log_level,
       :warning,
       fn ->
@@ -237,7 +226,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_unexpected_error(atom(), any()) :: :ok
   def cond_log_unexpected_error(log_level, error) do
-    maybe_log(
+    Util.cond_log(
       log_level,
       :error,
       fn -> "Unexpected error in action: #{extract_safe_error_message(error)}" end
@@ -249,7 +238,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_caught_error(atom(), any()) :: :ok
   def cond_log_caught_error(log_level, reason) do
-    maybe_log(
+    Util.cond_log(
       log_level,
       :warning,
       fn ->
@@ -263,13 +252,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_execution_debug(atom(), module(), map(), map()) :: :ok
   def cond_log_execution_debug(log_level, action, params, context) do
-    maybe_log(
-      log_level,
-      :debug,
-      fn ->
-        "Starting execution of #{inspect(action)}, params: #{safe_inspect(params)}, context: #{safe_inspect(context)}"
-      end
-    )
+    cond_log_start(log_level, action, params, context)
   end
 
   @doc """
@@ -277,7 +260,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_validation_failure(atom(), module(), any()) :: :ok
   def cond_log_validation_failure(log_level, action, validation_error) do
-    maybe_log(
+    Util.cond_log(
       log_level,
       :error,
       fn ->
@@ -291,7 +274,7 @@ defmodule Jido.Exec.Telemetry do
   """
   @spec cond_log_failure(atom(), any()) :: :ok
   def cond_log_failure(log_level, reason) do
-    maybe_log(log_level, :debug, fn ->
+    Util.cond_log(log_level, :error, fn ->
       "Action execution failed: #{safe_inspect(reason)}"
     end)
   end
@@ -313,14 +296,36 @@ defmodule Jido.Exec.Telemetry do
     _ -> "[uninspectable value]"
   end
 
-  defp maybe_log(threshold_level, message_level, message, metadata \\ []) do
-    valid_levels = Logger.levels()
-
-    if threshold_level in valid_levels and message_level in valid_levels and
-         Logger.compare_levels(threshold_level, message_level) in [:lt, :eq] do
-      Logger.log(message_level, message, metadata)
-    else
-      :ok
-    end
+  defp event_start_metadata(action, context) do
+    %{
+      action: action
+    }
+    |> maybe_put(:jido, Map.get(context, :jido) || Map.get(context, "jido"))
   end
+
+  defp event_stop_metadata({:ok, _result}), do: %{outcome: :ok}
+
+  defp event_stop_metadata({:ok, _result, _directive}) do
+    %{outcome: :ok, directive?: true}
+  end
+
+  defp event_stop_metadata({:error, error}) do
+    normalized = Error.to_map(error)
+
+    %{
+      outcome: :error,
+      error_type: normalized.type,
+      retryable?: normalized.retryable?
+    }
+  end
+
+  defp event_stop_metadata({:error, error, _directive}) do
+    event_stop_metadata({:error, error})
+    |> Map.put(:directive?, true)
+  end
+
+  defp event_stop_metadata(_result), do: %{outcome: :unknown}
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 end

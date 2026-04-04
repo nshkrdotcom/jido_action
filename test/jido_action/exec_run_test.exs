@@ -46,7 +46,7 @@ defmodule JidoTest.ExecRunTest do
           assert {:ok, %{value: 5}} = Exec.run(BasicAction, %{value: 5}, %{}, log_level: :debug)
         end)
 
-      assert log =~ "Executing JidoTest.TestActions.BasicAction with params: %{value: 5}"
+      assert log =~ "Starting execution of JidoTest.TestActions.BasicAction"
       verify!()
     end
 
@@ -100,7 +100,7 @@ defmodule JidoTest.ExecRunTest do
           assert is_exception(error)
         end)
 
-      assert log =~ "Executing JidoTest.TestActions.ErrorAction with params: %{}"
+      assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
       assert log =~ "Action JidoTest.TestActions.ErrorAction failed"
       verify!()
     end
@@ -362,6 +362,35 @@ defmodule JidoTest.ExecRunTest do
           Application.put_env(:jido_action, :default_backoff, original_backoff)
         else
           Application.delete_env(:jido_action, :default_backoff)
+        end
+      end
+    end
+
+    test "uses configured default_log_level and allows per-call overrides" do
+      original_log_level = Application.get_env(:jido_action, :default_log_level)
+
+      try do
+        Application.put_env(:jido_action, :default_log_level, :debug)
+
+        configured_log =
+          capture_log(fn ->
+            assert {:ok, %{value: 5}} = Exec.run(BasicAction, %{value: 5}, %{})
+          end)
+
+        assert configured_log =~ "Starting execution of JidoTest.TestActions.BasicAction"
+
+        overridden_log =
+          capture_log(fn ->
+            assert {:ok, %{value: 5}} =
+                     Exec.run(BasicAction, %{value: 5}, %{}, log_level: :error)
+          end)
+
+        refute overridden_log =~ "Starting execution of JidoTest.TestActions.BasicAction"
+      after
+        if original_log_level do
+          Application.put_env(:jido_action, :default_log_level, original_log_level)
+        else
+          Application.delete_env(:jido_action, :default_log_level)
         end
       end
     end
