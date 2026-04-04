@@ -217,6 +217,22 @@
         "subject_id": "jido_action.scaffolding"
       },
       {
+        "file": ".spec/specs/scaffolding.spec.md",
+        "id": "jido_action.scaffolding.support_guide_observability_examples",
+        "priority": "should",
+        "stability": "evolving",
+        "statement": "Maintainer-facing FAQ and support guides shall keep production observability examples aligned with the current execution contract, including additive action telemetry examples and sanitized success-path logging guidance.",
+        "subject_id": "jido_action.scaffolding"
+      },
+      {
+        "file": ".spec/specs/schema.spec.md",
+        "id": "jido_action.schema.nimble_json_schema_annotations",
+        "priority": "should",
+        "stability": "stable",
+        "statement": "NimbleOptions schema export shall preserve required keys, infer JSON-friendly primitive and enum types, and emit per-property descriptions with a fallback placeholder when the schema author does not provide one.",
+        "subject_id": "jido_action.schema"
+      },
+      {
         "file": ".spec/specs/schema.spec.md",
         "id": "jido_action.schema.safe_tool_translation",
         "priority": "must",
@@ -247,6 +263,14 @@
         "stability": "evolving",
         "statement": "Built-in tool actions shall cooperate with execution-policy concerns such as deadline propagation and Lua supervision and timeout cleanup where the tests exercise those boundaries.",
         "subject_id": "jido_action.tools"
+      },
+      {
+        "file": ".spec/specs/workflow.spec.md",
+        "id": "jido_action.workflow.dependency_validation_diagnostics",
+        "priority": "should",
+        "stability": "stable",
+        "statement": "Jido.Plan shall reject undefined step dependencies with deterministic validation details that identify missing dependencies by step and list the available step names needed to repair the plan definition.",
+        "subject_id": "jido_action.workflow"
       },
       {
         "file": ".spec/specs/workflow.spec.md",
@@ -738,7 +762,8 @@
       },
       {
         "covers": [
-          "jido_action.scaffolding.examples_and_support"
+          "jido_action.scaffolding.examples_and_support",
+          "jido_action.scaffolding.support_guide_observability_examples"
         ],
         "file": ".spec/specs/scaffolding.spec.md",
         "kind": "guide_file",
@@ -757,7 +782,8 @@
       {
         "covers": [
           "jido_action.schema.unified_validation",
-          "jido_action.schema.safe_tool_translation"
+          "jido_action.schema.safe_tool_translation",
+          "jido_action.schema.nimble_json_schema_annotations"
         ],
         "execute": true,
         "file": ".spec/specs/schema.spec.md",
@@ -800,7 +826,8 @@
       {
         "covers": [
           "jido_action.workflow.instruction_normalization",
-          "jido_action.workflow.plan_and_workflow_execution"
+          "jido_action.workflow.plan_and_workflow_execution",
+          "jido_action.workflow.dependency_validation_diagnostics"
         ],
         "execute": true,
         "file": ".spec/specs/workflow.spec.md",
@@ -872,7 +899,7 @@
     "decisions": 3,
     "exceptions": 0,
     "findings": 0,
-    "requirements": 33,
+    "requirements": 36,
     "scenarios": 0,
     "subjects": 10,
     "verifications": 30
@@ -885,7 +912,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.action",
         "target": "mix test test/jido_action/action_test.exs test/jido_action/on_after_run_test.exs test/jido_action/exec_tool_test.exs test/jido_action/util_test.exs",
         "verification_index": 0
@@ -896,7 +923,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.action",
         "target": "mix test test/jido_action/action_test.exs test/jido_action/on_after_run_test.exs test/jido_action/exec_tool_test.exs test/jido_action/util_test.exs",
         "verification_index": 0
@@ -907,7 +934,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.action",
         "target": "mix test test/jido_action/action_test.exs test/jido_action/on_after_run_test.exs test/jido_action/exec_tool_test.exs test/jido_action/util_test.exs",
         "verification_index": 0
@@ -918,7 +945,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.action",
         "target": "mix test test/jido_action/action_test.exs test/jido_action/on_after_run_test.exs test/jido_action/exec_tool_test.exs test/jido_action/util_test.exs",
         "verification_index": 0
@@ -929,7 +956,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.error_handling",
         "target": "mix test test/jido_action/error_test.exs",
         "verification_index": 0
@@ -940,7 +967,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.error_handling",
         "target": "mix test test/jido_action/error_test.exs",
         "verification_index": 0
@@ -951,7 +978,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.exec",
         "target": "mix test test/jido_action/exec_run_test.exs test/jido_action/exec_async_test.exs test/jido_action/exec_integration_test.exs test/jido_action/exec_retry_policy_test.exs test/jido_action/exec_return_shape_test.exs",
         "verification_index": 0
@@ -962,7 +989,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.exec",
         "target": "mix test test/jido_action/exec_run_test.exs test/jido_action/exec_async_test.exs test/jido_action/exec_integration_test.exs test/jido_action/exec_retry_policy_test.exs test/jido_action/exec_return_shape_test.exs",
         "verification_index": 0
@@ -973,7 +1000,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.exec",
         "target": "mix test test/jido_action/exec_run_test.exs test/jido_action/exec_async_test.exs test/jido_action/exec_integration_test.exs test/jido_action/exec_retry_policy_test.exs test/jido_action/exec_return_shape_test.exs",
         "verification_index": 0
@@ -984,7 +1011,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.exec",
         "target": "mix test test/jido_action/exec_timeout_task_supervisor_test.exs test/jido_action/exec/chain_test.exs test/jido_action/exec/telemetry_sanitization_test.exs",
         "verification_index": 1
@@ -995,7 +1022,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.exec",
         "target": "mix test test/jido_action/exec_timeout_task_supervisor_test.exs test/jido_action/exec/chain_test.exs test/jido_action/exec/telemetry_sanitization_test.exs",
         "verification_index": 1
@@ -1006,7 +1033,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.exec",
         "target": "mix test test/jido_action/exec_timeout_task_supervisor_test.exs test/jido_action/exec/chain_test.exs test/jido_action/exec/telemetry_sanitization_test.exs",
         "verification_index": 1
@@ -1017,7 +1044,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.package",
         "target": "mix test test/jido_action/action_test.exs test/jido_action/instruction_test.exs test/jido/plan_test.exs test/jido_action/exec_tool_test.exs",
         "verification_index": 0
@@ -1028,7 +1055,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.package",
         "target": "mix test test/jido_action/exec_return_shape_test.exs test/jido_action/error_test.exs",
         "verification_index": 1
@@ -1039,7 +1066,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.package",
         "target": "mix test test/jido_action/exec_integration_test.exs test/jido_action/exec/telemetry_sanitization_test.exs test/jido_action/exec/chain_test.exs",
         "verification_index": 2
@@ -1061,7 +1088,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.package",
         "target": "MIX_ENV=prod mix deps.get",
         "verification_index": 4
@@ -1094,7 +1121,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.sanitizer",
         "target": "mix test test/jido_action/sanitizer_test.exs",
         "verification_index": 0
@@ -1105,7 +1132,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.sanitizer",
         "target": "mix test test/jido_action/sanitizer_test.exs",
         "verification_index": 0
@@ -1116,7 +1143,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.sanitizer",
         "target": "mix test test/jido_action/exec/telemetry_sanitization_test.exs",
         "verification_index": 1
@@ -1177,6 +1204,17 @@
         "verification_index": 4
       },
       {
+        "cover_id": "jido_action.scaffolding.support_guide_observability_examples",
+        "file": ".spec/specs/scaffolding.spec.md",
+        "kind": "guide_file",
+        "meets_minimum": true,
+        "required_strength": "claimed",
+        "strength": "linked",
+        "subject_id": "jido_action.scaffolding",
+        "target": "guides/faq.md",
+        "verification_index": 4
+      },
+      {
         "cover_id": "jido_action.scaffolding.examples_and_support",
         "file": ".spec/specs/scaffolding.spec.md",
         "kind": "guide_file",
@@ -1188,12 +1226,23 @@
         "verification_index": 5
       },
       {
+        "cover_id": "jido_action.schema.nimble_json_schema_annotations",
+        "file": ".spec/specs/schema.spec.md",
+        "kind": "command",
+        "meets_minimum": true,
+        "required_strength": "claimed",
+        "strength": "executed",
+        "subject_id": "jido_action.schema",
+        "target": "mix test test/jido_action/zoi_schema_test.exs test/jido_action/schema_json_test.exs",
+        "verification_index": 0
+      },
+      {
         "cover_id": "jido_action.schema.safe_tool_translation",
         "file": ".spec/specs/schema.spec.md",
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.schema",
         "target": "mix test test/jido_action/zoi_schema_test.exs test/jido_action/schema_json_test.exs",
         "verification_index": 0
@@ -1204,7 +1253,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.schema",
         "target": "mix test test/jido_action/zoi_schema_test.exs test/jido_action/schema_json_test.exs",
         "verification_index": 0
@@ -1215,7 +1264,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.schema",
         "target": "mix test test/jido_action/json_schema_map_test.exs test/jido_action/json_schema_bridge_test.exs test/jido_action/atom_safety_test.exs",
         "verification_index": 1
@@ -1226,7 +1275,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.schema",
         "target": "mix test test/jido_action/json_schema_map_test.exs test/jido_action/json_schema_bridge_test.exs test/jido_action/atom_safety_test.exs",
         "verification_index": 1
@@ -1237,7 +1286,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.tools",
         "target": "mix test test/jido_tools/arithmetic_test.exs test/jido_tools/basic_test.exs test/jido_tools/files_test.exs test/jido_tools/req_test.exs",
         "verification_index": 0
@@ -1248,7 +1297,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.tools",
         "target": "mix test test/jido_tools/lua_eval_test.exs test/jido_tools/lua_eval_supervision_test.exs test/jido_tools/deadline_propagation_test.exs",
         "verification_index": 1
@@ -1259,10 +1308,21 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.tools",
         "target": "mix test test/jido_tools/lua_eval_test.exs test/jido_tools/lua_eval_supervision_test.exs test/jido_tools/deadline_propagation_test.exs",
         "verification_index": 1
+      },
+      {
+        "cover_id": "jido_action.workflow.dependency_validation_diagnostics",
+        "file": ".spec/specs/workflow.spec.md",
+        "kind": "command",
+        "meets_minimum": true,
+        "required_strength": "claimed",
+        "strength": "executed",
+        "subject_id": "jido_action.workflow",
+        "target": "mix test test/jido_action/instruction_test.exs test/jido/plan_test.exs test/jido/plan_coverage_test.exs test/jido/plan_missing_dependency_test.exs",
+        "verification_index": 0
       },
       {
         "cover_id": "jido_action.workflow.instruction_normalization",
@@ -1270,7 +1330,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.workflow",
         "target": "mix test test/jido_action/instruction_test.exs test/jido/plan_test.exs test/jido/plan_coverage_test.exs test/jido/plan_missing_dependency_test.exs",
         "verification_index": 0
@@ -1281,7 +1341,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.workflow",
         "target": "mix test test/jido_action/instruction_test.exs test/jido/plan_test.exs test/jido/plan_coverage_test.exs test/jido/plan_missing_dependency_test.exs",
         "verification_index": 0
@@ -1292,7 +1352,7 @@
         "kind": "command",
         "meets_minimum": true,
         "required_strength": "claimed",
-        "strength": "claimed",
+        "strength": "executed",
         "subject_id": "jido_action.workflow",
         "target": "mix test test/jido_tools/action_plan_test.exs test/jido_tools/workflow_test.exs test/jido_tools/workflow_parallel_policy_test.exs test/jido_tools/workflow_retry_policy_test.exs test/jido_action/examples/user_registration_workflow_test.exs",
         "verification_index": 1
@@ -1367,9 +1427,9 @@
     "cli_minimum_strength": null,
     "default_minimum_strength": "claimed",
     "strength_summary": {
-      "claimed": 31,
-      "executed": 0,
-      "linked": 13
+      "claimed": 2,
+      "executed": 31,
+      "linked": 14
     },
     "threshold_failures": 0
   },

@@ -1,6 +1,6 @@
 # Frequently Asked Questions
 
-<!-- covers: jido_action.scaffolding.examples_and_support -->
+<!-- covers: jido_action.scaffolding.examples_and_support, jido_action.scaffolding.support_guide_observability_examples -->
 
 Common questions and solutions for Jido Action development.
 
