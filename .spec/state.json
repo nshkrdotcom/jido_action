@@ -42,6 +42,14 @@
     "requirements": [
       {
         "file": ".spec/specs/action.spec.md",
+        "id": "jido_action.action.log_level_resolution",
+        "priority": "should",
+        "stability": "evolving",
+        "statement": "Jido.Action.Util shall resolve execution log levels from per-call options and package configuration, warn on invalid configured or call-site values, and fall back to stable defaults so action and tool execution keeps predictable logging behavior.",
+        "subject_id": "jido_action.action"
+      },
+      {
+        "file": ".spec/specs/action.spec.md",
         "id": "jido_action.action.metadata_contract",
         "priority": "must",
         "stability": "stable",
@@ -78,6 +86,14 @@
         "priority": "must",
         "stability": "stable",
         "statement": "Jido.Action.Error shall provide concrete exception structs and helper constructors for validation, execution, timeout, configuration, and internal errors, with normalized mapping suitable for cross-package handling.",
+        "subject_id": "jido_action.error_handling"
+      },
+      {
+        "file": ".spec/specs/error_handling.spec.md",
+        "id": "jido_action.error_handling.retryable_hints",
+        "priority": "should",
+        "stability": "stable",
+        "statement": "Jido.Action.Error.retryable?/1 shall derive stable retryability hints from timeout errors, transient reason atoms, explicit retry flags, and normalized error types so downstream callers and guides can make consistent retry decisions.",
         "subject_id": "jido_action.error_handling"
       },
       {
@@ -189,7 +205,7 @@
         "id": "jido_action.sanitizer.telemetry_profile",
         "priority": "must",
         "stability": "stable",
-        "statement": "Jido.Action.Sanitizer shall provide a telemetry profile that preserves execution telemetry semantics for redaction, truncation, tuple handling, inspect-safe summaries, and bounded traversal of nested runtime terms.",
+        "statement": "Jido.Action.Sanitizer shall provide a telemetry profile that preserves execution telemetry semantics for redaction, truncation, tuple handling, inspect-safe summaries, bounded traversal of nested runtime terms, and additive outcome metadata emitted by the execution telemetry layer.",
         "subject_id": "jido_action.sanitizer"
       },
       {
@@ -451,7 +467,8 @@
           "summary": "Shared transport and telemetry sanitization for arbitrary runtime terms used across Jido Action boundaries.",
           "surface": [
             "lib/jido_action/sanitizer.ex",
-            "test/jido_action/sanitizer_test.exs"
+            "test/jido_action/sanitizer_test.exs",
+            "test/jido_action/exec/telemetry_sanitization_test.exs"
           ],
           "verification_minimum_strength": null
         },
@@ -593,7 +610,8 @@
           "jido_action.action.metadata_contract",
           "jido_action.action.schema_validation",
           "jido_action.action.tool_bridge",
-          "jido_action.action.tool_execution_json_contract"
+          "jido_action.action.tool_execution_json_contract",
+          "jido_action.action.log_level_resolution"
         ],
         "execute": true,
         "file": ".spec/specs/action.spec.md",
@@ -604,7 +622,8 @@
       {
         "covers": [
           "jido_action.error_handling.normalized_errors",
-          "jido_action.error_handling.transport_safe_error_maps"
+          "jido_action.error_handling.transport_safe_error_maps",
+          "jido_action.error_handling.retryable_hints"
         ],
         "execute": true,
         "file": ".spec/specs/error_handling.spec.md",
@@ -899,13 +918,24 @@
     "decisions": 3,
     "exceptions": 0,
     "findings": 0,
-    "requirements": 36,
+    "requirements": 38,
     "scenarios": 0,
     "subjects": 10,
     "verifications": 30
   },
   "verification": {
     "claims": [
+      {
+        "cover_id": "jido_action.action.log_level_resolution",
+        "file": ".spec/specs/action.spec.md",
+        "kind": "command",
+        "meets_minimum": true,
+        "required_strength": "claimed",
+        "strength": "executed",
+        "subject_id": "jido_action.action",
+        "target": "mix test test/jido_action/action_test.exs test/jido_action/on_after_run_test.exs test/jido_action/exec_tool_test.exs test/jido_action/util_test.exs",
+        "verification_index": 0
+      },
       {
         "cover_id": "jido_action.action.metadata_contract",
         "file": ".spec/specs/action.spec.md",
@@ -952,6 +982,17 @@
       },
       {
         "cover_id": "jido_action.error_handling.normalized_errors",
+        "file": ".spec/specs/error_handling.spec.md",
+        "kind": "command",
+        "meets_minimum": true,
+        "required_strength": "claimed",
+        "strength": "executed",
+        "subject_id": "jido_action.error_handling",
+        "target": "mix test test/jido_action/error_test.exs",
+        "verification_index": 0
+      },
+      {
+        "cover_id": "jido_action.error_handling.retryable_hints",
         "file": ".spec/specs/error_handling.spec.md",
         "kind": "command",
         "meets_minimum": true,
@@ -1428,7 +1469,7 @@
     "default_minimum_strength": "claimed",
     "strength_summary": {
       "claimed": 2,
-      "executed": 31,
+      "executed": 33,
       "linked": 14
     },
     "threshold_failures": 0
