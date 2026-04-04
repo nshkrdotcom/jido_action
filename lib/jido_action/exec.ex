@@ -558,12 +558,6 @@ defmodule Jido.Exec do
       execute_action_with_timeout(action, params, context, get_default_timeout(), opts)
     end
 
-    @spec execute_action_with_timeout(action(), params(), context(), non_neg_integer()) ::
-            exec_result
-    defp execute_action_with_timeout(action, params, context, timeout) do
-      execute_action_with_timeout(action, params, context, timeout, [])
-    end
-
     defp cleanup_timeout_task(ref, monitor_ref, pid) do
       wait_for_task_down(monitor_ref, pid, 100)
       Process.demonitor(monitor_ref, [:flush])
