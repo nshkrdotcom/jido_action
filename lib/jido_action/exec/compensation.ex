@@ -12,8 +12,6 @@ defmodule Jido.Exec.Compensation do
   alias Jido.Exec.Supervisors
   alias Jido.Exec.Telemetry
 
-  require Logger
-
   @type action :: module()
   @type params :: map()
   @type context :: map()
