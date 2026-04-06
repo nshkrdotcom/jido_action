@@ -44,11 +44,9 @@ defmodule Jido.Exec.Telemetry do
 
   @doc false
   @spec span_start_metadata(module(), map(), map(), keyword() | map()) :: map()
-  def span_start_metadata(action, params, context, opts_or_context) do
+  def span_start_metadata(action, _params, _context, opts_or_context) do
     %{
-      action: action,
-      params: params,
-      context: context
+      action: action
     }
     |> maybe_put(:jido, extract_jido(opts_or_context))
   end
@@ -56,8 +54,7 @@ defmodule Jido.Exec.Telemetry do
   @doc false
   @spec span_stop_metadata(any()) :: map()
   def span_stop_metadata(result) do
-    %{result: result}
-    |> Map.merge(stop_outcome_metadata(result))
+    stop_outcome_metadata(result)
   end
 
   @doc false

@@ -1,5 +1,6 @@
 defmodule Jido.Tools.LuaEvalTest do
   use ExUnit.Case, async: true
+  use Private
 
   alias Jido.Action.Error
   alias Jido.Tools.LuaEval
@@ -104,6 +105,22 @@ defmodule Jido.Tools.LuaEvalTest do
     test "allows execution within timeout" do
       params = %{code: "return 42", timeout_ms: 1000}
       assert {:ok, %{results: [42]}} = LuaEval.run(params, @context)
+    end
+
+    test "waits briefly for a result after a normal task down message" do
+      ref = make_ref()
+      monitor_ref = make_ref()
+      pid = spawn(fn -> Process.sleep(200) end)
+      parent = self()
+
+      spawn(fn ->
+        send(parent, {:DOWN, monitor_ref, :process, pid, :normal})
+        Process.sleep(10)
+        send(parent, {:lua_eval_result, ref, {:ok, %{results: [42]}}})
+      end)
+
+      assert {:ok, {:ok, %{results: [42]}}} =
+               LuaEval.await_lua_result(ref, pid, monitor_ref, 50)
     end
   end
 

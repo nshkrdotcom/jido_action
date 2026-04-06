@@ -299,7 +299,7 @@ async_ref = async_closure.(%{data: "large_dataset"})
 
 ## Telemetry & Observability
 
-The execution engine emits comprehensive telemetry events using `:telemetry.span/3`:
+The execution engine emits low-cardinality telemetry events using `:telemetry.span/3`:
 
 ### Built-in Events
 
@@ -320,18 +320,14 @@ def handle_telemetry(event, measurements, metadata, _config) do
     [:jido, :action, :start] ->
       Logger.debug("Action started",
         action: metadata.action,
-        jido: metadata[:jido],
-        params: metadata.params,
-        context: metadata.context
+        jido: metadata[:jido]
       )
     
     [:jido, :action, :stop] ->
       Logger.info("Action completed",
         action: metadata.action,
         duration: measurements.duration,
-        params: metadata.params,
-        context: metadata.context,
-        result: metadata[:result],
+        jido: metadata[:jido],
         outcome: metadata.outcome,
         error_type: metadata[:error_type],
         retryable?: metadata[:retryable?]
@@ -341,10 +337,10 @@ end
 ```
 
 Normal action failures are reported as `[:jido, :action, :stop]` events with
-`metadata.outcome == :error`. Existing rich execution metadata such as `params`, `context`,
-and `result` remains available alongside the normalized outcome summary fields. The `:exception`
-event is reserved for uncaught exceptions that escape the telemetry span, which should be rare
-in normal `Jido.Exec` execution.
+`metadata.outcome == :error`. Default span metadata deliberately excludes `params`, `context`,
+`result`, and stacktraces so observability handlers can rely on bounded, low-cardinality fields.
+The `:exception` event is reserved for uncaught exceptions that escape the telemetry span, which
+should be rare in normal `Jido.Exec` execution.
 
 ### Disabling Telemetry
 

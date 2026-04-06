@@ -45,7 +45,7 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
     :ok
   end
 
-  test "emit_start_event preserves rich metadata for compatibility" do
+  test "emit_start_event emits low-cardinality default metadata" do
     long_string = String.duplicate("x", 300)
 
     params = %{
@@ -59,7 +59,11 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
       }
     }
 
-    context = %{"authorization" => "Bearer top-secret", "note" => long_string}
+    context = %{
+      "authorization" => "Bearer top-secret",
+      "note" => long_string,
+      "jido" => "tenant-a"
+    }
 
     assert :ok = Telemetry.emit_start_event(__MODULE__, params, context)
 
@@ -67,8 +71,7 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
 
     assert metadata == %{
              action: __MODULE__,
-             params: params,
-             context: context
+             jido: "tenant-a"
            }
   end
 
@@ -80,10 +83,10 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
     assert_struct_summary(sanitized_request, Req.Request, map_size(request))
   end
 
-  test "emit_end_event keeps rich metadata and adds outcome summary" do
+  test "emit_end_event emits low-cardinality success metadata" do
     long_string = String.duplicate("z", 280)
-    params = %{input: 1}
-    context = %{secret: "hidden"}
+    params = %{input: 1, token: "tok-123"}
+    context = %{secret: "hidden", jido: :tenant_a}
     result = {:ok, %{token: "tok-123", payload: long_string}}
 
     assert :ok =
@@ -98,16 +101,14 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
 
     assert metadata == %{
              action: __MODULE__,
-             params: params,
-             context: context,
-             result: result,
+             jido: :tenant_a,
              outcome: :ok
            }
   end
 
-  test "emit_end_event keeps rich metadata on errors and adds summary fields" do
+  test "emit_end_event emits bounded error summary fields" do
     params = %{input: 1}
-    context = %{secret: "hidden"}
+    context = %{secret: "hidden", jido: :tenant_a}
     result = {:error, Jido.Action.Error.execution_error("boom", %{token: "tok-123"})}
 
     assert :ok =
@@ -120,32 +121,36 @@ defmodule JidoTest.Exec.TelemetrySanitizationTest do
 
     assert_receive {:telemetry_event, [:jido, :action, :stop], _measurements, metadata}
 
-    assert metadata.action == __MODULE__
-    assert metadata.params == params
-    assert metadata.context == context
-    assert metadata.result == result
-    assert metadata.outcome == :error
-    assert metadata.error_type == :execution_error
-    assert metadata.retryable? == true
+    assert metadata == %{
+             action: __MODULE__,
+             jido: :tenant_a,
+             outcome: :error,
+             error_type: :execution_error,
+             retryable?: true
+           }
   end
 
-  test "Exec.run emits additive span metadata on start and stop events" do
+  test "Exec.run emits low-cardinality span metadata on start and stop events" do
     params = %{value: 7}
     context = %{secret: "hidden"}
 
     assert {:ok, %{value: 7}} = Exec.run(BasicAction, params, context)
 
     assert_receive {:telemetry_event, [:jido, :action, :start], _measurements, start_metadata}
-    assert start_metadata.action == BasicAction
-    assert start_metadata.params == params
-    assert start_metadata.context.secret == "hidden"
+    assert Map.drop(start_metadata, [:telemetry_span_context]) == %{action: BasicAction}
+    refute Map.has_key?(start_metadata, :params)
+    refute Map.has_key?(start_metadata, :context)
 
     assert_receive {:telemetry_event, [:jido, :action, :stop], _measurements, stop_metadata}
-    assert stop_metadata.action == BasicAction
-    assert stop_metadata.params == params
-    assert stop_metadata.context.secret == "hidden"
-    assert stop_metadata.result == {:ok, %{value: 7}}
-    assert stop_metadata.outcome == :ok
+
+    assert Map.drop(stop_metadata, [:telemetry_span_context]) == %{
+             action: BasicAction,
+             outcome: :ok
+           }
+
+    refute Map.has_key?(stop_metadata, :params)
+    refute Map.has_key?(stop_metadata, :context)
+    refute Map.has_key?(stop_metadata, :result)
   end
 
   test "struct with custom Inspect at depth >= 4 does not crash safe_inspect" do

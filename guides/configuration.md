@@ -172,12 +172,15 @@ end
 
 Jido Action emits telemetry events under the `[:jido, :action]` prefix using `:telemetry.span/3`:
 
-- `[:jido, :action, :start]` - Action execution begins
-- `[:jido, :action, :stop]` - Action execution completes with rich metadata plus outcome summary fields
+- `[:jido, :action, :start]` - Action execution begins with `action` and optional `jido`
+- `[:jido, :action, :stop]` - Action execution completes with bounded summary metadata (`action`, optional `jido`, `outcome`, and error summary fields when relevant)
 
 Regular action failures are represented as `:stop` events with `metadata.outcome == :error`.
 `[:jido, :action, :exception]` is reserved for uncaught exceptions that escape the telemetry span,
 which should be rare in normal `Jido.Exec` flows.
+
+Default execution telemetry intentionally excludes full `params`, `context`, `result`, and
+stacktrace payloads to keep metadata low-cardinality and avoid leaking sensitive runtime values.
 
 ### Custom Telemetry Handlers
 
@@ -214,9 +217,7 @@ defmodule MyApp.Telemetry do
   def handle_event([:jido, :action, :start], _measurements, metadata, _config) do
     Logger.debug("Action started",
       action: metadata.action,
-      jido: metadata[:jido],
-      params: metadata.params,
-      context: metadata.context
+      jido: metadata[:jido]
     )
   end
 
@@ -228,9 +229,7 @@ defmodule MyApp.Telemetry do
         Logger.info("Action completed",
           action: metadata.action,
           duration_ms: duration_ms,
-          params: metadata.params,
-          context: metadata.context,
-          result: metadata[:result],
+          jido: metadata[:jido],
           directive?: metadata[:directive?] == true
         )
 
@@ -238,6 +237,7 @@ defmodule MyApp.Telemetry do
         Logger.error("Action failed",
           action: metadata.action,
           duration_ms: duration_ms,
+          jido: metadata[:jido],
           error_type: metadata[:error_type],
           retryable?: metadata[:retryable?] == true,
           directive?: metadata[:directive?] == true
